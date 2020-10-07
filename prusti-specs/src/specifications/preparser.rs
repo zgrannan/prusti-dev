@@ -113,9 +113,9 @@ impl ParserStream {
         false
     }
     /// Check if the input starts with the operator. Does not set the span.
-    fn peek_operator(&self, operator: &str) -> bool {
+    fn peek_operator_with_offset(&self, operator: &str, offset: usize) -> bool {
         for (i, c) in operator.char_indices() {
-            if let Some(TokenTree::Punct(punct)) = self.tokens.get(i) {
+            if let Some(TokenTree::Punct(punct)) = self.tokens.get(i+offset) {
                 if punct.as_char() != c {
                     return false;
                 }
@@ -134,9 +134,21 @@ impl ParserStream {
         }
         true
     }
+    /// Check if the input starts with the operator. Does not set the span.
+    fn peek_operator(&self, operator: &str) -> bool {
+        self.peek_operator_with_offset(operator, 0)
+    }
     /// Check whether the input starts with an operator. Does not set the span.
     fn peek_any_operator(&self) -> bool {
         self.peek_operator("==>") || self.peek_operator("&&")
+    }
+    /// Check whether the input starts with an identifier. Does not set the span.
+    fn peek_is_identifier(&self) -> bool {
+        if let Some(TokenTree::Ident(_)) = self.tokens.get(0) {
+            true
+        } else {
+            false
+        }
     }
     /// Check if the input starts with the operator and if yes, consume it
     /// and set the span to it.
@@ -616,7 +628,7 @@ impl Parser {
     }
     pub fn extract_pledge_rhs_only(&mut self) -> syn::Result<PledgeWithoutId> {
         let mut reference = None;
-        if self.input.contains_operator("=>") {
+        if self.input.peek_is_identifier() && self.input.peek_operator_with_offset("=>", 1) {
             let ref_stream = self.input.create_stream_until("=>");
             let parsed_expr = self.parse_rust_expression(ref_stream)?;
 
