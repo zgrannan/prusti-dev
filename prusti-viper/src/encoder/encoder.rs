@@ -764,7 +764,6 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             }).collect();
             self.spec_functions.borrow_mut().insert(def_id, result);
         }
-        Ok(self.spec_functions.borrow()[&def_id].clone())
     }
 
     pub fn encode_type(&self, ty: ty::Ty<'tcx>)
