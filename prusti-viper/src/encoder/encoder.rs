@@ -761,13 +761,22 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
     pub fn encode_spec_funcs(&self, def_id: ProcedureDefId)
         -> SpannedEncodingResult<Vec<vir::Function>>
     {
-        if !self.spec_functions.borrow().contains_key(&def_id) {
-            let procedure = self.env.get_procedure(def_id);
-            let spec_func_encoder = SpecFunctionEncoder::new(self, &procedure);
-            let result = spec_func_encoder.encode()?;
-            self.spec_functions.borrow_mut().insert(def_id, result);
+        if def_id.is_local() {
+            if !self.spec_functions.borrow().contains_key(&def_id) {
+                let procedure = self.env.get_procedure(def_id);
+                let spec_func_encoder = SpecFunctionEncoder::new(self, &procedure);
+                let result = spec_func_encoder.encode()?;
+                self.spec_functions.borrow_mut().insert(def_id, result);
+            }
+            Ok(self.spec_functions.borrow()[&def_id].clone())
+        } else {
+            Err(
+              SpannedEncodingError::unsupported(
+                  format!("Definition '{:?}' is not local", def_id),
+                  self.env.tcx().def_span(def_id)
+              )
+            )
         }
-        Ok(self.spec_functions.borrow()[&def_id].clone())
     }
 
     pub fn encode_type(&self, ty: ty::Ty<'tcx>)

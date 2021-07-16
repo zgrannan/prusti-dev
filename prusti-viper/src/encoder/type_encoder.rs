@@ -766,15 +766,21 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             .log_vir_program_before_foldunfold(function.to_string());
 
         // Add folding/unfolding
-        let final_function = foldunfold::add_folding_unfolding_to_function(
+        match foldunfold::add_folding_unfolding_to_function(
             function,
             self.encoder.get_used_viper_predicates_map(),
-        ).unwrap(); // TODO: generate a stub function in case of error
-        debug!(
-            "[exit] encode_invariant_def({:?}):\n{}",
-            self.ty, final_function
-        );
-        Ok(final_function)
+        ) {
+            Ok(final_function) => {
+                debug!(
+                    "[exit] encode_invariant_def({:?}):\n{}",
+                    self.ty, final_function
+                );
+                Ok(final_function)
+            }
+            Err(e) => Err(EncodingError::internal(
+                format!("Cannot add folding/unfolding due to {:?}", e)
+            ))
+        }
     }
 
     pub fn encode_invariant_use(self) -> EncodingResult<String> {

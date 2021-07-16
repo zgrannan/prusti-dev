@@ -12,7 +12,7 @@ use rustc_middle::ty::{self, Ty, TyCtxt};
 use std::cell::Ref;
 use std::collections::{HashSet, HashMap};
 use rustc_span::Span;
-use log::{trace, debug};
+use log::{trace, debug, info};
 use rustc_middle::mir::StatementKind;
 use rustc_hir::def_id;
 use std::iter::FromIterator;
@@ -36,7 +36,7 @@ impl<'a, 'tcx> Procedure<'a, 'tcx> {
     /// Builds an implementation of the Procedure interface, given a typing context and the
     /// identifier of a procedure
     pub fn new(tcx: TyCtxt<'tcx>, proc_def_id: ProcedureDefId) -> Self {
-        trace!("Encoding procedure {:?}", proc_def_id);
+        info!("Encoding procedure {:?}", proc_def_id);
         let (mir, _) = tcx.mir_promoted(ty::WithOptConstParam::unknown(proc_def_id.expect_local()));
         let mir = mir.borrow();
         let real_edges = RealEdges::new(&mir);
