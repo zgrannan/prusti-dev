@@ -16,7 +16,6 @@ fn main() {
 }
 
 fn process(mut args: Vec<String>) -> Result<(), i32> {
-    println!("STARTING");
     let current_executable_dir = env::current_exe()
         .expect("current executable path invalid")
         .parent()
@@ -49,7 +48,7 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
 
     let mut cmd = Command::new(&prusti_driver_path);
 
-    println!("{:?}", vec![&compiler_lib, &compiler_bin, &libjvm_path]);
+    // println!("{:?}", vec![&compiler_lib, &compiler_bin, &libjvm_path]);
     add_to_loader_path(vec![compiler_lib, compiler_bin, libjvm_path], &mut cmd);
 
     if let None = env::var("VIPER_HOME").ok() {
@@ -128,7 +127,7 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
     // Register the SIGINT handler; CTRL_C_EVENT or CTRL_BREAK_EVENT on Windows
     ctrlc::set_handler(sigint_handler).expect("Error setting Ctrl-C handler");
 
-    println!("{:?}", cmd);
+    // println!("{:?}", cmd);
 
     let exit_status = cmd.status()
         .expect(&format!("failed to execute prusti-driver ({:?})", prusti_driver_path));

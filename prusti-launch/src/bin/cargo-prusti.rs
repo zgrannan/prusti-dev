@@ -33,6 +33,7 @@ fn process<I>(args: I) -> Result<(), i32>
     let exit_status = Command::new(cargo_path)
         .arg("check")
         .args(clean_args)
+        .env("RUST_SYSROOT", std::env::var("RUST_SYSROOT").unwrap_or("".to_string()))
         .env("RUST_TOOLCHAIN", get_rust_toolchain_channel())
         .env("PRUSTI_QUIET", "true")
         .env("PRUSTI_FULL_COMPILATION", "true")

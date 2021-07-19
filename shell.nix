@@ -10,7 +10,7 @@ in
   with pkgs;
 
   mkShell {
-    shellHook = ''export VIPER_HOME=/home/zgrannan/prusti-dev/viper_tools/backends'';
+    RUST_SRC_PATH = "${rustPlatform.rustLibSrc}";
     buildInputs = [
       openssl pkg-config
       # (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain)
