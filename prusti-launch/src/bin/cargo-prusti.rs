@@ -37,7 +37,7 @@ fn process<I>(args: I) -> Result<(), i32>
         .env("RUST_TOOLCHAIN", get_rust_toolchain_channel())
         .env("PRUSTI_QUIET", "true")
         .env("PRUSTI_FULL_COMPILATION", "true")
-        .env("RUSTC_WRAPPER", prusti_rustc_path)
+        .env("RUSTC_WORKSPACE_WRAPPER", prusti_rustc_path)
         .status()
         .expect("could not run cargo");
 
