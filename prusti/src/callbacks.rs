@@ -16,6 +16,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
+        println!("After expansion start");
         compiler.session().abort_if_errors();
         let (krate, _resolver, _lint_store) = &mut *queries.expansion().unwrap().peek_mut();
         if config::print_desugared_specs() {
@@ -29,6 +30,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 None,
             );
         }
+        println!("After expansion end");
         Compilation::Continue
     }
     fn after_analysis<'tcx>(
@@ -36,6 +38,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
+        println!("After analysis start");
         compiler.session().abort_if_errors();
         queries.global_ctxt().unwrap().peek_mut().enter(|tcx| {
             let hir = tcx.hir();
@@ -81,6 +84,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
         });
 
         compiler.session().abort_if_errors();
+        println!("After analysis end");
         if config::full_compilation() {
             Compilation::Continue
         } else {

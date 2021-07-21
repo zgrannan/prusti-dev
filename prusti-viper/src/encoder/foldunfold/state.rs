@@ -47,7 +47,7 @@ impl State {
 
     pub fn check_consistency(&self) {
         // Skip consistency checks in release mode
-        if cfg!(not(debug_assertions)) {
+        if true || cfg!(not(debug_assertions)) {
             return;
         }
 
