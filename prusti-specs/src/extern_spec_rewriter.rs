@@ -2,9 +2,10 @@ use crate::specifications::common::NameGenerator;
 use super::parse_quote_spanned;
 use proc_macro2::{TokenStream, TokenTree, Group};
 use quote::{quote, quote_spanned, ToTokens};
-use syn::ImplItemMethod;
+use syn::{ImplItemMethod, GenericParam};
 use syn::spanned::Spanned;
 use crate::span_overrider::SpanOverrider;
+use std::str::FromStr;
 
 /// Process external specifications in Rust modules marked with the
 /// #[extern_spec] attribute. Nested modules are processed recursively.
@@ -91,6 +92,7 @@ pub fn rewrite_impl(
     impl_item: &mut syn::ItemImpl,
     new_ty: Box<syn::Type>,
 ) -> syn::Result<TokenStream> {
+    println!("{:?}", new_ty);
     let item_ty = &mut impl_item.self_ty;
     if let syn::Type::Path(type_path) = item_ty.as_mut() {
         for seg in type_path.path.segments.iter_mut() {
@@ -205,6 +207,14 @@ fn rewrite_method_inputs(item_ty: &Box<syn::Type>, method: &mut ImplItemMethod) 
     args
 }
 
+pub fn get_param_ident(param: &GenericParam) -> &syn::Ident {
+    match param {
+        GenericParam::Type(t) => &t.ident,
+        GenericParam::Lifetime(_) => panic!("No"),
+        GenericParam::Const(c) => &c.ident
+    }
+}
+
 /// Generate an empty struct to be able to define impl blocks (in
 /// `rewrite_impl`) on it for its specification functions.
 pub fn generate_new_struct(item: &syn::ItemImpl) -> syn::Result<syn::ItemStruct> {
@@ -231,7 +241,7 @@ pub fn generate_new_struct(item: &syn::ItemImpl) -> syn::Result<syn::ItemStruct>
     // Add `PhantomData` markers for each type parameter to silence errors
     // about unused type parameters.
     for param in generics.params.iter() {
-        let field = format!("std::marker::PhantomData<{}>,", param.to_token_stream().to_string());
+        let field = format!("std::marker::PhantomData<{}>,", get_param_ident(param).to_token_stream().to_string());
         fields_str.push_str(&field);
     }
 
