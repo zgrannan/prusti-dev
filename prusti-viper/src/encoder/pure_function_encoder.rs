@@ -410,13 +410,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
 
         // Return an error for unsupported return types
         let tcx = self.encoder.env().tcx();
-        if !is_supported_type_of_pure_expression(tcx, ty) {
-            return Err(SpannedEncodingError::incorrect(
-                "invalid return type of pure function",
-                return_span,
-            ));
-        }
-
+        check_is_supported_type_of_pure_expression(tcx, ty).map_err(|t|
+            SpannedEncodingError::incorrect(
+                format!("invalid return type of pure function. Type {} has unsupported kind {:?}.", t, t.kind()),
+                            return_span,
+                        )
+        )?;
         let return_local = mir::Place::return_place().as_local().unwrap();
         let span = self.interpreter.mir_encoder().get_local_span(return_local);
         self.encoder.encode_snapshot_type(ty).with_span(span)
@@ -804,12 +803,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
 
                                 // Return an error for unsupported old(..) types
                                 let tcx = self.encoder.env().tcx();
-                                if !is_supported_type_of_pure_expression(tcx, ty) {
-                                    return Err(SpannedEncodingError::incorrect(
-                                        "the type of the old expression is invalid",
+                                check_is_supported_type_of_pure_expression(tcx, ty).map_err(|t|
+                                    SpannedEncodingError::incorrect(
+                                        format!("the type of the old expression is invalid. Type {} is not supported.", t),
                                         term.source_info.span,
-                                    ));
-                                }
+                                                )
+                                )?;
 
                                 let encoded_rhs = self
                                     .mir_encoder
@@ -1493,24 +1492,32 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
     }
 }
 
-fn is_supported_type_of_pure_expression<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> bool {
+fn check_is_supported_type_of_pure_expression<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> Result<(), ty::Ty<'tcx>> {
     // Since we don't support box, references and raw pointers this will not recurse forever.
     match ty.kind() {
         ty::TyKind::Bool
         | ty::TyKind::Int(_)
         | ty::TyKind::Uint(_)
-        | ty::TyKind::Char => true,
+        | ty::TyKind::Char => Ok(()),
 
         ty::TyKind::Tuple(elems) => {
-            elems.types().all(|t| is_supported_type_of_pure_expression(tcx, t))
+            let results: Result<Vec<_>, _> =
+                elems.types().map(|t| check_is_supported_type_of_pure_expression(tcx, t)).collect();
+            results.map(|_| ())
         }
 
         ty::TyKind::Adt(adt_def, subst) if !adt_def.is_box() => {
-            adt_def.all_fields()
-                    .map(|field| field.ty(tcx, subst))
-                    .all(|t| is_supported_type_of_pure_expression(tcx, t))
+            let results: Result<Vec<_>, _> =
+                adt_def.all_fields()
+                        .map(|field| field.ty(tcx, subst))
+                        .map(|t| check_is_supported_type_of_pure_expression(tcx, t)).collect();
+            results.map(|_| ())
         }
 
-        _ => false,
+        ty::TyKind::Projection(proj) => {
+           check_is_supported_type_of_pure_expression(tcx, proj.substs.type_at(0))
+        }
+
+        _ => Err(ty),
     }
 }
