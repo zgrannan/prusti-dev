@@ -11,6 +11,15 @@ use crate::verifier::verify;
 pub struct PrustiCompilerCalls;
 
 impl rustc_driver::Callbacks for PrustiCompilerCalls {
+    fn after_parsing<'tcx>(
+        &mut self,
+        compiler: &Compiler,
+        queries: &'tcx Queries<'tcx>,
+    ) -> Compilation {
+        println!("After parsing start");
+        println!("After parsing end");
+        Compilation::Continue
+    }
     fn after_expansion<'tcx>(
         &mut self,
         compiler: &Compiler,

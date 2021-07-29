@@ -8,6 +8,7 @@ pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     rewrite_prusti_attributes(SpecAttributeKind::Requires, attr.into(), tokens.into()).into()
 }
 
+
 #[proc_macro_attribute]
 pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     rewrite_prusti_attributes(SpecAttributeKind::Ensures, attr.into(), tokens.into()).into()
@@ -51,6 +52,11 @@ pub fn refine_trait_spec(attr: TokenStream, tokens: TokenStream) -> TokenStream 
 #[proc_macro_attribute]
 pub fn extern_spec(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     prusti_specs::extern_spec(attr.into(), tokens.into()).into()
+}
+
+#[proc_macro_attribute]
+pub fn invariant(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    prusti_specs::invariant(attr.into(), tokens.into()).into()
 }
 
 #[proc_macro]

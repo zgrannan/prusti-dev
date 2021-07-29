@@ -203,7 +203,10 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             ty::TyKind::Char => {
                 Some((0.into(), std::char::MAX.into()))
             }
-            ty::TyKind::Bool | ty::TyKind::Ref(_, _, _) => None,
+            ty::TyKind::Bool
+                | ty::TyKind::Ref(_, _, _)
+                | ty::TyKind::Param(_)
+                | ty::TyKind::Adt(_,_) => None,
             ref x => unreachable!("{:?}", x),
         }
     }

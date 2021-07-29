@@ -442,6 +442,10 @@ pub fn refine_trait_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream
     }
 }
 
+pub fn invariant(_attr: TokenStream, tokens:TokenStream) -> TokenStream {
+    tokens
+}
+
 pub fn extern_spec(_attr: TokenStream, tokens:TokenStream) -> TokenStream {
     let item: syn::Item = handle_result!(syn::parse2(tokens));
     let item_span = item.span();
