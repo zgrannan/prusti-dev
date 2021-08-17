@@ -764,6 +764,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             }).collect();
             self.spec_functions.borrow_mut().insert(def_id, result);
         }
+        Ok(self.spec_functions.borrow()[&def_id].clone())
     }
 
     pub fn encode_type(&self, ty: ty::Ty<'tcx>)
@@ -1001,7 +1002,13 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         ty: &ty::TyS<'tcx>,
         value: &ty::ConstKind<'tcx>
     ) -> EncodingResult<vir::Expr> {
-        trace!("encode_const_expr {:?}", value);
+        info!("encode_const_expr {:?} {:?}", ty, value);
+        match ty.kind() {
+          ty::TyKind::Ref(_, _, _)   =>
+            return Ok(vir::Expr::Const(vir::Const::StringConst("foo".to_string()), vir::Position::default())),
+          _ => {}
+        }
+
         let scalar_value = self.const_eval_intlike(value)?;
 
         let expr = match ty.kind() {

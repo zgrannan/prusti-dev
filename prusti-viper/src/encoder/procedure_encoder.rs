@@ -5588,11 +5588,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             alloc_stmts.push(vir::Stmt::Inhale(acc));
             match vir_assign_kind {
                 vir::AssignKind::Copy => {
-                    if field.typ.is_ref() {
+                    if field.typ.is_ref() && Type::TypedRef("str".to_string()) != field.typ {
                         // TODO: Inhale the predicate rooted at dst_field
                         return Err(SpannedEncodingError::unsupported(
-                            "the encoding of this reference copy has not \
-                            been implemented",
+                            format!("the encoding of this reference copy (type {:?}) has not \
+                            been implemented", field.typ),
                             self.mir_encoder.get_span_of_location(location),
                         ));
                     }
