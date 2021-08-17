@@ -10,3 +10,5 @@ proc-macro = true
 [dependencies]
 prusti-specs = { path = "../prusti-specs" }
 proc-macro2 = "1.0"
+syn = { version = "^1.0.43", features = ["full", "extra-traits", "visit-mut", "parsing", "printing"] }
+quote = "1.0"

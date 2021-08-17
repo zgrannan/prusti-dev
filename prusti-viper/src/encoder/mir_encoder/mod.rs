@@ -21,7 +21,7 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::{mir, ty};
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_span::{Span, DUMMY_SP};
-use log::{trace, debug};
+use log::{trace, debug, info};
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -408,6 +408,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> PlaceEncoder<'v, 'tcx> for MirEncoder<'p, 'v, 'tcx> {
     }
 
     fn get_local_span(&self, local: mir::Local) -> Span {
+        info!("get_local_span {:?}", local);
         self.mir.local_decls[local].source_info.span
     }
 }

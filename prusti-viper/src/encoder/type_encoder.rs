@@ -235,6 +235,15 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                 false,
             )],
 
+            ty::TyKind::Ref(_, ty, _) if ty.is_str() => {
+                vec![vir::Predicate::new_primitive_value(
+                    typ,
+                    self.encoder.encode_value_field(self.ty)?,
+                    None,
+                    false,
+                )]
+            }
+
             ty::TyKind::Int(_) | ty::TyKind::Uint(_) | ty::TyKind::Char => {
                 let bounds = if config::check_overflows() {
                     self.get_integer_bounds()

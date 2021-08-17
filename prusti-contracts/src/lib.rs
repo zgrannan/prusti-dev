@@ -78,6 +78,8 @@ mod private {
     /// A macro for defining a predicate using prusti expression syntax instead
     /// of just Rust expressions.
     pub use prusti_contracts_internal::predicate;
+
+    pub use prusti_contracts_internal::PrustiDeserialize;
 }
 
 

@@ -233,8 +233,8 @@ impl ApplyOnState for vir::Stmt {
 
                 debug_assert!(
                     !lhs_place.is_simple_place() || state.is_prefix_of_some_acc(lhs_place) || state.is_prefix_of_some_pred(lhs_place),
-                    "The fold/unfold state does not contain the permission for an expiring borrow: {}",
-                    lhs_place
+                    "The fold/unfold state does not contain the permission for an expiring borrow: {:?} -> {:?}",
+                    lhs_place, rhs_place
                 );
                 /*assert!(
                     state.is_prefix_of_some_pred(lhs_place),

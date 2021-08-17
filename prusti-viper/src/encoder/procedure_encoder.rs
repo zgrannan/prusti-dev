@@ -3052,7 +3052,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         ty: ref inner_ty, ..
                     }),
                 )
-                | (Some(ref place), ty::TyKind::Ref(_, ref inner_ty, _)) => {
+                | (Some(ref place), ty::TyKind::Ref(_, ref inner_ty, _)) if !inner_ty.is_str() => {
                     let ref_field = self.encoder
                         .encode_dereference_field(inner_ty)
                         .with_span(span)?;
@@ -5588,7 +5588,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             alloc_stmts.push(vir::Stmt::Inhale(acc));
             match vir_assign_kind {
                 vir::AssignKind::Copy => {
-                    if field.typ.is_ref() && Type::TypedRef("str".to_string()) != field.typ {
+                    if field.typ.is_ref() /* && field.typed_ref_name().unwrap() != "str".to_string() */ {
                         // TODO: Inhale the predicate rooted at dst_field
                         return Err(SpannedEncodingError::unsupported(
                             format!("the encoding of this reference copy (type {:?}) has not \

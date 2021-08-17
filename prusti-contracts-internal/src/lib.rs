@@ -2,6 +2,24 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use prusti_specs::{rewrite_prusti_attributes, SpecAttributeKind};
+use quote::quote;
+use syn::{self, DeriveInput};
+
+#[proc_macro_derive(PrustiDeserialize)]
+pub fn derive_deserialize(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl <'de> Deserialize<'de> for #name {
+        #[trusted]
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de> {
+            todo!()
+        }
+      }
+    }).into()
+}
 
 #[proc_macro_attribute]
 pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {

@@ -519,7 +519,8 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
                     vir::Type::TypedRef("".to_string()),
                 )
             });
-        Ok(vir::Field::new(viper_field_name, vir::Type::TypedRef(type_name)))
+        let typ = vir::Type::TypedRef(type_name);
+        Ok(vir::Field::new(viper_field_name, typ))
     }
 
     pub fn encode_dereference_field(&self, ty: ty::Ty<'tcx>)
@@ -870,6 +871,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             | ty::TyKind::Tuple(_)
             | ty::TyKind::Never
             | ty::TyKind::Array(..)
+            | ty::TyKind::Str
             | ty::TyKind::Param(_) => true,
             ty::TyKind::Adt(_, _) => {
                 self.env().tcx().has_structural_eq_impls(ty)
@@ -1003,8 +1005,9 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         value: &ty::ConstKind<'tcx>
     ) -> EncodingResult<vir::Expr> {
         info!("encode_const_expr {:?} {:?}", ty, value);
+
         match ty.kind() {
-          ty::TyKind::Ref(_, _, _)   =>
+          ty::TyKind::Ref(_, typ, mir::Mutability::Not) if typ.is_str() =>
             return Ok(vir::Expr::Const(vir::Const::StringConst("foo".to_string()), vir::Position::default())),
           _ => {}
         }
