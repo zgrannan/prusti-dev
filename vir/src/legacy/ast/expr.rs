@@ -117,7 +117,6 @@ pub enum Const {
     Bool(bool),
     Int(i64),
     BigInt(String),
-    StringConst(String),
     /// All function pointers share the same constant, because their function
     /// is determined by the type system.
     FnPtr,
@@ -317,7 +316,6 @@ impl fmt::Display for Const {
             Const::Bool(val) => write!(f, "{}", val),
             Const::Int(val) => write!(f, "{}", val),
             Const::BigInt(ref val) => write!(f, "{}", val),
-            Const::StringConst(val) => write!(f, "{}", val),
             Const::FnPtr => write!(f, "FnPtr"),
         }
     }
@@ -1050,7 +1048,6 @@ impl Expr {
     pub fn get_type(&self) -> &Type {
         lazy_static! {
             static ref FN_PTR_TYPE: Type = Type::TypedRef("FnPtr".to_string());
-            static ref STR_TYPE: Type = Type::TypedRef("str".to_string());
         }
         match self {
             Expr::Local(LocalVar { ref typ, .. }, _)
@@ -1066,7 +1063,6 @@ impl Expr {
             Expr::Const(constant, ..) => match constant {
                 Const::Bool(..) => &Type::Bool,
                 Const::Int(..) | Const::BigInt(..) => &Type::Int,
-                Const::StringConst(..) => &STR_TYPE,
                 Const::FnPtr => &FN_PTR_TYPE,
             },
             Expr::BinOp(ref kind, box ref base1, box ref base2, _pos) => match kind {

@@ -1557,22 +1557,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         );
         let mut builder = vir::borrows::DAGBuilder::new();
         for node in mir_dag.iter() {
-            // match node.kind {
-            //     ReborrowingKind::Assignment { loan } => {
-            //         let loan_places = self.polonius_info().get_loan_places(&loan).unwrap().unwrap();
-            //         match loan_places.source {
-            //             mir::Rvalue::Use(mir::Operand::Constant(box mir::Constant { literal, .. })) => {
-            //                 let (ty, _) = mir_constantkind_to_ty_val(literal);
-            //                 match ty.kind() {
-            //                 ty::TyKind::Ref(_, inner, _) if inner.is_str() => continue,
-            //                 _ => {}
-            //                 }
-            //             },
-            //             _ => {}
-            //         };
-            //     },
-            //     _ => {}
-            // }
             let node = match node.kind {
                 ReborrowingKind::Assignment { loan } => self
                     .construct_vir_reborrowing_node_for_assignment(
@@ -3074,7 +3058,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         ty: ref inner_ty, ..
                     }),
                 )
-                | (Some(ref place), ty::TyKind::Ref(_, ref inner_ty, _)) if !inner_ty.is_str() => {
+                | (Some(ref place), ty::TyKind::Ref(_, ref inner_ty, _)) => {
                     let ref_field = self.encoder
                         .encode_dereference_field(inner_ty)
                         .with_span(span)?;
@@ -5618,14 +5602,16 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             match vir_assign_kind {
                 vir::AssignKind::Copy => {
                     if field.typ.is_ref() {
-                        if field.typed_ref_name() == Some("str".to_string()) {
-                            let pred_acc = vir::Expr::predicate_access_predicate("str", dst_field, vir::PermAmount::Read);
+                        let ref_name = field.typed_ref_name().unwrap();
+                        if ref_name == "str" || ref_name.ends_with("$str") {
+                            let pred_acc = vir::Expr::predicate_access_predicate(ref_name, dst_field, vir::PermAmount::Read);
                             alloc_stmts.push(vir::Stmt::Inhale(pred_acc));
                         } else {
                             // TODO: Inhale the predicate rooted at dst_field
                             return Err(SpannedEncodingError::unsupported(
-                                "the encoding of this reference copy has not \
-                                been implemented",
+                                format!(
+                                "the encoding of this reference copy {:?} has not \
+                                been implemented", field.typ),
                                 self.mir_encoder.get_span_of_location(location),
                             ));
                         }

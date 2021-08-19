@@ -11,7 +11,6 @@ use std::collections::HashSet;
 use rustc_middle::mir;
 use rustc_middle::ty::{self, TyCtxt};
 use log::trace;
-use log::warn;
 
 
 /// Check if the place `potential_prefix` is a prefix of `place`. For example:
@@ -79,7 +78,7 @@ pub(crate) fn expand_struct_place<'tcx>(
                 }
             },
             ref ty => {
-                warn!("ty={:?}", ty);
+                unimplemented!("ty={:?}", ty);
             }
         }
     }
