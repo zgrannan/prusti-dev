@@ -1452,7 +1452,9 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             mir::Rvalue::Use(mir::Operand::Constant(box mir::Constant { literal, .. })) => {
                 let (ty, val) = mir_constantkind_to_ty_val(literal);
 
-                let restored : Option<vir::Expr> = match ty.kind() {
+                // TODO: Encoding of string literals is not yet supported, so
+                // do not return an expression in restored here.
+                let restored: Option<vir::Expr> = match ty.kind() {
                     ty::TyKind::Ref(_, inner, _) if inner.is_str() => None,
                     _ => Some(
                         self.encoder.encode_const_expr(ty, &val).unwrap()
@@ -1626,7 +1628,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             .with_span(span)?.unwrap();
         let (expiring, restored, is_mut, mut stmts) = self.encode_loan_places(&loan_places)
             .with_span(span)?;
-        let borrowed_places = restored.clone().into_iter().collect(); // rvec![restored.clone()];
+        let borrowed_places = restored.clone().into_iter().collect();
         trace!("construct_vir_reborrowing_node_for_assignment(loan={:?}, loan_places={:?}, expiring={:?}, restored={:?}, stmts={:?}", loan, loan_places, expiring, restored, stmts);
 
         let mut used_lhs_label = false;
@@ -1659,7 +1661,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let rhs_place = match node.zombity {
             ReborrowingZombity::Zombie(rhs_location) if !node_is_leaf => {
                 let rhs_label = self.get_label_after_location(rhs_location);
-                restored.clone().map(|r| r.old(rhs_label))
+                restored.map(|r| r.old(rhs_label))
             }
 
             _ => restored,
@@ -2155,6 +2157,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                                     ref_field,
                                     location,
                                     vir::AssignKind::Move,
+                                    false
                                 )?
                             );
 
@@ -4878,6 +4881,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                             field.clone(),
                             location,
                             vir::AssignKind::Move,
+                            false
                         )?;
                         alloc_stmts.push(vir::Stmt::Assign(
                             lhs.clone().field(field.clone()),
@@ -4922,6 +4926,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                             ref_field.clone(),
                             location,
                             vir::AssignKind::SharedBorrow(loan.index().into()),
+                            false
                         )?;
                         stmts.push(vir::Stmt::Assign(
                             lhs.clone().field(ref_field.clone()),
@@ -4955,13 +4960,16 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                             field.clone(),
                             location,
                             vir::AssignKind::Copy,
+                            true
                         )?;
+
+                        // TODO Encoding of string literals is not yet supported,
+                        // so do not encode an assignment if the RHS is a string
                         let is_str = match ty.kind() {
                             ty::TyKind::Ref(_, inner, _) => inner.is_str(),
-                            _ => false
+                            _ => false,
                         };
                         if !is_str {
-                            // warn!("Hey {:?}", ty);
                             // Initialize the constant
                             let const_val = self.encoder
                                 .encode_const_expr(ty, &val)
@@ -5185,6 +5193,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     ref_field,
                     location,
                     vir::AssignKind::Move,
+                    false
                 )?;
 
                 // Allocate `box_content`
@@ -5307,6 +5316,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 field.clone(),
                 location,
                 vir_assign_kind,
+                false
             )?
         );
         stmts.push(vir::Stmt::Assign(
@@ -5586,6 +5596,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         field: vir::Field,
         location: mir::Location,
         vir_assign_kind: vir::AssignKind,
+        can_copy_reference: bool
     ) -> SpannedEncodingResult<Vec<vir::Stmt>> {
         trace!(
             "[enter] prepare_assign_target(dst={}, field={}, location={:?})",
@@ -5601,9 +5612,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             match vir_assign_kind {
                 vir::AssignKind::Copy => {
                     if field.typ.is_ref() {
-                        let ref_name = field.typed_ref_name().unwrap();
-                        if true {
-                            let pred_acc = vir::Expr::predicate_access_predicate(ref_name, dst_field, vir::PermAmount::Read);
+                        if can_copy_reference {
+                            let pred_acc = vir::Expr::predicate_access_predicate(
+                                field.typed_ref_name().unwrap(),
+                                dst_field,
+                                vir::PermAmount::Read
+                            );
                             alloc_stmts.push(vir::Stmt::Inhale(pred_acc));
                         } else {
                             // TODO: Inhale the predicate rooted at dst_field
@@ -5640,7 +5654,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             lhs.clone(),
             field.clone(),
             location,
-            vir::AssignKind::Copy
+            vir::AssignKind::Copy,
+            false
         )?;
         stmts.push(vir::Stmt::Assign(
             lhs.field(field),
