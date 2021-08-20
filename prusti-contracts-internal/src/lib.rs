@@ -21,6 +21,36 @@ pub fn derive_deserialize(item: TokenStream) -> TokenStream {
     }).into()
 }
 
+#[proc_macro_derive(PrustiDebug)]
+pub fn derive_debug(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl std::fmt::Debug for #name {
+        #[trusted]
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            todo!()
+        }
+      }
+    }).into()
+}
+
+#[proc_macro_derive(PrustiSerialize)]
+pub fn derive_serialize(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl  Serialize for #name {
+        #[trusted]
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+            todo!()
+        }
+      }
+    }).into()
+}
+
 #[proc_macro_derive(PrustiEq)]
 pub fn derive_eq(item: TokenStream) -> TokenStream {
     let input : DeriveInput = syn::parse(item).unwrap();
