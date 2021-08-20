@@ -80,6 +80,8 @@ mod private {
     pub use prusti_contracts_internal::predicate;
 
     pub use prusti_contracts_internal::PrustiDeserialize;
+    pub use prusti_contracts_internal::PrustiEq;
+    pub use prusti_contracts_internal::PrustiPartialEq;
 }
 
 

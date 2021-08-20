@@ -5602,7 +5602,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 vir::AssignKind::Copy => {
                     if field.typ.is_ref() {
                         let ref_name = field.typed_ref_name().unwrap();
-                        if ref_name == "str" || ref_name.ends_with("$str") {
+                        if true {
                             let pred_acc = vir::Expr::predicate_access_predicate(ref_name, dst_field, vir::PermAmount::Read);
                             alloc_stmts.push(vir::Stmt::Inhale(pred_acc));
                         } else {

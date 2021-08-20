@@ -21,6 +21,29 @@ pub fn derive_deserialize(item: TokenStream) -> TokenStream {
     }).into()
 }
 
+#[proc_macro_derive(PrustiEq)]
+pub fn derive_eq(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl Eq for #name {
+        fn assert_receiver_is_total_eq(&self){}
+      }
+    }).into()
+}
+
+#[proc_macro_derive(PrustiPartialEq)]
+pub fn derive_partial_eq(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl PartialEq for #name {
+        #[trusted]
+        fn eq(&self, other: &#name) -> bool { todo!() }
+      }
+    }).into()
+}
+
 #[proc_macro_attribute]
 pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     rewrite_prusti_attributes(SpecAttributeKind::Requires, attr.into(), tokens.into()).into()
