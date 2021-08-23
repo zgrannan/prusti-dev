@@ -203,10 +203,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             ty::TyKind::Char => {
                 Some((0.into(), std::char::MAX.into()))
             }
-            ty::TyKind::Bool
-                | ty::TyKind::Ref(_, _, _)
-                | ty::TyKind::Param(_)
-                | ty::TyKind::Adt(_,_) => None,
+            ty::TyKind::Bool | ty::TyKind::Ref(_, _, _) => None,
             ref x => unreachable!("{:?}", x),
         }
     }
@@ -234,15 +231,6 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                 None,
                 false,
             )],
-
-            ty::TyKind::Ref(_, ty, _) if ty.is_str() => {
-                vec![vir::Predicate::new_primitive_value(
-                    typ,
-                    self.encoder.encode_value_field(self.ty)?,
-                    None,
-                    false,
-                )]
-            }
 
             ty::TyKind::Int(_) | ty::TyKind::Uint(_) | ty::TyKind::Char => {
                 let bounds = if config::check_overflows() {

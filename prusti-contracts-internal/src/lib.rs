@@ -5,6 +5,20 @@ use prusti_specs::{rewrite_prusti_attributes, SpecAttributeKind};
 use quote::quote;
 use syn::{self, DeriveInput};
 
+#[proc_macro_derive(PrustiClone)]
+pub fn derive_clone(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl Clone for #name {
+        #[trusted]
+        fn clone(&self) -> Self {
+            todo!()
+        }
+      }
+    }).into()
+}
+
 #[proc_macro_derive(PrustiDeserialize)]
 pub fn derive_deserialize(item: TokenStream) -> TokenStream {
     let input : DeriveInput = syn::parse(item).unwrap();

@@ -79,6 +79,7 @@ mod private {
     /// of just Rust expressions.
     pub use prusti_contracts_internal::predicate;
 
+    pub use prusti_contracts_internal::PrustiClone;
     pub use prusti_contracts_internal::PrustiDebug;
     pub use prusti_contracts_internal::PrustiDeserialize;
     pub use prusti_contracts_internal::PrustiSerialize;
