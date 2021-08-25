@@ -5,6 +5,34 @@ use prusti_specs::{rewrite_prusti_attributes, SpecAttributeKind};
 use quote::quote;
 use syn::{self, DeriveInput};
 
+#[proc_macro_derive(PrustiPartialOrd)]
+pub fn derive_partial_ord(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl PartialOrd for #name {
+        #[trusted]
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            todo!()
+        }
+      }
+    }).into()
+}
+
+#[proc_macro_derive(PrustiOrd)]
+pub fn derive_ord(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl Ord for #name {
+        #[trusted]
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            todo!()
+        }
+      }
+    }).into()
+}
+
 #[proc_macro_derive(PrustiClone)]
 pub fn derive_clone(item: TokenStream) -> TokenStream {
     let input : DeriveInput = syn::parse(item).unwrap();

@@ -77,6 +77,7 @@ pub(crate) fn expand_struct_place<'tcx>(
                     places.push(tcx.mk_place_deref(*place));
                 }
             },
+            ty::Closure(_, _) => {},
             ref ty => {
                 unimplemented!("ty={:?}", ty);
             }

@@ -85,6 +85,8 @@ mod private {
     pub use prusti_contracts_internal::PrustiSerialize;
     pub use prusti_contracts_internal::PrustiEq;
     pub use prusti_contracts_internal::PrustiPartialEq;
+    pub use prusti_contracts_internal::PrustiOrd;
+    pub use prusti_contracts_internal::PrustiPartialOrd;
 }
 
 
