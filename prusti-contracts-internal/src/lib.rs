@@ -52,7 +52,7 @@ pub fn derive_deserialize(item: TokenStream) -> TokenStream {
     let input : DeriveInput = syn::parse(item).unwrap();
     let name = input.ident;
     (quote! {
-      impl <'de> Deserialize<'de> for #name {
+      impl <'de> serde::Deserialize<'de> for #name {
         #[trusted]
         fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
