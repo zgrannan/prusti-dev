@@ -15,6 +15,7 @@ use syn::spanned::Spanned;
 use std::convert::TryInto;
 
 use specifications::untyped;
+use specifications::untyped::EncodeTypeCheck;
 use parse_closure_macro::ClosureWithSpec;
 pub use spec_attribute_kind::SpecAttributeKind;
 use prusti_utils::force_matches;
@@ -442,8 +443,39 @@ pub fn refine_trait_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream
     }
 }
 
-pub fn invariant(_attr: TokenStream, tokens:TokenStream) -> TokenStream {
-    tokens
+pub fn invariant(attr: TokenStream, tokens:TokenStream) -> TokenStream {
+    let mut rewriter = rewriter::AstRewriter::new();
+    let spec_id = rewriter.generate_spec_id();
+    let invariant = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    let item: syn::DeriveInput = handle_result!(syn::parse2(tokens));
+    let item_span = item.span();
+    let item_ident = item.ident.clone();
+    let item_name = syn::Ident::new(
+        &format!("prusti_struct_invariant_item_{}_{}", item_ident, spec_id),
+        item_span,
+    );
+    let mut statements = TokenStream::new();
+    invariant.encode_type_check(&mut statements);
+    let spec_id_str = spec_id.to_string();
+    let assertion_json = crate::specifications::json::to_json_string(&invariant);
+
+    let mut spec_item: syn::ItemFn = parse_quote_spanned! {item_span=>
+        #[allow(unused_must_use, unused_variables, dead_code)]
+        #[prusti::spec_only]
+        #[prusti::spec_id = #spec_id_str]
+        #[prusti::assertion = #assertion_json]
+        fn #item_name(self) {
+            #statements
+        }
+    };
+    // spec_item.sig.generics = item.sig().generics.clone();
+    // spec_item.sig.inputs = item.sig().inputs.clone();
+    quote_spanned! { item_span =>
+       #item
+       impl #item_ident {
+          #spec_item
+       }
+    }
 }
 
 pub fn extern_spec(_attr: TokenStream, tokens:TokenStream) -> TokenStream {

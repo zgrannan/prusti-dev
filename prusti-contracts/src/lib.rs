@@ -61,7 +61,7 @@ mod private {
     pub use prusti_contracts_internal::trusted;
 
     /// A macro for data invariants
-    pub use prusti_contracts_impl::invariant;
+    pub use prusti_contracts_internal::invariant;
 
     /// A macro for writing a loop body invariant.
     pub use prusti_contracts_internal::body_invariant;

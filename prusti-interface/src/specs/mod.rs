@@ -337,6 +337,8 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                     SpecType::Postcondition
                 } else if fn_name.starts_with("prusti_pred_item_") {
                     SpecType::Predicate
+                } else if fn_name.starts_with("prusti_struct_invariant_") {
+                    SpecType::Invariant
                 } else {
                     unreachable!()
                 }
