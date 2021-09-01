@@ -1662,10 +1662,7 @@ impl PartialEq for Expr {
     /// Compare ignoring the `position` field
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Expr::Local(ref self_var, _), Expr::Local(ref other_var, _)) => {
-                println!("Compare {} to {}", self_var, other_var);
-                self_var == other_var
-            },
+            (Expr::Local(ref self_var, _), Expr::Local(ref other_var, _)) => self_var == other_var,
             (
                 Expr::Variant(box ref self_base, ref self_variant, _),
                 Expr::Variant(box ref other_base, ref other_variant, _),

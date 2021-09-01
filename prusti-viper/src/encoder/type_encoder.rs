@@ -199,7 +199,10 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             ty::TyKind::Char => {
                 Some((0.into(), std::char::MAX.into()))
             }
-            ty::TyKind::Bool | ty::TyKind::Ref(_, _, _) => None,
+            ty::TyKind::Bool
+                | ty::TyKind::Ref(_, _, _)
+                | ty::TyKind::Param(_)
+                | ty::TyKind::Adt(_, _) => None,
             ref x => unreachable!("{:?}", x),
         }
     }
@@ -545,28 +548,28 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                   );
                   let expr = (HackyExprFolder {saelf: self_local_var.clone()}).fold(enc.unwrap());
                   exprs.push(expr);
-              }
-             if num_variants == 0 {
-               debug!("ADT {:?} has no variant", adt_def);
-              } else if num_variants == 1 && (adt_def.is_struct() || adt_def.is_union()) {
-               debug!("ADT {:?} has only one variant", adt_def);
-               for field in &adt_def.non_enum_variant().fields {
-                 debug!("Encoding field {:?}", field);
-                 let field_name = &field.ident.as_str();
-                 let field_ty = field.ty(tcx, subst);
-                 let elem_field = self.encoder.encode_struct_field(field_name, field_ty)?;
-                 let elem_loc =
-                                vir::Expr::from(self_local_var.clone()).field(elem_field);
-                            exprs.push(
-                                self.encoder.encode_invariant_func_app(
-                                    field_ty,
-                                    elem_loc
-                                )?
-                            );
-                        }
-              } else {
-                        debug!("ADT {:?} has {} variants", adt_def, num_variants);
-                        // TODO: https://gitlab.inf.ethz.ch/OU-PMUELLER/prusti-dev/issues/201
+                if num_variants == 0 {
+                debug!("ADT {:?} has no variant", adt_def);
+                } else if num_variants == 1 && (adt_def.is_struct() || adt_def.is_union()) {
+                debug!("ADT {:?} has only one variant", adt_def);
+                for field in &adt_def.non_enum_variant().fields {
+                    debug!("Encoding field {:?}", field);
+                    let field_name = &field.ident.as_str();
+                    let field_ty = field.ty(tcx, subst);
+                    let elem_field = self.encoder.encode_struct_field(field_name, field_ty)?;
+                    let elem_loc =
+                                    vir::Expr::from(self_local_var.clone()).field(elem_field);
+                                exprs.push(
+                                    self.encoder.encode_invariant_func_app(
+                                        field_ty,
+                                        elem_loc
+                                    )?
+                                );
+                            }
+                } else {
+                            debug!("ADT {:?} has {} variants", adt_def, num_variants);
+                            // TODO: https://gitlab.inf.ethz.ch/OU-PMUELLER/prusti-dev/issues/201
+                }
               }
                     Some(exprs)
             },

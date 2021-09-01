@@ -411,7 +411,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> PlaceEncoder<'v, 'tcx> for MirEncoder<'p, 'v, 'tcx> {
     }
 
     fn get_local_span(&self, local: mir::Local) -> Span {
-        info!("get_local_span {:?}", local);
         self.mir.local_decls[local].source_info.span
     }
 }
