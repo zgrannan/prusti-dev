@@ -1,6 +1,7 @@
+extern crate prusti_contracts;
 use prusti_contracts::*;
 
-// postcondition (&mut arg) assert
+// precondition assert
 
 #[invariant(self.value <= 100)]
 struct Percentage {
@@ -12,7 +13,13 @@ impl Percentage {
         if self.value < 100 {
             self.value += 1;
         }
-    } // trivial test case
+    }
+}
+
+#[requires(x <= 100)]
+fn test(x: u8) {
+    let mut perc = Percentage { value: x };
+    perc.incr();
 }
 
 fn main() {}
