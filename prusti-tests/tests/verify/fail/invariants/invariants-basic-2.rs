@@ -1,3 +1,4 @@
+extern crate prusti_contracts;
 use prusti_contracts::*;
 
 // precondition assert
