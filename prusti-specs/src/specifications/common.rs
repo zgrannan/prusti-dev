@@ -315,6 +315,24 @@ impl<EID, ET, AT> LoopSpecification<EID, ET, AT> {
     }
 }
 
+/// Specification of a struct.
+#[derive(Debug, Clone)]
+pub struct StructSpecification<EID, ET, AT> {
+    pub invariant: Vec<Assertion<EID, ET, AT>>
+}
+
+impl<EID, ET, AT> StructSpecification<EID, ET, AT> {
+    pub fn new(invariant: Vec<Assertion<EID, ET, AT>>) -> Self {
+        Self { invariant }
+    }
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+    pub fn is_empty(&self) -> bool {
+        self.invariant.is_empty()
+    }
+}
+
 /// Specification of a procedure.
 #[derive(Debug, Clone)]
 pub struct ProcedureSpecification<EID, ET, AT> {
@@ -407,7 +425,7 @@ pub enum SpecificationSet<EID, ET, AT> {
     /// Loop invariant.
     Loop(LoopSpecification<EID, ET, AT>),
     /// Struct invariant.
-    Struct(Vec<Specification<EID, ET, AT>>),
+    Struct(StructSpecification<EID, ET, AT>),
 }
 
 impl<EID, ET, AT> SpecificationSet<EID, ET, AT> {
@@ -446,7 +464,7 @@ impl<EID: Clone + Debug, ET: Clone + Debug, AT: Clone + Debug> SpecificationSet<
     }
 
     #[track_caller]
-    pub fn expect_struct(&self) -> &Vec<Specification<EID, ET, AT>> {
+    pub fn expect_struct(&self) -> &StructSpecification<EID, ET, AT> {
         if let SpecificationSet::Struct(spec) = self {
             return spec;
         }

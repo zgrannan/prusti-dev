@@ -451,7 +451,7 @@ pub fn invariant(attr: TokenStream, tokens:TokenStream) -> TokenStream {
     let item_span = item.span();
     let item_ident = item.ident.clone();
     let item_name = syn::Ident::new(
-        &format!("prusti_struct_invariant_item_{}_{}", item_ident, spec_id),
+        &format!("prusti_struct_invariant_item_{}_{}", item_ident.to_string().to_lowercase(), spec_id),
         item_span,
     );
     let mut statements = TokenStream::new();
@@ -459,7 +459,7 @@ pub fn invariant(attr: TokenStream, tokens:TokenStream) -> TokenStream {
     let spec_id_str = spec_id.to_string();
     let assertion_json = crate::specifications::json::to_json_string(&invariant);
 
-    let mut spec_item: syn::ItemFn = parse_quote_spanned! {item_span=>
+    let spec_item: syn::ItemFn = parse_quote_spanned! {item_span=>
         #[allow(unused_must_use, unused_variables, dead_code)]
         #[prusti::spec_only]
         #[prusti::spec_id = #spec_id_str]

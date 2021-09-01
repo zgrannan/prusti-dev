@@ -182,6 +182,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> Collector<'p, 'v, 'tcx> {
                 {
                     // The function body is not needed.
                     if !function.has_constant_body() {
+                        println!("Body for {:?} : {} is not CONSTANT", identifier, function.body.unwrap());
                         // The function body is non-constant, make the function
                         // abstract. (We leave the constant bodies so that they
                         // could be inlined by one of the optimizations.)

@@ -48,7 +48,6 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
 
     let mut cmd = Command::new(&prusti_driver_path);
 
-    // println!("{:?}", vec![&compiler_lib, &compiler_bin, &libjvm_path]);
     add_to_loader_path(vec![compiler_lib, compiler_bin, libjvm_path], &mut cmd);
 
     if let None = env::var("VIPER_HOME").ok() {
@@ -76,7 +75,6 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
     };
 
     let has_no_sysroot_arg = !args.iter().any(|s| s == "--sysroot");
-    let is_check = args.iter().any(|s| s == "--print=cfg");
 
     // Setting RUSTC_WRAPPER causes Cargo to pass 'rustc' as the first argument.
     // We're invoking the compiler programmatically, so we ignore this
@@ -128,13 +126,8 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
     // Register the SIGINT handler; CTRL_C_EVENT or CTRL_BREAK_EVENT on Windows
     ctrlc::set_handler(sigint_handler).expect("Error setting Ctrl-C handler");
 
-    if(!is_check) {
-      println!("{:?}", cmd);
-    }
-
     let exit_status = cmd.status()
         .expect(&format!("failed to execute prusti-driver ({:?})", prusti_driver_path));
-
 
     if exit_status.success() {
         Ok(())

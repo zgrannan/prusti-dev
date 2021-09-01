@@ -317,6 +317,11 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         Some(spec.expect_procedure().clone())
     }
 
+    pub fn get_struct_specs(&self, def_id: DefId) -> Option<typed::StructSpecification<'tcx>> {
+        let spec = self.def_spec.get(&def_id)?;
+        Some(spec.expect_struct().clone())
+    }
+
     /// Get a local wrapper `DefId` for functions that have external specs.
     /// Return the original `DefId` for everything else.
     fn get_wrapper_def_id(&self, def_id: DefId) -> DefId {
