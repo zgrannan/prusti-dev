@@ -318,11 +318,11 @@ impl<EID, ET, AT> LoopSpecification<EID, ET, AT> {
 /// Specification of a struct.
 #[derive(Debug, Clone)]
 pub struct StructSpecification<EID, ET, AT> {
-    pub invariant: Vec<Assertion<EID, ET, AT>>
+    pub invariant: Vec<(ET, Assertion<EID, ET, AT>)>
 }
 
 impl<EID, ET, AT> StructSpecification<EID, ET, AT> {
-    pub fn new(invariant: Vec<Assertion<EID, ET, AT>>) -> Self {
+    pub fn new(invariant: Vec<(ET, Assertion<EID, ET, AT>)>) -> Self {
         Self { invariant }
     }
     pub fn empty() -> Self {

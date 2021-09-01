@@ -534,20 +534,22 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
               let num_variants = adt_def.variants.len();
               let tcx = self.encoder.env().tcx();
               if let Some(spec) = self.encoder.get_struct_specs(adt_def.did) {
-                  let enc = self.encoder.encode_assertion(
-                      &spec.invariant[0],
-                      &self.encoder.env().local_mir(get_struct_spec_procedure_def_id(&spec)),
-                      None,
-                      &vec![],
-                      None,
-                      true,
-                      None,
-                      ErrorCtxt::GenericExpression,
-                      adt_def.did,
-                      &HashMap::new()
-                  );
-                  let expr = (HackyExprFolder {saelf: self_local_var.clone()}).fold(enc.unwrap());
-                  exprs.push(expr);
+                  for (def_id, assertion) in &spec.invariant {
+                    let enc = self.encoder.encode_assertion(
+                        assertion,
+                        &self.encoder.env().local_mir(def_id.clone()),
+                        None,
+                        &vec![],
+                        None,
+                        true,
+                        None,
+                        ErrorCtxt::GenericExpression,
+                        adt_def.did,
+                        &HashMap::new()
+                    );
+                    let expr = (HackyExprFolder {saelf: self_local_var.clone()}).fold(enc.unwrap());
+                    exprs.push(expr);
+                  }
                 if num_variants == 0 {
                 debug!("ADT {:?} has no variant", adt_def);
                 } else if num_variants == 1 && (adt_def.is_struct() || adt_def.is_union()) {
@@ -722,12 +724,5 @@ struct HackyExprFolder {
 impl ExprFolder for HackyExprFolder {
     fn fold_local(&mut self, vir::Local {position, ..}: vir::Local) -> vir::Expr {
         vir::Expr::local_with_pos(self.saelf.clone(), position)
-    }
-}
-
-fn get_struct_spec_procedure_def_id(spec: &typed::StructSpecification<'_>) -> rustc_hir::def_id::LocalDefId {
-    match &**(&spec.invariant[0].kind) {
-        prusti_specs::specifications::common::AssertionKind::Expr(e) => e.expr,
-        _ => todo!()
     }
 }

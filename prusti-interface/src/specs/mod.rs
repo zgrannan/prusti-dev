@@ -68,7 +68,10 @@ pub struct SpecCollector<'a, 'tcx: 'a> {
 
     loop_specs: HashMap<LocalDefId, Vec<SpecificationId>>,
 
-    struct_specs: HashMap<LocalDefId, Vec<SpecificationId>>
+    // Struct invariants
+    // The keys are the struct ID definition, the first entry in each tuple
+    // is the id of the procedure implementing the spec
+    struct_specs: HashMap<LocalDefId, Vec<(LocalDefId, SpecificationId)>>
 }
 
 impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
@@ -183,11 +186,11 @@ impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
     }
 
     fn determine_struct_specs(&self, def_spec: &mut typed::DefSpecificationMap<'tcx>) {
-        for (local_id, spec_ids) in self.struct_specs.iter() {
+        for (struct_id, spec_ids) in self.struct_specs.iter() {
             let specs = spec_ids.iter()
-                .map(|spec_id| self.typed_specs.get(&spec_id).unwrap().clone())
+                .map(|(local_id, spec_id)| (local_id.clone(), self.typed_specs.get(&spec_id).unwrap().clone()))
                 .collect();
-            def_spec.specs.insert(*local_id, typed::SpecificationSet::Struct(typed::StructSpecification {
+            def_spec.specs.insert(*struct_id, typed::SpecificationSet::Struct(typed::StructSpecification {
                 invariant: specs
             }));
         }
@@ -360,19 +363,21 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 
             // Collect invariants
             if spec_type == SpecType::Invariant {
-                let (specs, id) = if is_loop_invariant {
-                  (&mut self.loop_specs, local_id)
+                if is_loop_invariant {
+                  self.loop_specs
+                    .entry(local_id)
+                    .or_insert(vec![])
+                    .push(spec_id);
                 } else {
                   let self_id = fn_decl.inputs[0].hir_id;
                   let hir = self.tcx.hir();
                   let impl_id = hir.get_parent_node(hir.get_parent_node(self_id));
                   let struct_id = get_struct_id_from_impl_node(hir.get(impl_id)).unwrap();
-                  (&mut self.struct_specs, struct_id.as_local().unwrap())
-                };
-                specs
-                    .entry(id)
+                  self.struct_specs
+                    .entry(struct_id.as_local().unwrap())
                     .or_insert(vec![])
-                    .push(spec_id);
+                    .push((local_id, spec_id));
+                };
             }
         }
     }
