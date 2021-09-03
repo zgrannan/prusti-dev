@@ -72,8 +72,8 @@ impl Predicate {
     }
     /// Construct a predicate that corresponds to a composite type that has only one variant such
     /// as `struct` or `tuple`.
-    pub fn new_struct(typ: Type, fields: Vec<Field>) -> Predicate {
-        Predicate::Struct(StructPredicate::new(typ, fields))
+    pub fn new_struct(typ: Type, fields: Vec<Field>, typ_inv: Option<Expr>) -> Predicate {
+        Predicate::Struct(StructPredicate::new(typ, fields, typ_inv))
     }
     /// Construct a predicate that corresponds to a composite type that has zero or more than one
     /// variants.
@@ -165,9 +165,9 @@ impl fmt::Display for StructPredicate {
 }
 
 impl StructPredicate {
-    pub fn new(typ: Type, fields: Vec<Field>) -> Self {
+    pub fn new(typ: Type, fields: Vec<Field>, typ_inv: Option<Expr>) -> Self {
         let this = Predicate::construct_this(typ.clone());
-        let body = fields
+        let body0 = fields
             .into_iter()
             .flat_map(|field| {
                 let location: Expr = Expr::from(this.clone()).field(field.clone());
@@ -177,6 +177,10 @@ impl StructPredicate {
                 vec![field_perm, pred_perm]
             })
             .conjoin();
+        let body = match typ_inv {
+            Some(inv) => Expr::and(body0, inv),
+            None => body0
+        };
         Self {
             typ,
             this,

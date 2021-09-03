@@ -279,6 +279,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
     }
 
     pub(super) fn get_viper_predicate(&self, name: &str) -> vir::Predicate {
+        println!("Lookup predicate for {}", name);
         self.type_predicates.borrow()[name].clone()
     }
 

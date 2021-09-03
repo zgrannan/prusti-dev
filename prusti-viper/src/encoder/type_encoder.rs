@@ -10,7 +10,7 @@ use crate::encoder::utils::range_extract;
 use crate::encoder::utils::PlusOne;
 use crate::encoder::Encoder;
 use prusti_common::{config, vir_local};
-use vir_crate::polymorphic::{self as vir, ExprFolder, ExprIterator};
+use vir_crate::polymorphic::{self as vir, ExprFolder, ExprIterator, FuncApp};
 // use prusti_interface::specifications::*;
 // use rustc::middle::const_val::ConstVal;
 use rustc_middle::ty;
@@ -253,6 +253,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                 vec![vir::Predicate::new_struct(
                     typ,
                     vec![self.encoder.encode_dereference_field(ty)?],
+                    None
                 )]
             },
 
@@ -265,7 +266,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                         self.encoder.encode_raw_ref_field(field_name, ty.expect_ty())
                     })
                     .collect::<Result<_, _>>()?;
-                vec![vir::Predicate::new_struct(typ, fields)]
+                vec![vir::Predicate::new_struct(typ, fields, None)]
             }
 
             ty::TyKind::Adt(adt_def, subst) if !adt_def.is_box() => {
@@ -284,7 +285,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             )?
                         );
                     }
-                    vec![vir::Predicate::new_struct(typ, fields)]
+                    vec![vir::Predicate::new_struct(typ, fields, None)]
                 } else {
                     debug!("ADT {:?} has {} variants", adt_def, num_variants);
                     let discriminant_field = self.encoder.encode_discriminant_field();
@@ -310,6 +311,19 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                                     self.encoder.encode_struct_field(field_name, field_ty)
                                 })
                                 .collect::<Result<_, _>>();
+                            let fields_invs: vir::Expr = variant_def
+                                .fields
+                                .iter()
+                                .map(|field| {
+                                    let field_name = &field.ident.as_str();
+                                    let field_ty = field.ty(tcx, subst);
+                                    let expr = self.encoder.encode_invariant_func_app(
+                                        field_ty,
+                                        vir::Expr::from(this.clone()). field(self.encoder.encode_enum_variant_field(field_name))
+                                    );
+                                    expr.unwrap()
+                                })
+                                .fold(true.into(), |lhs,rhs| vir::Expr::and(lhs, rhs));
                             let variant_name = &variant_def.ident.as_str();
                             let guard = vir::Expr::eq_cmp(
                                 discriminant_loc.clone().into(),
@@ -319,7 +333,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             fields_res.map(|fields| (
                                 guard,
                                 variant_name.to_string(),
-                                vir::StructPredicate::new(variant_typ, fields),
+                                vir::StructPredicate::new(variant_typ, fields, Some(fields_invs)),
                             ))
                         })
                         .collect::<Result<_, _>>()?;
@@ -349,6 +363,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                 vec![vir::Predicate::new_struct(
                     typ,
                     vec![self.encoder.encode_dereference_field(field_ty)?],
+                    None
                 )]
             }
 
@@ -375,7 +390,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                         // let field_name = "upvars".to_owned();
                         // let field = self.encoder.encode_raw_ref_field(field_name, cl_upvars);
                         // let pred = vir::Predicate::new_struct(typ, vec![field.clone()]);
-                        let pred = vir::Predicate::new_struct(typ.clone(), vec![]);
+                        let pred = vir::Predicate::new_struct(typ.clone(), vec![], None);
                         // trace!("Encoded closure type {:?} as {:?} with field {:?}", typ, pred, field);
                         trace!("Encoded closure type {:?} as {:?}", typ, pred);
                         vec![pred]
