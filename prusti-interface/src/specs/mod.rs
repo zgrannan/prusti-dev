@@ -47,9 +47,9 @@ struct ProcedureSpecRef {
 }
 
 /// Specification collector, intended to be applied as a visitor over the crate
-/// HIR. After the visit, [determine_def_specs] can be used to get back
+/// HIR. After the visit, [SpecCollector::build_def_specs] can be used to get back
 /// a mapping of DefIds (which may not be local due to extern specs) to their
-/// [SpecificationSet], i.e. procedures, loop invariants, and structs.
+/// [typed::SpecificationSet], i.e. procedures, loop invariants, and structs.
 pub struct SpecCollector<'a, 'tcx: 'a> {
     tcx: TyCtxt<'tcx>,
     env: &'a Environment<'tcx>,
@@ -366,7 +366,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 if is_loop_invariant {
                   self.loop_specs
                     .entry(local_id)
-                    .or_insert(vec![])
+                    .or_insert_with(Vec::new)
                     .push(spec_id);
                 } else {
                   let self_id = fn_decl.inputs[0].hir_id;

@@ -32,7 +32,7 @@ pub fn is_prefix(place: &mir::Place, potential_prefix: &mir::Place) -> bool {
 /// each of the struct's fields `{x.f.g.f, x.f.g.g, x.f.g.h}`. If
 /// `without_field` is not `None`, then omits that field from the final
 /// vector.
-pub fn expand_struct_place<'a, 'tcx: 'a>(
+pub fn expand_struct_place<'tcx>(
     place: &mir::Place<'tcx>,
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
@@ -155,7 +155,7 @@ pub fn try_pop_deref<'tcx>(tcx: TyCtxt<'tcx>, place: mir::Place<'tcx>) -> Option
 /// `{x.g, x.h, x.f.f, x.f.h, x.f.g.f, x.f.g.g, x.f.g.h}` and
 /// subtracting `{x.f.g.h}` from it, which results into `{x.g, x.h,
 /// x.f.f, x.f.h, x.f.g.f, x.f.g.g}`.
-pub fn expand<'a, 'tcx: 'a>(
+pub fn expand<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     minuend: &mir::Place<'tcx>,
@@ -189,7 +189,7 @@ pub fn expand<'a, 'tcx: 'a>(
 /// Try to collapse all places in `places` by following the
 /// `guide_place`. This function is basically the reverse of
 /// `expand_struct_place`.
-pub fn collapse<'a, 'tcx: 'a>(
+pub fn collapse<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     places: &mut HashSet<mir::Place<'tcx>>,
@@ -231,7 +231,7 @@ impl<'tcx> VecPlaceComponent<'tcx> {
 }
 
 /// A different way to represent a place that is more similar to the one
-/// mentioned in the issue https://github.com/rust-lang/rust/issues/52708.
+/// mentioned in the issue <https://github.com/rust-lang/rust/issues/52708>.
 #[derive(Debug)]
 pub struct VecPlace<'tcx> {
     components: Vec<VecPlaceComponent<'tcx>>,
