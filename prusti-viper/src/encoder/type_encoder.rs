@@ -573,7 +573,46 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             // TODO: https://gitlab.inf.ethz.ch/OU-PMUELLER/prusti-dev/issues/201
                 }
               }
-                    Some(exprs)
+              if num_variants > 1 {
+                let discriminant_field = self.encoder.encode_discriminant_field();
+                let discriminant_values = compute_discriminant_values(adt_def, tcx);
+                let discriminant_loc =
+                    vir::Expr::from(self_local_var.clone()).field(discriminant_field.clone());
+                adt_def.variants.iter().zip(discriminant_values).for_each(|(variant_def, variant_index)| {
+                        let variant_name = &variant_def.ident.as_str();
+                        let guard = vir::Expr::eq_cmp(
+                            discriminant_loc.clone(),
+                            variant_index.into(),
+                        );
+                        variant_def
+                            .fields
+                            .iter()
+                            .for_each(|field| {
+                                debug!("Encoding (tyinv) field {:?}", field);
+                                let field_name = &field.ident.as_str();
+                                let field_ty = field.ty(tcx, subst);
+                                let vir_field = self.encoder.encode_struct_field(field_name, field_ty).unwrap();
+                                let field_loc = vir::Expr::from(self_local_var.clone())
+                                    .field(self.encoder.encode_enum_variant_field(variant_name))
+                                    .field(vir_field);
+                                let invariant_expr =
+                                  self.encoder.encode_invariant_func_app(field_ty, field_loc).unwrap();
+                                // let acc =
+                                //     vir::Expr::and(
+                                //         vir::Expr::acc_permission(field_loc.clone(), vir::PermAmount::Read),
+                                //         vir::Expr::pred_permission(field_loc.clone(), vir::PermAmount::Read).unwrap(),
+                                //     );
+                                // let impl_rhs = vir::Expr::and(acc, invariant_expr);
+                                exprs.push(
+                                    vir::Expr::implies(
+                                        guard.clone(),
+                                        invariant_expr
+                                    )
+                                );
+                            });
+                });
+              }
+              Some(exprs)
             },
             _ => {
          Some(vec![])
