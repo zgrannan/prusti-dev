@@ -228,7 +228,13 @@ impl State {
     }
 
     pub fn contains_pred(&self, place: &vir::Expr) -> bool {
-        self.pred.contains_key(place)
+        if self.pred.contains_key(place) {
+            // println!("Pred {:?} contains place {:?}", self.pred, place);
+            true
+        } else {
+            // println!("Pred {:?} does not contain place {:?}", self.pred, place);
+            false
+        }
     }
 
     /// Note: the permission amount is currently ignored

@@ -518,6 +518,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
     pub fn encode_invariant_def(self) -> EncodingResult<vir::Function> {
         debug!("[enter] encode_invariant_def({:?})", self.ty);
 
+        let typ = self.encoder.encode_type(self.ty)?;
         let predicate_name = self.encoder.encode_type_predicate_use(self.ty)?;
         let self_local_var = vir_local!{ self: {vir::Type::typed_ref(predicate_name)} };
 
@@ -573,13 +574,14 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             // TODO: https://gitlab.inf.ethz.ch/OU-PMUELLER/prusti-dev/issues/201
                 }
               }
-              if num_variants > 1 {
+              if false && num_variants > 1 {
                 let discriminant_field = self.encoder.encode_discriminant_field();
                 let discriminant_values = compute_discriminant_values(adt_def, tcx);
                 let discriminant_loc =
                     vir::Expr::from(self_local_var.clone()).field(discriminant_field.clone());
                 adt_def.variants.iter().zip(discriminant_values).for_each(|(variant_def, variant_index)| {
                         let variant_name = &variant_def.ident.as_str();
+                        let variant_field = self.encoder.encode_enum_variant_field(variant_name);
                         let guard = vir::Expr::eq_cmp(
                             discriminant_loc.clone(),
                             variant_index.into(),
@@ -592,21 +594,36 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                                 let field_name = &field.ident.as_str();
                                 let field_ty = field.ty(tcx, subst);
                                 let vir_field = self.encoder.encode_struct_field(field_name, field_ty).unwrap();
-                                let field_loc = vir::Expr::from(self_local_var.clone())
-                                    .field(self.encoder.encode_enum_variant_field(variant_name))
-                                    .field(vir_field);
+                                let variant_loc = vir::Expr::from(self_local_var.clone()).field(variant_field.clone());
+                                let field_loc = variant_loc.clone().field(vir_field.clone());
                                 let invariant_expr =
-                                  self.encoder.encode_invariant_func_app(field_ty, field_loc).unwrap();
-                                // let acc =
-                                //     vir::Expr::and(
-                                //         vir::Expr::acc_permission(field_loc.clone(), vir::PermAmount::Read),
-                                //         vir::Expr::pred_permission(field_loc.clone(), vir::PermAmount::Read).unwrap(),
-                                //     );
-                                // let impl_rhs = vir::Expr::and(acc, invariant_expr);
+                                  self.encoder.encode_invariant_func_app(field_ty, field_loc.clone()).unwrap();
+                                let variant_acc_permission = vir::Expr::acc_permission(
+                                    variant_loc.clone(),
+                                    vir::PermAmount::Read,
+                                );
+                                let field_acc_permission = vir::Expr::acc_permission(
+                                    field_loc,
+                                    vir::PermAmount::Read,
+                                );
+                                let unfolding = vir::Expr::unfolding(
+                                    typ.clone().variant(variant_name).name(),
+                                    vec![variant_loc.clone()],
+                                    invariant_expr,
+                                    vir::PermAmount::Read,
+                                    None
+                                    // Some(vir::EnumVariantIndex::from(&variant_field))
+                                );
+                                // let acc_permission = vir::Expr::and(variant_acc_permission, field_acc_permission);
+                                let consequence = unfolding; // vir::Expr::and(variant_acc_permission, unfolding);
+                                let impliction = vir::Expr::implies(guard.clone(), consequence);
                                 exprs.push(
-                                    vir::Expr::implies(
-                                        guard.clone(),
-                                        invariant_expr
+                                    vir::Expr::unfolding(
+                                        typ.name(),
+                                        vec![vir::Expr::from(self_local_var.clone())],
+                                        impliction,
+                                        vir::PermAmount::Read,
+                                        None // Some(vir::EnumVariantIndex::from(&variant_field))
                                     )
                                 );
                             });
@@ -650,10 +667,12 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
         self.encoder
           .log_vir_program_before_foldunfold(function.to_string());
 
+        let predicates_map = self.encoder.get_used_viper_predicates_map();
+
         // Add folding/unfolding
         let final_function = foldunfold::add_folding_unfolding_to_function(
-             function,
-             self.encoder.get_used_viper_predicates_map(),
+            function,
+            predicates_map
         ).unwrap(); // TODO: generate a stub function in case of error
         debug!(
           "[exit] encode_invariant_def({:?}):\n{}",

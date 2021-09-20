@@ -31,6 +31,7 @@ pub type TriggerSet = common::TriggerSet<ExpressionId, syn::Expr>;
 pub type Pledge = common::Pledge<ExpressionId, syn::Expr, Arg>;
 
 /// An abstraction over all kinds of function items.
+#[derive(Clone)]
 pub enum AnyFnItem {
     Fn(syn::ItemFn),
     TraitMethod(syn::TraitItemMethod),

@@ -1,9 +1,24 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use prusti_specs::{rewrite_prusti_attributes, SpecAttributeKind};
+use prusti_specs::{SpecAttributeKind, rewrite_prusti_attributes, specifications::untyped::AnyFnItem};
 use quote::quote;
 use syn::{self, DeriveInput};
+
+
+#[proc_macro_derive(PrustiHash)]
+pub fn derive_hash(item: TokenStream) -> TokenStream {
+    let input : DeriveInput = syn::parse(item).unwrap();
+    let name = input.ident;
+    (quote! {
+      impl std::hash::Hash for #name {
+        #[trusted]
+        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            todo!()
+        }
+      }
+    }).into()
+}
 
 #[proc_macro_derive(PrustiPartialOrd)]
 pub fn derive_partial_ord(item: TokenStream) -> TokenStream {
@@ -82,7 +97,7 @@ pub fn derive_serialize(item: TokenStream) -> TokenStream {
     let input : DeriveInput = syn::parse(item).unwrap();
     let name = input.ident;
     (quote! {
-      impl  Serialize for #name {
+      impl serde::Serialize for #name {
         #[trusted]
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
@@ -145,6 +160,29 @@ pub fn pure(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn trusted(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     rewrite_prusti_attributes(SpecAttributeKind::Trusted, attr.into(), tokens.into()).into()
+}
+
+fn without_body(orig: AnyFnItem) -> AnyFnItem {
+    let mut fn_item = orig.clone();
+    let block: syn::Block = syn::parse2(quote! {{
+       todo!();
+    }}).unwrap();
+    match fn_item {
+        AnyFnItem::Fn(ref mut item) => { item.block = Box::new(block); },
+        AnyFnItem::ImplMethod(ref mut item) => { item.block = block; } ,
+        AnyFnItem::TraitMethod(ref mut item) => { item.default = Some(block); }
+    }
+    fn_item
+}
+
+#[proc_macro_attribute]
+pub fn trusted_skip(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let orig : AnyFnItem = syn::parse2(tokens.into()).unwrap();
+    let wb = without_body(orig);
+    (quote! {
+       #[trusted]
+       #wb
+    }).into()
 }
 
 #[proc_macro]

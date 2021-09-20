@@ -59,6 +59,7 @@ mod private {
 
     /// A macro for marking a function as trusted.
     pub use prusti_contracts_internal::trusted;
+    pub use prusti_contracts_internal::trusted_skip;
 
     /// A macro for data invariants
     pub use prusti_contracts_internal::invariant;
@@ -82,11 +83,12 @@ mod private {
     pub use prusti_contracts_internal::PrustiClone;
     pub use prusti_contracts_internal::PrustiDebug;
     pub use prusti_contracts_internal::PrustiDeserialize;
-    pub use prusti_contracts_internal::PrustiSerialize;
     pub use prusti_contracts_internal::PrustiEq;
-    pub use prusti_contracts_internal::PrustiPartialEq;
+    pub use prusti_contracts_internal::PrustiHash;
     pub use prusti_contracts_internal::PrustiOrd;
+    pub use prusti_contracts_internal::PrustiPartialEq;
     pub use prusti_contracts_internal::PrustiPartialOrd;
+    pub use prusti_contracts_internal::PrustiSerialize;
 }
 
 

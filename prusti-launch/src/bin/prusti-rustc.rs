@@ -120,6 +120,7 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
 
     // Set the `prusti` compilation flag, used to enable `prusti_contract`'s macros.
     cmd.arg("--cfg=feature=\"prusti\"");
+    cmd.arg("--cfg=feature=\"prusti_fast\"");
 
     // cmd.arg("-Zreport-delayed-bugs");
     // cmd.arg("-Ztreat-err-as-bug=1");

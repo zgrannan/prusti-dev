@@ -198,7 +198,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
 
                     x => {
                         return Err(EncodingError::internal(
-                            format!("{} has no fields", utils::ty_to_string(x))
+                            format!("{:?} has no fields", x)
                         ));
                     }
                 }
