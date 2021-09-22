@@ -201,10 +201,10 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             }
             ty::TyKind::Bool | ty::TyKind::Ref(_, _, _) => None,
             ty::TyKind::Adt(_, _) => {
-                assert!(self.encoder.env().type_is_copy(self.ty));
+                // debug_assert!(self.encoder.env().type_is_copy(self.ty), "{:?} is not copy type", self.ty);
                 None
             }
-            ref x => unreachable!("{:?}", x),
+            ref x => None //unreachable!("{:?}", x),
         }
     }
 

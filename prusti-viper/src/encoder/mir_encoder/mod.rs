@@ -66,7 +66,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         &self,
         place: &mir::Place<'tcx>,
     ) -> EncodingResult<(PlaceEncoding<'tcx>, ty::Ty<'tcx>, Option<usize>)> {
-        trace!("Encode place {:?}", place);
+        info!("Encode place {:?}", place);
         self.encode_projection(place.local, place.projection)
     }
 
@@ -79,7 +79,9 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         local: mir::Local,
         projection: &[mir::PlaceElem<'tcx>],
     ) -> EncodingResult<(PlaceEncoding<'tcx>, ty::Ty<'tcx>, Option<usize>)> {
-        trace!("Encode projection {:?}, {:?}", local, projection);
+        info!("Encode projection {:?}, {:?}", local, projection);
+        info!("LT: {:?}", self.get_local_ty(local));
+        info!("LT Span: {:?}", self.get_local_span(local));
 
         if projection.is_empty() {
             return Ok((
@@ -93,7 +95,9 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
             local,
             &projection[..projection.len() - 1]
         )?;
-        trace!("base_ty: {:?}", base_ty);
+        info!("end recurse {:?}, {:?}", local, projection);
+        info!("encoded_base: {:?}", encoded_base);
+        info!("base_ty: {:?}", base_ty);
 
         let elem = projection.last().unwrap();
         Ok(match elem {
@@ -102,7 +106,8 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                     ty::TyKind::Tuple(elems) => {
                         let field_name = format!("tuple_{}", field.index());
                         let field_ty = elems[field.index()].expect_ty();
-                        let encoded_field = self.encoder()
+                        let encoded_field =
+                            self.encoder()
                             .encode_raw_ref_field(field_name, field_ty)?;
                         let encoded_projection = encoded_base.field(encoded_field);
                         (encoded_projection, field_ty, None)
@@ -116,6 +121,13 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                             num
                         } else {
                             if num_variants != 1 {
+                                panic!(
+                                    "tried to encode a projection that accesses the field {} \
+                                    of a variant without first downcasting its enumeration \
+                                    {:?}",
+                                    field.index(),
+                                    base_ty,
+                                );
                                 return Err(EncodingError::unsupported(
                                     format!(
                                         "tried to encode a projection that accesses the field {} \
@@ -197,6 +209,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                     }
 
                     x => {
+                        panic!("{:?} has no fields", x);
                         return Err(EncodingError::internal(
                             format!("{:?} has no fields", x)
                         ));

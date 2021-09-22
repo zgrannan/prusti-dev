@@ -62,7 +62,7 @@ use rustc_attr::IntType::SignedInt;
 // use syntax::codemap::{MultiSpan, Span};
 use rustc_span::{MultiSpan, Span};
 use prusti_interface::specs::typed;
-use ::log::{trace, debug};
+use ::log::{trace, debug, info};
 use std::borrow::Borrow as StdBorrow;
 use prusti_interface::environment::borrowck::regions::PlaceRegionsError;
 use crate::encoder::errors::EncodingErrorKind;
@@ -2564,7 +2564,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             .tcx()
             .def_path_str(called_def_id);
             // .absolute_item_path_str(called_def_id);
-        debug!("Encoding non-pure function call '{}' with args {:?}", full_func_proc_name, mir_args);
+        info!("Encoding non-pure function call '{}' with args {:?}", full_func_proc_name, mir_args);
 
         // First we construct the "operands" vector. This construction differs
         // for closure calls, where we need to unpack a tuple into the actual

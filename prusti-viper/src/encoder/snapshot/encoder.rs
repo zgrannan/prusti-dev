@@ -53,7 +53,7 @@ pub struct SnapshotEncoder {
 
 
     /// Interning table for functions.
-    functions: HashMap<vir::FunctionIdentifier, vir::Function>,
+    pub functions: HashMap<vir::FunctionIdentifier, vir::Function>,
     /// Interning table for domains.
     domains: HashMap<String, vir::Domain>,
 }
