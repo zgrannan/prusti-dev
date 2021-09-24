@@ -20,7 +20,6 @@ fn main() {
 }
 
 fn process(mut args: Vec<String>) -> Result<(), i32> {
-    println!("prusti-rustc called with original args {:?}", args);
     let current_executable_dir = env::current_exe()
         .expect("current executable path invalid")
         .parent()

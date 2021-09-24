@@ -17,14 +17,12 @@ fn process<I>(args: I) -> Result<(), i32>
 where
     I: Iterator<Item = String>,
 {
-    println!("Init");
     let mut prusti_rustc_path = std::env::current_exe()
         .expect("current executable path invalid")
         .with_file_name("prusti-rustc");
     if cfg!(windows) {
         prusti_rustc_path.set_extension("exe");
     }
-    println!("Init2");
 
     // Remove the leading "prusti" argument when `cargo-prusti` is invocated
     // as `cargo prusti` (note the space)
@@ -38,15 +36,10 @@ where
         std::env::var("PRUSTI_LOG_DIR").unwrap_or_else(|_| format!("{}/log", cargo_target));
 
     let clean_args : Vec<String> = clean_args.collect();
-    println!("{:?}", cargo_path);
-    println!("{:?}", prusti_rustc_path);
-    println!("{:?}", &clean_args);
     let exit_status = Command::new(cargo_path)
         .arg("check")
         .args(clean_args)
-        .env("RUST_SYSROOT", std::env::var("RUST_SYSROOT").unwrap_or("".to_string()))
         .env("RUST_TOOLCHAIN", get_rust_toolchain_channel())
-        .env("RUSTC_WRAPPER", prusti_rustc_path.clone())
         .env("CARGO_TARGET_DIR", cargo_target)
         .env("PRUSTI_QUIET", "true")
         .env("PRUSTI_FULL_COMPILATION", "true")
