@@ -205,6 +205,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
             let var_name = mir_encoder.encode_local_var_name(local);
             let var_span = mir_encoder.get_local_span(local);
             let mir_type = mir_encoder.get_local_ty(local);
+            if !self.encoder.env().type_is_copy(mir_type) {
+                return Err(SpannedEncodingError::incorrect(
+                    "pure function parameters must be Copy",
+                    var_span,
+                ));
+            }
             let var_type = self
                 .encoder
                 .encode_snapshot_type(mir_type, self.tymap)
@@ -407,13 +413,13 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
         let return_span = self.get_local_span(mir::RETURN_PLACE);
 
         // Return an error for unsupported return types
-        let tcx = self.encoder.env().tcx();
-        check_is_supported_type_of_pure_expression(tcx, ty).map_err(|t|
-            SpannedEncodingError::incorrect(
-                format!("invalid return type of pure function. Type {} has unsupported kind {:?}.", t, t.kind()),
-                            return_span,
-                        )
-        )?;
+        if !self.encoder.env().type_is_copy(ty) {
+            return Err(SpannedEncodingError::incorrect(
+                "return type of pure function does not implement Copy",
+                return_span,
+            ));
+        }
+
         let return_local = mir::Place::return_place().as_local().unwrap();
         let span = self.interpreter.mir_encoder().get_local_span(return_local);
         self.encoder.encode_snapshot_type(ty, self.tymap).with_span(span)
@@ -808,13 +814,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                                 assert_eq!(args.len(), 1);
 
                                 // Return an error for unsupported old(..) types
-                                let tcx = self.encoder.env().tcx();
-                                check_is_supported_type_of_pure_expression(tcx, ty).map_err(|t|
-                                    SpannedEncodingError::incorrect(
-                                        format!("the type of the old expression is invalid. Type {} is not supported.", t),
-                                        term.source_info.span,
-                                                )
-                                )?;
 
                                 let encoded_rhs = self
                                     .mir_encoder
@@ -929,7 +928,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                             _ => {
                                 let is_pure_function = self.encoder.is_pure(def_id);
                                 let (function_name, return_type) = if is_pure_function {
-                                    self.encoder.encode_pure_function_use(def_id, self.parent_def_id, tymap)
+                                    self.encoder.encode_pure_function_use(def_id, self.parent_def_id, &tymap)
                                         .with_span(term.source_info.span)?
                                 } else {
                                     return Err(SpannedEncodingError::incorrect(
@@ -1497,35 +1496,5 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
         self.apply_downcasts(state, location)?;
 
         Ok(())
-    }
-}
-
-fn check_is_supported_type_of_pure_expression<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> Result<(), ty::Ty<'tcx>> {
-    // Since we don't support box, references and raw pointers this will not recurse forever.
-    match ty.kind() {
-        ty::TyKind::Bool
-        | ty::TyKind::Int(_)
-        | ty::TyKind::Uint(_)
-        | ty::TyKind::Char => Ok(()),
-
-        ty::TyKind::Tuple(elems) => {
-            let results: Result<Vec<_>, _> =
-                elems.types().map(|t| check_is_supported_type_of_pure_expression(tcx, t)).collect();
-            results.map(|_| ())
-        }
-
-        ty::TyKind::Adt(adt_def, subst) if !adt_def.is_box() => {
-            let results: Result<Vec<_>, _> =
-                adt_def.all_fields()
-                        .map(|field| field.ty(tcx, subst))
-                        .map(|t| check_is_supported_type_of_pure_expression(tcx, t)).collect();
-            results.map(|_| ())
-        }
-
-        ty::TyKind::Projection(proj) => {
-           check_is_supported_type_of_pure_expression(tcx, proj.substs.type_at(0))
-        }
-
-        _ => Err(ty),
     }
 }
