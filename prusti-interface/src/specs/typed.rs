@@ -19,6 +19,8 @@ pub type SpecificationSet<'tcx> = common::SpecificationSet<ExpressionId, LocalDe
 pub type LoopSpecification<'tcx> = common::LoopSpecification<ExpressionId, LocalDefId, (mir::Local, ty::Ty<'tcx>)>;
 /// A set of untyped specifications associated with a procedure.
 pub type ProcedureSpecification<'tcx> = common::ProcedureSpecification<ExpressionId, LocalDefId, (mir::Local, ty::Ty<'tcx>)>;
+/// A set of untyped specifications associated with a struct.
+pub type StructSpecification<'tcx> = common::StructSpecification<ExpressionId, LocalDefId, (mir::Local, ty::Ty<'tcx>)>;
 /// A map of untyped specifications for a specific crate.
 pub type SpecificationMap<'tcx> = HashMap<common::SpecificationId, Assertion<'tcx>>;
 /// An assertion that has no types associated with it.
