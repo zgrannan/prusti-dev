@@ -377,12 +377,11 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 
             // Collect invariants
             if spec_type == SpecType::Invariant {
-                if is_loop_invariant {
                   self.loop_specs
                     .entry(local_id)
                     .or_insert_with(Vec::new)
                     .push(spec_id);
-                } else {
+            } else if spec_type == SpecType::StructInvariant {
                   let self_id = fn_decl.inputs[0].hir_id;
                   let hir = self.tcx.hir();
                   let impl_id = hir.get_parent_node(hir.get_parent_node(self_id));
@@ -391,8 +390,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                     .entry(struct_id.as_local().unwrap())
                     .or_insert(StructSpecRef::new())
                     .add_spec(local_id, spec_id);
-                };
-            }
+            };
         }
     }
 
