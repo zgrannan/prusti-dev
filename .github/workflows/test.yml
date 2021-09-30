@@ -32,13 +32,7 @@ jobs:
       - name: Set up the environment
         run: python x.py setup
       - name: Cache cargo
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Build with cargo
         run: python x.py build --all --verbose
       - name: Run "quick" cargo tests
@@ -64,13 +58,7 @@ jobs:
       - name: Set up the environment
         run: python x.py setup
       - name: Cache cargo
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Build with cargo
         run: python x.py build --all --verbose
       - name: Check and report Clippy errors
@@ -103,13 +91,7 @@ jobs:
       - name: Set up the environment
         run: python x.py setup
       - name: Cache cargo
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Build with cargo
         run: python x.py build --all --verbose
       - name: Check and report formatting warnings
@@ -131,9 +113,11 @@ jobs:
           python ./x.py fmt-check prusti-utils
           #python ./x.py fmt-check prusti-viper
           rustfmt --check prusti-viper/src/encoder/foldunfold/mod.rs
+          rustfmt --check prusti-viper/src/encoder/pure_functions/mod.rs
           python ./x.py fmt-check viper
           python ./x.py fmt-check viper-sys
           python ./x.py fmt-check vir
+          rustfmt --check vir/defs/high/mod.rs
           rustfmt --check vir/defs/polymorphic/mod.rs
           rustfmt --check vir/defs/components/mod.rs
           python ./x.py fmt-check vir-gen
@@ -157,13 +141,7 @@ jobs:
       - name: Set up the environment
         run: python x.py setup
       - name: Cache cargo
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-debug-${{ hashFiles('**/Cargo.lock', 'rust-toolchain') }}
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Build with cargo
         run: python x.py build --all --verbose
       - name: Run "quick" cargo tests
@@ -204,6 +182,8 @@ jobs:
           java-version: '15'
       - name: Set up the environment
         run: python x.py setup
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v1.3.0
       - name: Build with cargo
         run: python x.py build --all --verbose
       - name: Run cargo tests
