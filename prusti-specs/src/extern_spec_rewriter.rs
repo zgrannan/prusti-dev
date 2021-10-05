@@ -241,7 +241,7 @@ pub fn generate_new_struct(item: &syn::ItemImpl) -> syn::Result<syn::ItemStruct>
     // Add `PhantomData` markers for each type parameter to silence errors
     // about unused type parameters.
     for param in generics.params.iter() {
-        let field = format!("std::marker::PhantomData<{}>,", get_param_ident(param).to_token_stream().to_string());
+        let field = format!("core::marker::PhantomData<{}>,", param.to_token_stream().to_string());
         fields_str.push_str(&field);
     }
 

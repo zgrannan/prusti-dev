@@ -46,6 +46,21 @@ struct ProcedureSpecRef {
     trusted: bool,
 }
 
+struct StructSpecRef {
+    // The first entry in each tuple represents the proceedure implementing the spec
+    struct_specs: Vec<(LocalDefId, SpecificationId)>
+}
+
+impl StructSpecRef {
+    fn new() -> StructSpecRef {
+        StructSpecRef { struct_specs: vec![] }
+    }
+
+    fn add_spec(&mut self, procedure_def_id: LocalDefId, spec_id: SpecificationId) {
+        self.struct_specs.push((procedure_def_id, spec_id))
+    }
+}
+
 /// Specification collector, intended to be applied as a visitor over the crate
 /// HIR. After the visit, [SpecCollector::build_def_specs] can be used to get back
 /// a mapping of DefIds (which may not be local due to extern specs) to their
@@ -69,9 +84,8 @@ pub struct SpecCollector<'a, 'tcx: 'a> {
     loop_specs: HashMap<LocalDefId, Vec<SpecificationId>>,
 
     // Struct invariants
-    // The keys are the struct ID definition, the first entry in each tuple
-    // is the id of the procedure implementing the spec
-    struct_specs: HashMap<LocalDefId, Vec<(LocalDefId, SpecificationId)>>
+    // The keys are struct definitions
+    struct_specs: HashMap<LocalDefId, StructSpecRef>
 }
 
 impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
@@ -187,7 +201,7 @@ impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
 
     fn determine_struct_specs(&self, def_spec: &mut typed::DefSpecificationMap<'tcx>) {
         for (struct_id, spec_ids) in self.struct_specs.iter() {
-            let specs = spec_ids.iter()
+            let specs = spec_ids.struct_specs.iter()
                 .map(|(local_id, spec_id)| (local_id.clone(), self.typed_specs.get(&spec_id).unwrap().clone()))
                 .collect();
             def_spec.specs.insert(*struct_id, typed::SpecificationSet::Struct(typed::StructSpecification {
@@ -352,7 +366,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 } else if fn_name.starts_with("prusti_pred_item_") {
                     SpecType::Predicate
                 } else if fn_name.starts_with("prusti_struct_invariant_") {
-                    SpecType::Invariant
+                    SpecType::StructInvariant
                 } else {
                     unreachable!()
                 }
@@ -363,22 +377,20 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 
             // Collect invariants
             if spec_type == SpecType::Invariant {
-                if is_loop_invariant {
                   self.loop_specs
                     .entry(local_id)
                     .or_insert_with(Vec::new)
                     .push(spec_id);
-                } else {
+            } else if spec_type == SpecType::StructInvariant {
                   let self_id = fn_decl.inputs[0].hir_id;
                   let hir = self.tcx.hir();
                   let impl_id = hir.get_parent_node(hir.get_parent_node(self_id));
                   let struct_id = get_struct_id_from_impl_node(hir.get(impl_id)).unwrap();
                   self.struct_specs
                     .entry(struct_id.as_local().unwrap())
-                    .or_insert(vec![])
-                    .push((local_id, spec_id));
-                };
-            }
+                    .or_insert(StructSpecRef::new())
+                    .add_spec(local_id, spec_id);
+            };
         }
     }
 
@@ -406,24 +418,14 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 }
 
 fn get_struct_id_from_impl_node(node: rustc_hir::Node) -> Option<DefId> {
-  let item_kind = if let rustc_hir::Node::Item(item) = node {
-    Some(&item.kind)
-  } else {
-     None
-  }?;
-  let item_self_ty_kind = if let ItemKind::Impl(item_impl) = item_kind {
-     Some(&item_impl.self_ty.kind)
-  } else {
+    if let rustc_hir::Node::Item(item) = node {
+        if let ItemKind::Impl(item_impl) = &item.kind {
+            if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(_, path)) = item_impl.self_ty.kind {
+                if let rustc_hir::def::Res::Def(_, def_id) = path.res {
+                    return Some(def_id);
+                }
+            }
+        }
+    }
     None
-  }?;
-  let path_res = if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(_, path)) = item_self_ty_kind {
-    Some(path.res)
-  } else {
-    None
-  }?;
-  if let rustc_hir::def::Res::Def(_, def_id) = path_res {
-    Some(def_id)
-  } else {
-    None
-  }
 }

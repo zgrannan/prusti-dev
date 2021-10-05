@@ -235,7 +235,11 @@ impl ApplyOnState for vir::Stmt {
                 let places_in_pred: Vec<_> = predicate
                     .get_body_footprint(enum_variant)
                     .into_iter()
-                    .map(|aop| aop.map_place(|p| p.replace_place(&pred_self_place, place)))
+                    .map(
+                        |aop| aop
+                            .map_place(|p| p.replace_place(&pred_self_place, place))
+                            .update_perm_amount(permission)
+                    )
                     .collect();
 
                 for contained_place in &places_in_pred {

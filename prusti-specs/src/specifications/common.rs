@@ -15,10 +15,12 @@ pub enum SpecType {
     Precondition,
     /// Postcondition of a procedure.
     Postcondition,
-    /// Loop invariant or struct invariant
+    /// Loop invariant
     Invariant,
     /// Predicate
     Predicate,
+    /// Struct invariant
+    StructInvariant,
 }
 
 #[derive(Debug)]
@@ -325,9 +327,7 @@ impl<EID, ET, AT> StructSpecification<EID, ET, AT> {
     pub fn new(invariant: Vec<(ET, Assertion<EID, ET, AT>)>) -> Self {
         Self { invariant }
     }
-    pub fn empty() -> Self {
-        Self::new(Vec::new())
-    }
+
     pub fn is_empty(&self) -> bool {
         self.invariant.is_empty()
     }
