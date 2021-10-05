@@ -101,7 +101,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
 
         let elem = projection.last().unwrap();
         Ok(match elem {
-            mir::ProjectionElem::Field(ref field, _) => {
+            mir::ProjectionElem::Field(ref field, fty) => {
                 match base_ty.kind() {
                     ty::TyKind::Tuple(elems) => {
                         let field_name = format!("tuple_{}", field.index());
@@ -114,7 +114,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                     }
 
                     ty::TyKind::Adt(adt_def, ref subst) if !adt_def.is_box() => {
-                        debug!("subst {:?}", subst);
+                        debug!("subst {:?} {:?}", subst, fty);
                         let num_variants = adt_def.variants.len();
                         // FIXME: why this can be None?
                         let variant_index = if let Some(num) = opt_variant_index {

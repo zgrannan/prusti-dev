@@ -1,3 +1,4 @@
+#![feature(associated_type_bounds)]
 #![deny(unused_must_use)]
 
 #[macro_use]

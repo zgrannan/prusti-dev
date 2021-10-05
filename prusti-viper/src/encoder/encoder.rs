@@ -271,13 +271,14 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             let encoder = self.snapshot_encoder.borrow();
             Ok(encoder.get_function(identifier).clone())
         } else {
-            let normal_funcs : Vec<String> =
-                self.functions.borrow().keys().map(|f| format!("{:?}", f)).into_iter().collect();
-            let snapshot_funcs : Vec<String> =
-                self.snapshot_encoder.borrow().functions.keys().map(|f| format!("{:?}", f)).into_iter().collect();
-            unreachable!(
-                "Not found function: {:?}.\nAvailable functions were:\n{}\n\nSnapshots:\n{}",
-                identifier, normal_funcs.join("\n"), snapshot_funcs.join("\n"))
+            panic!()
+            // let normal_funcs : Vec<String> =
+            //     self.functions.borrow().keys().map(|f| format!("{:?}", f)).into_iter().collect();
+            // let snapshot_funcs : Vec<String> =
+            //     self.snapshot_encoder.borrow().functions.keys().map(|f| format!("{:?}", f)).into_iter().collect();
+            // unreachable!(
+            //     "Not found function: {:?}.\nAvailable functions were:\n{}\n\nSnapshots:\n{}",
+            //     identifier, normal_funcs.join("\n"), snapshot_funcs.join("\n"))
         }
     }
 
