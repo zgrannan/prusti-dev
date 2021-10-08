@@ -465,13 +465,15 @@ pub fn invariant(attr: TokenStream, tokens:TokenStream) -> TokenStream {
             #statements
         }
     };
-    // spec_item.sig.generics = item.sig().generics.clone();
-    // spec_item.sig.inputs = item.sig().inputs.clone();
-    quote_spanned! { item_span =>
-       #item
-       impl #item_ident {
+    let generics = item.generics.clone();
+    let item_impl : syn::ItemImpl = parse_quote_spanned! { item_span =>
+       impl #generics #item_ident #generics {
           #spec_item
        }
+    };
+    quote_spanned! { item_span =>
+       #item
+       #item_impl
     }
 }
 
