@@ -1,4 +1,4 @@
-use super::{super::encoder::SubstMap, interface::PureFunctionEncoderInterface};
+use super::{super::super::encoder::SubstMap, interface::PureFunctionEncoderInterface};
 use crate::encoder::{
     borrows::{compute_procedure_contract, ProcedureContract},
     builtin_encoder::BuiltinFunctionKind,
@@ -7,6 +7,7 @@ use crate::encoder::{
         SpannedEncodingResult, WithSpan,
     },
     foldunfold,
+    mir::types::TypeEncoderInterface,
     mir_encoder::{MirEncoder, PlaceEncoder, PlaceEncoding, PRECONDITION_LABEL, WAND_LHS_LABEL},
     mir_interpreter::{
         run_backward_interpretation, BackwardMirInterpreter, MultiExprBackwardInterpreterState,
@@ -506,11 +507,14 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                                 let base_ty = self.mir_encoder.get_operand_ty(&args[0]);
 
                                 let idx_ty = self.mir_encoder.get_operand_ty(&args[1]);
-                                let idx_ident = self
-                                    .encoder
-                                    .env()
-                                    .tcx()
-                                    .def_path_str(idx_ty.ty_adt_def().unwrap().did);
+                                let idx_ty_did = match idx_ty.ty_adt_def() {
+                                    Some(def) => def.did,
+                                    None => return Err(SpannedEncodingError::unsupported(
+                                        format!("Using {} as index/range type for {} is not currently supported in pure functions", idx_ty, base_ty),
+                                        span,
+                                    ))
+                                };
+                                let idx_ident = self.encoder.env().tcx().def_path_str(idx_ty_did);
                                 let encoded_idx = &encoded_args[1];
 
                                 let (start, end) = match &*idx_ident {

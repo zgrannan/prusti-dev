@@ -69,8 +69,8 @@ use crate::encoder::errors::EncodingErrorKind;
 use crate::encoder::snapshot;
 use std::convert::TryInto;
 use crate::utils::is_reference;
-use crate::encoder::pure_functions::PureFunctionEncoderInterface;
-
+use crate::encoder::mir::pure_functions::PureFunctionEncoderInterface;
+use crate::encoder::mir::types::TypeEncoderInterface;
 use super::encoder::SubstMap;
 
 pub struct ProcedureEncoder<'p, 'v: 'p, 'tcx: 'v> {
@@ -1011,14 +1011,13 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         debug_assert!(!self.procedure.is_spec_block(bbi));
         let bb_data = &self.mir.basic_blocks()[bbi];
         let statements: &Vec<mir::Statement<'tcx>> = &bb_data.statements;
-        let is_panic_block = self.procedure.is_panic_block(bbi);
         for stmt_index in 0..statements.len() {
             trace!("Encode statement {:?}:{}", bbi, stmt_index);
             let location = mir::Location {
                 block: bbi,
                 statement_index: stmt_index,
             };
-            if !is_panic_block {
+            {
                 let (stmts, opt_succ) = self.encode_statement_at(location)?;
                 debug_assert!(opt_succ.is_none());
                 self.cfg_method.add_stmts(cfg_block, stmts);
@@ -1059,7 +1058,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         // Encode statements to inform fold-unfold of the downcasts
         let mut downcast_stmts = vec![];
         for (place, variant_idx) in self.mir_encoder.get_downcasts_at_location(location).into_iter() {
-            let span = self.mir_encoder.get_span_of_location(location);
             let (encoded_place, pre_stmts, place_ty, _) = self
                     // TODO: may need to look at place to decide the arrayaccesskind here
                     .encode_projection(place.local, &place.projection, ArrayAccessKind::Shared, location)?;
@@ -1730,6 +1728,13 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             "Location {:?} has not yet been encoded",
             loan_location
         );
+        if !self.procedure_contracts.contains_key(&loan_location) {
+            return Err(SpannedEncodingError::internal(
+                format!("There is no procedure contract for loan {:?}. This could happen if you \
+                         are chaining pure functions, which is not fully supported.", loan),
+                span
+            ));
+        }
         let (contract, fake_exprs) = self.procedure_contracts[&loan_location].clone();
         let replace_fake_exprs = |mut expr: vir::Expr| -> vir::Expr {
             for (fake_arg, arg_expr) in fake_exprs.iter() {
@@ -3456,11 +3461,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 ).with_span(span)?;
                 let vir_access =
                     vir::Expr::pred_permission(place_expr.clone().old(label), perm_amount).unwrap();
-                self
+                let inv = self
                     .encoder
                     .encode_invariant_func_app(place_ty, place_expr.old(label))
-                    .with_span(span)
-                    .map(|inv| vir::Expr::and(vir_access, inv))
+                    .with_span(span)?;
+                Ok(vir::Expr::and(vir_access, inv))
             };
             let mut lhs: Vec<_> = borrow_info
                 .blocking_paths

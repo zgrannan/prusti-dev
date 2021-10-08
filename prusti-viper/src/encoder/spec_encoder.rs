@@ -13,7 +13,7 @@ use crate::encoder::mir_interpreter::{
     run_backward_interpretation_point_to_point, BackwardMirInterpreter,
     MultiExprBackwardInterpreterState,
 };
-use crate::encoder::pure_functions::{PureFunctionBackwardInterpreter, PureFunctionEncoderInterface};
+use crate::encoder::mir::pure_functions::{PureFunctionBackwardInterpreter, PureFunctionEncoderInterface};
 use crate::encoder::Encoder;
 use prusti_common::config;
 use crate::encoder::SpecFunctionKind;
@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use rustc_ast::ast;
 use log::{debug, trace};
 use prusti_interface::utils::read_prusti_attr;
+use crate::encoder::mir::types::TypeEncoderInterface;
 
 use super::encoder::SubstMap;
 
