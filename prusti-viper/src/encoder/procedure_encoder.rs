@@ -3569,9 +3569,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         contract: &ProcedureContract<'tcx>,
         encoded_args: &[vir::Expr],
     ) -> SpannedEncodingResult<vir::Expr> {
+        let original_assertion = assertion.clone();
         for (encoded_arg, &arg) in encoded_args.iter().zip(&contract.args) {
             let ty = self.locals.get_type(arg);
             if is_reference(ty) {
+                println!("{} is a reference", ty);
                 // If the argument is a reference, we wrap _1.val_ref into old.
                 let arg_span = self.mir_encoder.get_local_span(arg.into());
                 let (encoded_deref, ..) = self
@@ -3582,18 +3584,29 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 let old_expr = vir::Expr::labelled_old(pre_label, original_expr.clone());
                 assertion = assertion.replace_place(&original_expr, &old_expr);
             } else {
+                println!("{} is NOT a reference", ty);
                 // If the argument is not a reference, we wrap entire path into old.
-                assertion = assertion.fold_places(|place| {
+                assertion = assertion.fold_places_where(|place| {
                     let base: vir::Expr = place.get_base().into();
                     if encoded_arg == &base {
-                        place.old(pre_label)
+                        println!("{} : {} == {}", place, encoded_arg, base);
+                        Expr::labelled_old(pre_label, place)
                     } else {
+                        println!("{} : {} != {}", place, encoded_arg, base);
                         place
+                    }
+                }, |expr| {
+                    match expr {
+                        Expr::LabelledOld(_) => false,
+                        _ => true
                     }
                 });
             }
         }
-        Ok(assertion.remove_redundant_old())
+        println!("{} ->1 {}", original_assertion, assertion);
+        let result = assertion.remove_redundant_old();
+        println!("{} ->2 {}", original_assertion, result);
+        Ok(result)
     }
 
     /// Encode the postcondition with three expressions:

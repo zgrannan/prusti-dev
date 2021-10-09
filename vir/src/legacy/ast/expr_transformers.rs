@@ -12,31 +12,38 @@ use super::super::borrows::Borrow;
 use crate::legacy::ast::*;
 
 impl Expr {
-    /// Apply the closure to all places in the expression.
-    pub fn fold_places<F>(self, f: F) -> Expr
+    #[doc = " Apply the closure to all places in the expression, exploring subexpresions according to a predicate."]
+    pub fn fold_places_where<F, P>(self, f: F, pred: P) -> Expr
     where
         F: Fn(Expr) -> Expr,
+        P: Fn(&Expr) -> bool
     {
-        struct PlaceFolder<F>
+        struct PlaceFolder<F, P>
         where
             F: Fn(Expr) -> Expr,
+            P: Fn(&Expr) -> bool
         {
             f: F,
+            pred: P
         }
-        impl<F> ExprFolder for PlaceFolder<F>
+        impl<F, P> ExprFolder for PlaceFolder<F, P>
         where
             F: Fn(Expr) -> Expr,
+            P: Fn(&Expr) -> bool
         {
             fn fold(&mut self, e: Expr) -> Expr {
-                if e.is_place() {
-                    (self.f)(e)
+                if (self.pred)(&e) {
+                    if e.is_place() {
+                        (self.f)(e)
+                    } else {
+                        default_fold_expr(self, e)
+                    }
                 } else {
-                    default_fold_expr(self, e)
+                    e
                 }
             }
-            // TODO: Handle triggers?
         }
-        PlaceFolder { f }.fold(self)
+        PlaceFolder { f, pred }.fold(self)
     }
 
     /// Apply the closure to all expressions.
