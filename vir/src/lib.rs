@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 #![feature(box_syntax)]
+#![feature(decl_macro)]
 #![allow(unused_imports)]
 #![deny(unused_must_use)]
 #![deny(unreachable_patterns)]
@@ -19,5 +20,6 @@ extern crate serde;
 mod gen;
 pub use gen::*;
 
+pub mod common;
 pub mod converter;
 pub mod legacy;

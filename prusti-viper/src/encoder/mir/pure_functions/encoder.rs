@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use super::{super::encoder::SubstMap, interpreter::PureFunctionBackwardInterpreter};
+use super::{super::super::encoder::SubstMap, interpreter::PureFunctionBackwardInterpreter};
 use crate::encoder::{
     borrows::{compute_procedure_contract, ProcedureContract},
     builtin_encoder::BuiltinFunctionKind,
@@ -13,9 +13,10 @@ use crate::encoder::{
         SpannedEncodingResult, WithSpan,
     },
     foldunfold,
+    mir::types::MirTypeEncoderInterface,
     mir_encoder::{MirEncoder, PlaceEncoder, PlaceEncoding, PRECONDITION_LABEL, WAND_LHS_LABEL},
     mir_interpreter::{
-        run_backward_interpretation, BackwardMirInterpreter, MultiExprBackwardInterpreterState,
+        run_backward_interpretation, BackwardMirInterpreter, ExprBackwardInterpreterState,
     },
     snapshot, Encoder,
 };
@@ -73,7 +74,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
 
         let state = run_backward_interpretation(self.mir, &self.interpreter)?
             .unwrap_or_else(|| panic!("Procedure {:?} contains a loop", self.proc_def_id));
-        let body_expr = state.into_expressions().remove(0);
+        let body_expr = state.into_expr().unwrap();
         debug!(
             "Pure function {} has been encoded with expr: {}",
             function_name, body_expr
@@ -104,10 +105,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
                 )
                 .with_span(span)?;
             let new_place: vir::Expr = self.encode_local(arg)?.into();
-            state.substitute_place(&target_place, new_place);
+            state.substitute_value(&target_place, new_place);
         }
 
-        let mut body_expr = state.into_expressions().remove(0);
+        let mut body_expr = state.into_expr().unwrap();
         debug!(
             "Pure function {} has been encoded with expr: {}",
             function_name, body_expr

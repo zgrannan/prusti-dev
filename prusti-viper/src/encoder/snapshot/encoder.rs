@@ -31,6 +31,8 @@ use crate::encoder::{
     snapshot::{Snapshot, patcher::SnapshotPatcher},
     builtin_encoder::BuiltinFunctionKind,
 };
+use crate::encoder::mir::types::MirTypeEncoderInterface;
+use crate::encoder::high::types::HighTypeEncoderInterface;
 
 type PredicateType = Type;
 
@@ -431,6 +433,10 @@ impl SnapshotEncoder {
     ) -> EncodingResult<Expr> {
         let snapshot = self.encode_snapshot(encoder, ty, tymap)?;
         match snapshot {
+            Snapshot::Unit => {
+                assert!(args.is_empty());
+                Ok(self.domains[UNIT_DOMAIN_NAME].functions[0].apply(args))
+            },
             Snapshot::Complex { ref variants, .. } => {
                 assert_eq!(variants.len(), 1);
                 Ok(variants[0].0.apply(args))
@@ -1710,7 +1716,7 @@ impl SnapshotEncoder {
         };
         let snap_func = foldunfold::add_folding_unfolding_to_function(
             snap_func,
-            encoder.get_used_viper_predicates_map(),
+            encoder.get_used_viper_predicates_map()?,
         ).unwrap();
 
         // create domain

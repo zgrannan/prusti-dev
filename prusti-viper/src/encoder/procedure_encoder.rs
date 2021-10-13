@@ -11,6 +11,7 @@ use crate::encoder::errors::{
     EncodingResult, SpannedEncodingResult
 };
 use crate::encoder::foldunfold;
+use crate::encoder::high::types::HighTypeEncoderInterface;
 use crate::encoder::initialisation::InitInfo;
 use crate::encoder::loop_encoder::{LoopEncoder, LoopEncoderError};
 use crate::encoder::mir_encoder::{MirEncoder, FakeMirEncoder, PlaceEncoder, PlaceEncoding, ExprOrArrayBase};
@@ -69,8 +70,8 @@ use crate::encoder::errors::EncodingErrorKind;
 use crate::encoder::snapshot;
 use std::convert::TryInto;
 use crate::utils::is_reference;
-use crate::encoder::pure_functions::PureFunctionEncoderInterface;
-
+use crate::encoder::mir::pure_functions::PureFunctionEncoderInterface;
+use crate::encoder::mir::types::MirTypeEncoderInterface;
 use super::encoder::SubstMap;
 
 pub struct ProcedureEncoder<'p, 'v: 'p, 'tcx: 'v> {
@@ -3014,7 +3015,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let (target_value, mut stmts) = self.encode_pure_function_call_lhs_value(destination, location)
             .with_span(call_site_span)?;
 
-        let inhaled_expr = if return_type.is_domain() {
+        let inhaled_expr = if return_type.is_domain() || return_type.is_snapshot() {
             let (target_place, pre_stmts) = self.encode_pure_function_call_lhs_place(destination, location)?;
             stmts.extend(pre_stmts);
             vir::Expr::eq_cmp(
@@ -5384,7 +5385,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         encoded_src,
                         adt_def,
                         &substs,
-                    );
+                    )?;
                     self.encode_copy_value_assign(
                         encoded_lhs,
                         encoded_rhs,
@@ -5677,6 +5678,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let lookup_ret_ty = self.encoder.encode_snapshot_type(array_types.elem_ty_rs, &tymap)
             .with_span(span)?;
 
+        let inhaled_operand = if lookup_ret_ty.is_domain() || lookup_ret_ty.is_snapshot() {
+            vir::Expr::snap_app(encoded_operand)
+        } else {
+            encoded_operand
+        };
+
         let mut stmts = self.encode_havoc_and_allocation(&encoded_lhs);
         for i in 0..len {
             let idx = vir::Expr::from(i);
@@ -5688,7 +5695,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             );
 
             stmts.push(vir::Stmt::Inhale( vir::Inhale {
-                expr: vir_expr!{ [lookup_pure_call] == [encoded_operand] }
+                expr: vir_expr!{ [lookup_pure_call] == [inhaled_operand] }
             }));
         }
 
@@ -5977,7 +5984,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     // dst was havocked, so it is safe to assume the equality here.
                     let discriminant = self
                         .encoder
-                        .encode_discriminant_func_app(dst.clone(), adt_def, &tymap);
+                        .encode_discriminant_func_app(dst.clone(), adt_def, &tymap)?;
                     stmts.push(vir::Stmt::Inhale( vir::Inhale {
                         expr: vir::Expr::eq_cmp(discriminant, discr_value),
                     }));
