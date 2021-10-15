@@ -567,8 +567,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             let variant_name = &variant_def.ident.as_str();
                             let variant_loc =
                                 vir::Expr::from(self_local_var.clone()).variant(variant_name);
-                            let variant_predicate =
-                                typ.clone().variant(variant_name).encode_as_string();
+                            let variant_predicate = typ.clone().variant(variant_name);
                             let guard =
                                 vir::Expr::eq_cmp(discriminant_loc.clone(), variant_index.into());
                             variant_def.fields.iter().for_each(|field| {
@@ -646,7 +645,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
         self.encoder
             .log_vir_program_before_foldunfold(function.to_string());
 
-        let predicates_map = self.encoder.get_used_viper_predicates_map();
+        let predicates_map = self.encoder.get_used_viper_predicates_map()?;
 
         // Add folding/unfolding
         let function =
