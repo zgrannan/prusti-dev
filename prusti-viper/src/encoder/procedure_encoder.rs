@@ -130,7 +130,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let tcx = encoder.env().tcx();
         let mir_encoder = MirEncoder::new(encoder, mir, def_id);
         let init_info = InitInfo::new(mir, tcx, def_id, &mir_encoder)
-            .with_span(procedure.get_span())?;
+            .with_default_span(procedure.get_span())?;
 
         let cfg_method = vir::CfgMethod::new(
             // method name
@@ -3579,7 +3579,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     .encode_deref(encoded_arg.clone(), ty)
                     .with_span(arg_span)?;
                 let original_expr = encoded_deref;
-                let old_expr = vir::Expr::labelled_old(pre_label, original_expr.clone());
+                let old_expr = original_expr.clone().old(pre_label);
                 assertion = assertion.replace_place(&original_expr, &old_expr);
             } else {
                 // If the argument is not a reference, we wrap entire path into old.
