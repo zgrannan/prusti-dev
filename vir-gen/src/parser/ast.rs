@@ -91,3 +91,21 @@ impl Parse for RawBlock {
         Ok(Self { name, content })
     }
 }
+
+impl Parse for DeriveLower {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let user_trait_ident = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let deriver_trait_ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let source_type = input.parse()?;
+        input.parse::<Token![=>]>()?;
+        let target_type = input.parse()?;
+        Ok(Self {
+            user_trait_ident,
+            deriver_trait_ident,
+            source_type,
+            target_type,
+        })
+    }
+}

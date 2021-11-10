@@ -486,12 +486,10 @@ pub fn extern_spec(_attr: TokenStream, tokens:TokenStream) -> TokenStream {
             );
 
             let struct_ident = &new_struct.ident;
-            let generic_params = &new_struct.generics.params.iter();
-            let params_list = generic_params.clone().map(|x| extern_spec_rewriter::get_param_ident(x).to_token_stream().to_string()).collect::<Vec<String>>().join(", ");
-            let params_string: TokenStream = format!("<{}>", params_list).parse().unwrap();
+            let generic_args = extern_spec_rewriter::rewrite_generics(&new_struct.generics);
 
-            let struct_ty : syn::Type = parse_quote_spanned!{ item_span =>
-                #struct_ident #params_string
+            let struct_ty: syn::Type = parse_quote_spanned! {item_span=>
+                #struct_ident #generic_args
             };
 
             let rewritten_item = handle_result!(
