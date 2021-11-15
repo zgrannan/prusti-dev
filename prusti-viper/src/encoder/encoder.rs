@@ -57,13 +57,16 @@ use crate::encoder::snapshot::interface::{SnapshotEncoderInterface, SnapshotEnco
 use crate::encoder::purifier;
 use crate::encoder::array_encoder::{ArrayTypesEncoder, EncodedArrayTypes, EncodedSliceTypes};
 use super::mir::{
-    pure_functions::{PureFunctionEncoderState, PureFunctionEncoderInterface},
+    pure::{PureFunctionEncoderState, PureFunctionEncoderInterface},
     types::{
         compute_discriminant_bounds, compute_discriminant_values,
         MirTypeEncoderState, MirTypeEncoderInterface,
     },
 };
-use super::high::types::{HighTypeEncoderState, HighTypeEncoderInterface};
+use super::high::{
+    pure_functions::{HighPureFunctionEncoderInterface},
+    types::{HighTypeEncoderState, HighTypeEncoderInterface}
+};
 
 pub struct Encoder<'v, 'tcx: 'v> {
     env: &'v Environment<'tcx>,
@@ -354,6 +357,17 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
                 format!("unsupported constant value: {:?}", value)
             ))
         }
+    }
+
+    pub fn get_mir_procedure_contract_for_def(
+        &self,
+        proc_def_id: ProcedureDefId,
+    ) -> EncodingResult<ProcedureContractMirDef<'tcx>> {
+        self.procedure_contracts
+            .borrow_mut()
+            .entry(proc_def_id)
+            .or_insert_with(|| self.get_procedure_contract(proc_def_id))
+            .clone()
     }
 
     pub fn get_procedure_contract_for_def(
@@ -978,6 +992,16 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         self.array_types_encoder
             .borrow_mut()
             .encode_slice_types(self, slice_ty)
+    }
+
+    pub fn encode_struct_field_value(
+        &self,
+        strct: vir::Expr,
+        field_name: &str,
+        ty: ty::Ty<'tcx>
+    ) -> EncodingResult<vir::Expr> {
+        let field = strct.field(self.encode_struct_field(field_name, ty)?);
+        self.encode_value_expr(field, ty)
     }
 
     pub fn add_discriminant_info(&self, enum_id: String, discr_id: String, proc_def_id: ProcedureDefId) {
