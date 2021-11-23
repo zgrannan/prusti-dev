@@ -1727,6 +1727,7 @@ dependencies = [
  "prusti-common",
  "reqwest",
  "serde 1.0.130",
+ "serde_json",
  "tokio 0.2.25",
  "url",
  "viper",
@@ -1775,6 +1776,7 @@ dependencies = [
  "prusti-specs",
  "regex",
  "serde 1.0.130",
+ "uuid",
  "viper",
  "vir",
 ]

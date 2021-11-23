@@ -377,7 +377,8 @@ impl RequiredPermissionsGetter for vir::Expr {
 
             vir::Expr::Local(..) => HashSet::new(),
 
-            vir::Expr::AddrOf(..) => unreachable!(),
+            vir::Expr::AddrOf(vir::AddrOf { base, .. }) => unreachable!(),
+                //base.get_required_permissions(predicates, old_exprs),
 
             vir::Expr::Variant(..) => Some(Acc(self.clone(), PermAmount::Read))
                 .into_iter()

@@ -231,12 +231,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureEncoder<'p, 'v, 'tcx> {
     }
 
     fn encode_mir_local(&self, local: mir::Local) -> SpannedEncodingResult<vir_high::VariableDecl> {
-        if !self.encoder.is_local_copy(self.mir, local)? {
-            return Err(SpannedEncodingError::incorrect(
-                "pure function parameters must be Copy",
-                self.encoder.get_local_span(self.mir, local)?,
-            ));
-        }
+        // if !self.encoder.is_local_copy(self.mir, local)? {
+        //     return Err(SpannedEncodingError::incorrect(
+        //         "pure function parameters must be Copy",
+        //         self.encoder.get_local_span(self.mir, local)?,
+        //     ));
+        // }
         self.encoder.encode_local_high(self.mir, local)
     }
 

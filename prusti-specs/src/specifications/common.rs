@@ -3,8 +3,12 @@
 //! Please see the `parser.rs` file for more information about
 //! specifications.
 
+use proc_macro2::Span;
 use serde::{Deserialize, Serialize};
+use syn::spanned::Spanned;
+use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
 use std::fmt::{Display, Debug};
 use uuid::Uuid;
 
@@ -93,8 +97,8 @@ impl SpecificationIdGenerator {
     pub(crate) fn new() -> Self {
         Self {}
     }
-    pub(crate) fn generate(&mut self) -> SpecificationId {
-        SpecificationId(Uuid::new_v4())
+    pub(crate) fn generate(&mut self, span: Span, index: u8) -> SpecificationId {
+        SpecificationId(uuid_from_span(span, index))
     }
 }
 
@@ -145,15 +149,24 @@ impl NameGenerator {
                 return Err("expected a path".to_string());
             }
         };
-        let uuid = Uuid::new_v4().to_simple();
+        let uuid = uuid_from_span(item.span(), 0);
 
-        Ok(format!("PrustiStruct{}_{}", path_str, uuid))
+        Ok(format!("PrustiStruct{}_{}", path_str, uuid.to_simple()))
     }
 
     pub(crate) fn generate_mod_name(&self, ident: &syn::Ident) -> String {
-        let uuid = Uuid::new_v4().to_simple();
-        format!("{}_{}", ident, uuid)
+        let uuid = uuid_from_span(ident.span(), 0);
+        format!("{}_{}", ident, uuid.to_simple())
     }
+
+}
+
+fn uuid_from_span(span: Span, index: u8) -> Uuid {
+    let mut hasher = DefaultHasher::new();
+    let lc = span.start();
+    let file = span.unstable().source_file();
+    (lc.line, lc.column, file.path().to_str()).hash(&mut hasher);
+    Uuid::from_u128((hasher.finish() + index as u64).into())
 }
 
 #[derive(Debug, Clone)]

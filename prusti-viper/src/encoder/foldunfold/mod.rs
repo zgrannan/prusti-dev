@@ -8,7 +8,8 @@ use self::path_ctxt::*;
 use crate::encoder::{
     foldunfold::{action::Action, footprint::*, perm::*, requirements::*, semantics::ApplyOnState},
     Encoder,
-};
+}
+;
 #[rustfmt::skip]
 use ::log::{debug, trace};
 use super::errors::SpannedEncodingError;
@@ -28,6 +29,7 @@ use vir_crate::{
         FallibleExprFolder, PermAmount, PermAmountError,
     },
 };
+use uuid::Uuid;
 
 mod action;
 mod borrows;
@@ -217,6 +219,7 @@ struct FoldUnfold<'p, 'v: 'p, 'tcx: 'v> {
     borrow_locations: &'p HashMap<vir::borrows::Borrow, mir::Location>,
     cfg_map: &'p HashMap<mir::BasicBlock, HashSet<CfgBlockIndex>>,
     method_pos: vir::Position,
+    uniq_id_counter: u128
 }
 
 impl<'p, 'v: 'p, 'tcx: 'v> FoldUnfold<'p, 'v, 'tcx> {
@@ -239,6 +242,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> FoldUnfold<'p, 'v, 'tcx> {
             borrow_locations,
             cfg_map,
             method_pos,
+            uniq_id_counter: 0
         }
     }
 
@@ -391,6 +395,12 @@ impl CheckNoOpAction for ActionVec {
 
 impl<'p, 'v: 'p, 'tcx: 'v> vir::CfgReplacer<PathCtxt<'p>, ActionVec> for FoldUnfold<'p, 'v, 'tcx> {
     type Error = FoldUnfoldError;
+
+    fn uniq_id(&mut self) -> Uuid {
+        self.uniq_id_counter += 1;
+        Uuid::from_u128(self.uniq_id_counter)
+    }
+
 
     /// Dump the current CFG, for debugging purposes
     fn current_cfg(

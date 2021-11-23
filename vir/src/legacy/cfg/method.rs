@@ -134,6 +134,7 @@ impl CfgBlockIndex {
 
 impl CfgMethod {
     pub fn new(
+        uuid: Uuid,
         method_name: String,
         formal_arg_count: usize,
         formal_returns: Vec<LocalVar>,
@@ -141,7 +142,7 @@ impl CfgMethod {
         reserved_labels: Vec<String>,
     ) -> Self {
         CfgMethod {
-            uuid: Uuid::new_v4(),
+            uuid,
             method_name,
             formal_arg_count,
             formal_returns,

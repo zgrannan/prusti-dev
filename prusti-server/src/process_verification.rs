@@ -7,13 +7,17 @@
 use crate::{VerificationRequest, ViperBackendConfig};
 use log::info;
 use prusti_common::{config, report::log::report, vir::ToViper, Stopwatch};
-use std::{fs::create_dir_all, path::PathBuf};
+use std::{collections::hash_map::DefaultHasher, fs::create_dir_all, hash::Hash, path::PathBuf};
 use viper::{VerificationBackend, VerificationContext};
+use std::hash::Hasher;
 
 pub fn process_verification_request<'v, 't: 'v>(
     verification_context: &'v VerificationContext<'t>,
     request: VerificationRequest,
 ) -> viper::VerificationResult {
+    let mut hasher = DefaultHasher::new();
+    serde_json::to_string(&request.program).unwrap().hash(&mut hasher);
+    info!("Verification hash: {:x}", hasher.finish());
     let ast_utils = verification_context.new_ast_utils();
     ast_utils.with_local_frame(16, || {
         // Create a new verifier each time.

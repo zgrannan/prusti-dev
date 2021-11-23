@@ -453,12 +453,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
             let var_name = mir_encoder.encode_local_var_name(local);
             let var_span = mir_encoder.get_local_span(local);
             let mir_type = mir_encoder.get_local_ty(local);
-            if !self.encoder.env().type_is_copy(mir_type) {
-                return Err(SpannedEncodingError::incorrect(
-                    "pure function parameters must be Copy",
-                    var_span,
-                ));
-            }
+            // if !self.encoder.env().type_is_copy(mir_type) {
+            //     return Err(SpannedEncodingError::incorrect(
+            //         "pure function parameters must be Copy",
+            //         var_span,
+            //     ));
+            // }
             let var_type = self
                 .encoder
                 .encode_snapshot_type(mir_type, self.tymap)

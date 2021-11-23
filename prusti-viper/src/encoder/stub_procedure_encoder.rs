@@ -4,10 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use crate::encoder::high::types::HighTypeEncoderInterface;
 use crate::encoder::mir_encoder::{MirEncoder, PlaceEncoder};
 use crate::encoder::Encoder;
 use prusti_common::vir::ToGraphViz;
+use uuid::Uuid;
 use vir_crate::polymorphic::{self as vir, Successor};
 use prusti_common::config;
 use prusti_interface::environment::Procedure;
@@ -45,9 +49,15 @@ impl<'p, 'v: 'p, 'tcx: 'v> StubProcedureEncoder<'p, 'v, 'tcx> {
     pub fn encode(self) -> vir::CfgMethod {
         trace!("Encode stub for procedure {}", self.procedure.get_def_path());
 
+        let method_name = self.encoder.encode_item_name(self.def_id);
+        let mut hasher = DefaultHasher::new();
+        method_name.hash(&mut hasher);
+        let uuid = Uuid::from_u128(hasher.finish().into());
+
         let mut cfg_method = vir::CfgMethod::new(
+            uuid,
             // method name
-            self.encoder.encode_item_name(self.def_id),
+            method_name,
             // formal args
             self.mir.arg_count,
             // formal returns

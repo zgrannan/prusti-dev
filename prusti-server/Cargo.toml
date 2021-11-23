@@ -26,6 +26,7 @@ bincode = "1.0"
 url = "2.2.2"
 num_cpus = "1.8.0"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 # More recent verions of reqwest and warp fail to compile
 # due to https://github.com/rust-lang/rust/issues/82151
 reqwest = { version = "0.10", features = ["json"] }

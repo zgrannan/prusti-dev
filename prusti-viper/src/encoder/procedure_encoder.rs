@@ -27,6 +27,7 @@ use prusti_common::{
     vir::{ToGraphViz, fixes::fix_ghost_vars},
     vir_local, vir_expr, vir_stmt
 };
+use uuid::Uuid;
 use vir_crate::{
     polymorphic::{
         self as vir,
@@ -58,6 +59,8 @@ use rustc_index::vec::Idx;
 // use std;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use rustc_attr::IntType::SignedInt;
 // use syntax::codemap::{MultiSpan, Span};
 use rustc_span::{MultiSpan, Span};
@@ -133,9 +136,15 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let init_info = InitInfo::new(mir, tcx, def_id, &mir_encoder)
             .with_default_span(procedure.get_span())?;
 
+        let method_name = encoder.encode_item_name(def_id);
+        let mut hasher = DefaultHasher::new();
+        method_name.hash(&mut hasher);
+        let uuid = Uuid::from_u128(hasher.finish().into());
+
         let cfg_method = vir::CfgMethod::new(
+            uuid,
             // method name
-            encoder.encode_item_name(def_id),
+            method_name,
             // formal args
             mir.arg_count,
             // formal returns
