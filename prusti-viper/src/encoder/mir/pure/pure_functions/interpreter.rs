@@ -452,9 +452,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                             }
 
                             "std::cmp::PartialEq::eq" | "core::cmp::PartialEq::eq"
-                                if self.encoder.has_structural_eq_impl(
+                                // Prusti don't care
+                                /* if self.encoder.has_structural_eq_impl(
                                     self.mir_encoder.get_operand_ty(&args[0]),
-                                ) =>
+                                ) */ =>
                             {
                                 assert_eq!(args.len(), 2);
                                 let encoded_rhs = vir::Expr::eq_cmp(

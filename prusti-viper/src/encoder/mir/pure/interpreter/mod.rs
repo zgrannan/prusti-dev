@@ -443,8 +443,9 @@ impl<'p, 'v: 'p, 'tcx: 'v> ExpressionBackwardInterpreter<'p, 'v, 'tcx> {
                         unimplemented!();
                     }
                     "std::cmp::PartialEq::eq" | "core::cmp::PartialEq::eq"
-                        if self.has_structural_eq_impl(&args[0]).with_span(span)? =>
+                        /* if self.has_structural_eq_impl(&args[0]).with_span(span)? */ =>
                     {
+                        // Tendermint: Just allow for now
                         assert_eq!(args.len(), 2);
                         let encoded_rhs = vir_high::Expression::equals(
                             encoded_args[0].clone(),

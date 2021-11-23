@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crate::serde::Serialize;
 use crate::polymorphic::{ast::*, gather_labels::gather_labels};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -25,6 +26,7 @@ pub struct CfgMethod {
     // FIXME: This should be pub(in super::super). However, the optimization
     // that depends on snapshots needs to modify this field.
     pub local_vars: Vec<LocalVar>,
+    #[serde(serialize_with = "ordered_set")]
     pub(crate) labels: HashSet<String>,
     #[serde(skip)]
     pub(crate) reserved_labels: HashSet<String>,
@@ -34,6 +36,14 @@ pub struct CfgMethod {
     pub(crate) fresh_var_index: i32,
     #[serde(skip)]
     pub(crate) fresh_label_index: i32,
+}
+
+fn ordered_set<S>(value: &HashSet<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut ordered: Vec<&String> = value.iter().collect();
+    ordered.sort().serialize(serializer)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
