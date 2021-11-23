@@ -71,6 +71,7 @@ use prusti_interface::environment::borrowck::regions::PlaceRegionsError;
 use crate::encoder::errors::EncodingErrorKind;
 use crate::encoder::snapshot;
 use std::convert::TryInto;
+use vir_crate::polymorphic::Float;
 use crate::utils::is_reference;
 use crate::encoder::mir::pure::PureFunctionEncoderInterface;
 use crate::encoder::mir::types::MirTypeEncoderInterface;
@@ -900,6 +901,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             let builtin_method = match var.typ {
                 vir::Type::Int => BuiltinMethodKind::HavocInt,
                 vir::Type::Bool => BuiltinMethodKind::HavocBool,
+                vir::Type::Float(vir::Float::F32) => BuiltinMethodKind::HavocF32,
+                vir::Type::Float(vir::Float::F64) => BuiltinMethodKind::HavocF64,
                 vir::Type::TypedRef(_) => BuiltinMethodKind::HavocRef,
                 vir::Type::TypeVar(_) => BuiltinMethodKind::HavocRef,
                 vir::Type::Domain(_) => BuiltinMethodKind::HavocRef,
@@ -2001,6 +2004,14 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     | ty::TyKind::Uint(_)
                     | ty::TyKind::Char => {
                         self.cfg_method.add_fresh_local_var(vir::Type::Int)
+                    }
+
+                    ty::TyKind::Float(ty::FloatTy::F32) => {
+                        self.cfg_method.add_fresh_local_var(vir::Type::Float(Float::F32))
+                    }
+
+                    ty::TyKind::Float(ty::FloatTy::F64) => {
+                        self.cfg_method.add_fresh_local_var(vir::Type::Float(Float::F64))
                     }
 
                     ref x => unreachable!("{:?}", x),
@@ -5711,7 +5722,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 }
             }
 
-            ty::TyKind::Int(_) | ty::TyKind::Uint(_) => {
+            ty::TyKind::Int(_) | ty::TyKind::Uint(_) | ty::TyKind::Float(_) => {
                 let value_field = self.encoder.encode_value_field(src_ty).with_span(span)?;
                 let discr_value = encoded_src.field(value_field);
                 self.encode_copy_value_assign(
@@ -6201,6 +6212,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             ty::TyKind::Bool
             | ty::TyKind::Int(_)
             | ty::TyKind::Uint(_)
+            | ty::TyKind::Float(_)
             | ty::TyKind::Char => {
                 self.encode_copy_primitive_value(src, dst, self_ty, location)?
             }

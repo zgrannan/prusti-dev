@@ -26,7 +26,9 @@ use vir_crate::{
     polymorphic as vir,
     polymorphic::{
         ContainerOpKind, EnumVariantIndex, Expr, ExprIterator, FallibleExprFolder,
-        FallibleStmtFolder, PermAmount, Type, WithIdentifier,
+        FallibleStmtFolder,
+        Float::{F32, F64},
+        PermAmount, Type, WithIdentifier,
     },
 };
 
@@ -212,6 +214,14 @@ impl SnapshotEncoder {
                         expr,
                         vir::Field::new("val_int", Type::Int),
                     ),
+                    ty::TyKind::Float(ty::FloatTy::F32) => Expr::field(
+                        expr,
+                        vir::Field::new("val_float32", Type::Float(F32)),
+                    ),
+                    ty::TyKind::Float(ty::FloatTy::F64) => Expr::field(
+                        expr,
+                        vir::Field::new("val_float64", Type::Float(F64)),
+                    ),
                     ty::TyKind::Bool => Expr::field(
                         expr,
                         vir::Field::new("val_bool", Type::Bool),
@@ -228,7 +238,8 @@ impl SnapshotEncoder {
             // handle SnapApp on already patched expressions
             Type::Snapshot(_)
             | Type::Bool // TODO: restrict to snapshot-produced Bools and Ints
-            | Type::Int => Ok(expr),
+            | Type::Int
+            | Type::Float(_) => Ok(expr),
 
             _ => Err(EncodingError::internal(
                 format!("SnapApp applied to expr of invalid type {:?}", expr),
@@ -583,6 +594,8 @@ impl SnapshotEncoder {
             ty::TyKind::Int(_) => Type::Int,
             ty::TyKind::Uint(_) => Type::Int,
             ty::TyKind::Char => Type::Int,
+            ty::TyKind::Float(ty::FloatTy::F32) => Type::Float(vir::Float::F32),
+            ty::TyKind::Float(ty::FloatTy::F64) => Type::Float(vir::Float::F64),
             ty::TyKind::Bool => Type::Bool,
 
             // Param(_) | Adt(_) | Tuple(_), arrays and slices and unsupported types
@@ -631,6 +644,12 @@ impl SnapshotEncoder {
 
             ty::TyKind::Int(_) | ty::TyKind::Uint(_) | ty::TyKind::Char => {
                 Ok(Snapshot::Primitive(Type::Int))
+            }
+            ty::TyKind::Float(ty::FloatTy::F32) => {
+                Ok(Snapshot::Primitive(Type::Float(vir::Float::F32)))
+            }
+            ty::TyKind::Float(ty::FloatTy::F64) => {
+                Ok(Snapshot::Primitive(Type::Float(vir::Float::F64)))
             }
             ty::TyKind::Bool => Ok(Snapshot::Primitive(Type::Bool)),
 
@@ -1576,28 +1595,31 @@ impl SnapshotEncoder {
                 // encode type validity axiom for field
                 // TODO: encode type invariants rather than just integer bounds
                 match field.mir_type.kind() {
-                    ty::TyKind::Int(_) | ty::TyKind::Uint(_) | ty::TyKind::Char => domain_axioms
-                        .push({
-                            let self_local = vir::LocalVar::new("self", snapshot_type.clone());
-                            let self_expr = Expr::local(self_local.clone());
-                            let field_of_self = field_access_func.apply(vec![self_expr.clone()]);
+                    ty::TyKind::Int(_)
+                    | ty::TyKind::Uint(_)
+                    | ty::TyKind::Float(_)
+                    | ty::TyKind::Char => domain_axioms.push({
+                        let self_local = vir::LocalVar::new("self", snapshot_type.clone());
+                        let self_expr = Expr::local(self_local.clone());
+                        let field_of_self = field_access_func.apply(vec![self_expr.clone()]);
 
-                            vir::DomainAxiom {
-                                name: format!(
-                                    "{}${}$field${}$valid",
-                                    domain_name, variant_idx, field.name
-                                ),
-                                expr: Expr::forall(
-                                    vec![self_local.clone()],
-                                    vec![vir::Trigger::new(vec![field_of_self.clone()])],
-                                    encoder
-                                        .encode_type_bounds(&field_of_self, field.mir_type)
-                                        .into_iter()
-                                        .conjoin(),
-                                ),
-                                domain_name: domain_name.to_string(),
-                            }
-                        }),
+                        vir::DomainAxiom {
+                            name: format!(
+                                "{}${}$field${}$valid",
+                                domain_name, variant_idx, field.name
+                            ),
+                            expr: Expr::forall(
+                                vec![self_local.clone()],
+                                vec![vir::Trigger::new(vec![field_of_self.clone()])],
+                                encoder
+                                    .encode_type_bounds(&field_of_self, field.mir_type)
+                                    .into_iter()
+                                    .conjoin(),
+                            ),
+                            domain_name: domain_name.to_string(),
+                        }
+                    }),
+
                     _ => {}
                 }
             }

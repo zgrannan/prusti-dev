@@ -131,12 +131,15 @@ fn main() {
     // If the environment asks us to actually be rustc, or if lints have been disabled (which
     // indicates that an upstream dependency is being compiled), then run `rustc` instead of Prusti.
     let prusti_be_rustc = config::be_rustc();
+    // This environment variable will not be set when building dependencies.
+    let is_primary_package = env::var("CARGO_PRIMARY_PACKAGE").is_ok();
+    let is_no_verify_crate = !is_primary_package && config::no_verify_deps();
     let are_lints_disabled =
         arg_value(&original_rustc_args, "--cap-lints", |val| val == "allow").is_some();
     let is_prusti_package = env::var("CARGO_PKG_NAME")
         .map(|name| PRUSTI_PACKAGES.contains(&name.as_str()))
         .unwrap_or(false);
-    if prusti_be_rustc || are_lints_disabled || is_prusti_package {
+    if prusti_be_rustc || is_no_verify_crate || are_lints_disabled || is_prusti_package {
         rustc_driver::main();
     }
 
@@ -186,7 +189,6 @@ fn main() {
         ));
         info!("Prusti version: {}", get_prusti_version_info());
 
-        env::set_var("POLONIUS_ALGORITHM", "Naive");
         rustc_args.push("-Zpolonius".to_owned());
         rustc_args.push("-Zalways-encode-mir".to_owned());
         rustc_args.push("-Zcrate-attr=feature(register_tool)".to_owned());

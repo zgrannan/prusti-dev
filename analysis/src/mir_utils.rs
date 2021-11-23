@@ -9,17 +9,32 @@
 
 use log::trace;
 use rustc_data_structures::fx::FxHashSet;
+use rustc_infer::infer::TyCtxtInferExt;
 use rustc_middle::{
     mir,
     ty::{self, TyCtxt},
 };
+use rustc_trait_selection::infer::InferCtxtExt;
+
+/// Convert a `location` to a string representing the statement or terminator at that `location`
+pub fn location_to_stmt_str(location: mir::Location, mir: &mir::Body) -> String {
+    let bb_mir = &mir[location.block];
+    if location.statement_index < bb_mir.statements.len() {
+        let stmt = &bb_mir.statements[location.statement_index];
+        format!("{:?}", stmt)
+    } else {
+        // location = terminator
+        let terminator = bb_mir.terminator();
+        format!("{:?}", terminator.kind)
+    }
+}
 
 /// Check if the place `potential_prefix` is a prefix of `place`. For example:
 ///
 /// +   `is_prefix(x.f, x.f) == true`
 /// +   `is_prefix(x.f.g, x.f) == true`
 /// +   `is_prefix(x.f, x.f.g) == false`
-pub(crate) fn is_prefix(place: &mir::Place, potential_prefix: &mir::Place) -> bool {
+pub(crate) fn is_prefix(place: mir::Place, potential_prefix: mir::Place) -> bool {
     if place.local != potential_prefix.local
         || place.projection.len() < potential_prefix.projection.len()
     {
@@ -38,7 +53,7 @@ pub(crate) fn is_prefix(place: &mir::Place, potential_prefix: &mir::Place) -> bo
 /// `without_field` is not `None`, then omits that field from the final
 /// vector.
 pub(crate) fn expand_struct_place<'tcx>(
-    place: &mir::Place<'tcx>,
+    place: mir::Place<'tcx>,
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     without_field: Option<usize>,
@@ -60,7 +75,7 @@ pub(crate) fn expand_struct_place<'tcx>(
                     if Some(index) != without_field {
                         let field = mir::Field::from_usize(index);
                         let field_place =
-                            tcx.mk_place_field(*place, field, field_def.ty(tcx, substs));
+                            tcx.mk_place_field(place, field, field_def.ty(tcx, substs));
                         places.push(field_place);
                     }
                 }
@@ -69,7 +84,7 @@ pub(crate) fn expand_struct_place<'tcx>(
                 for (index, arg) in slice.iter().enumerate() {
                     if Some(index) != without_field {
                         let field = mir::Field::from_usize(index);
-                        let field_place = tcx.mk_place_field(*place, field, arg.expect_ty());
+                        let field_place = tcx.mk_place_field(place, field, arg.expect_ty());
                         places.push(field_place);
                     }
                 }
@@ -79,7 +94,7 @@ pub(crate) fn expand_struct_place<'tcx>(
                     assert_eq!(without_field, 0, "References have only a single “field”.");
                 }
                 None => {
-                    places.push(tcx.mk_place_deref(*place));
+                    places.push(tcx.mk_place_deref(place));
                 }
             },
             ty::Closure(_, _) => {},
@@ -104,7 +119,7 @@ pub(crate) fn expand_one_level<'tcx>(
     match guide_place.projection[index] {
         mir::ProjectionElem::Field(projected_field, field_ty) => {
             let places =
-                expand_struct_place(&current_place, mir, tcx, Some(projected_field.index()));
+                expand_struct_place(current_place, mir, tcx, Some(projected_field.index()));
             let new_current_place = tcx.mk_place_field(current_place, projected_field, field_ty);
             (new_current_place, places)
         }
@@ -138,8 +153,8 @@ pub(crate) fn expand_one_level<'tcx>(
 pub(crate) fn expand<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    minuend: &mir::Place<'tcx>,
-    subtrahend: &mir::Place<'tcx>,
+    mut minuend: mir::Place<'tcx>,
+    subtrahend: mir::Place<'tcx>,
 ) -> Vec<mir::Place<'tcx>> {
     assert!(
         is_prefix(subtrahend, minuend),
@@ -151,9 +166,8 @@ pub(crate) fn expand<'tcx>(
         subtrahend
     );
     let mut place_set = Vec::new();
-    let mut minuend = *minuend;
     while minuend.projection.len() < subtrahend.projection.len() {
-        let (new_minuend, places) = expand_one_level(mir, tcx, minuend, *subtrahend);
+        let (new_minuend, places) = expand_one_level(mir, tcx, minuend, subtrahend);
         minuend = new_minuend;
         place_set.extend(places);
     }
@@ -173,9 +187,8 @@ pub(crate) fn collapse<'tcx>(
     mir: &mir::Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     places: &mut FxHashSet<mir::Place<'tcx>>,
-    guide_place: &mir::Place<'tcx>,
+    guide_place: mir::Place<'tcx>,
 ) {
-    let guide_place = *guide_place;
     fn recurse<'tcx>(
         mir: &mir::Body<'tcx>,
         tcx: TyCtxt<'tcx>,
@@ -197,4 +210,113 @@ pub(crate) fn collapse<'tcx>(
         }
     }
     recurse(mir, tcx, places, guide_place.local.into(), guide_place);
+}
+
+pub struct DisplayPlaceRef<'a>(pub mir::PlaceRef<'a>);
+
+impl std::fmt::Display for DisplayPlaceRef<'_> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for elem in self.0.projection.iter().rev() {
+            match elem {
+                mir::ProjectionElem::Downcast(_, _) | mir::ProjectionElem::Field(_, _) => {
+                    write!(fmt, "(").unwrap();
+                }
+                mir::ProjectionElem::Deref => {
+                    write!(fmt, "(*").unwrap();
+                }
+                mir::ProjectionElem::Index(_)
+                | mir::ProjectionElem::ConstantIndex { .. }
+                | mir::ProjectionElem::Subslice { .. } => {}
+            }
+        }
+
+        write!(fmt, "{:?}", self.0.local)?;
+
+        for elem in self.0.projection.iter() {
+            match elem {
+                mir::ProjectionElem::Downcast(Some(name), _index) => {
+                    write!(fmt, " as {})", name)?;
+                }
+                mir::ProjectionElem::Downcast(None, index) => {
+                    write!(fmt, " as variant#{:?})", index)?;
+                }
+                mir::ProjectionElem::Deref => {
+                    write!(fmt, ")")?;
+                }
+                mir::ProjectionElem::Field(field, ty) => {
+                    write!(fmt, ".{:?}: {:?})", field.index(), ty)?;
+                }
+                mir::ProjectionElem::Index(ref index) => {
+                    write!(fmt, "[{:?}]", index)?;
+                }
+                mir::ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end: false,
+                } => {
+                    write!(fmt, "[{:?} of {:?}]", offset, min_length)?;
+                }
+                mir::ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end: true,
+                } => {
+                    write!(fmt, "[-{:?} of {:?}]", offset, min_length)?;
+                }
+                mir::ProjectionElem::Subslice {
+                    from,
+                    to,
+                    from_end: true,
+                } if *to == 0 => {
+                    write!(fmt, "[{:?}:]", from)?;
+                }
+                mir::ProjectionElem::Subslice {
+                    from,
+                    to,
+                    from_end: true,
+                } if *from == 0 => {
+                    write!(fmt, "[:-{:?}]", to)?;
+                }
+                mir::ProjectionElem::Subslice {
+                    from,
+                    to,
+                    from_end: true,
+                } => {
+                    write!(fmt, "[{:?}:-{:?}]", from, to)?;
+                }
+                mir::ProjectionElem::Subslice {
+                    from,
+                    to,
+                    from_end: false,
+                } => {
+                    write!(fmt, "[{:?}..{:?}]", from, to)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub fn is_copy<'tcx>(
+    tcx: ty::TyCtxt<'tcx>,
+    ty: ty::Ty<'tcx>,
+    param_env: ty::ParamEnv<'tcx>,
+) -> bool {
+    if let Some(copy_trait) = tcx.lang_items().copy_trait() {
+        // We need this check because `type_implements_trait`
+        // panics when called on reference types.
+        if let ty::TyKind::Ref(_, _, mutability) = ty.kind() {
+            // Shared references are copy, mutable references are not.
+            matches!(mutability, mir::Mutability::Not)
+        } else {
+            tcx.infer_ctxt().enter(|infcx| {
+                infcx
+                    .type_implements_trait(copy_trait, ty, ty::List::empty(), param_env)
+                    .must_apply_considering_regions()
+            })
+        }
+    } else {
+        false
+    }
 }

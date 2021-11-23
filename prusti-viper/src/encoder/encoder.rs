@@ -63,10 +63,7 @@ use super::mir::{
         MirTypeEncoderState, MirTypeEncoderInterface,
     },
 };
-use super::high::{
-    pure_functions::{HighPureFunctionEncoderInterface},
-    types::{HighTypeEncoderState, HighTypeEncoderInterface}
-};
+use super::high::types::{HighTypeEncoderState, HighTypeEncoderInterface};
 
 pub struct Encoder<'v, 'tcx: 'v> {
     env: &'v Environment<'tcx>,
@@ -688,6 +685,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             ty::TyKind::Bool
             | ty::TyKind::Int(_)
             | ty::TyKind::Uint(_)
+            | ty::TyKind::Float(_)
             | ty::TyKind::Char
             | ty::TyKind::Tuple(_)
             | ty::TyKind::Never
@@ -723,6 +721,22 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             ty::TyKind::Uint(ty::UintTy::U64) => scalar_value.to_u64().unwrap().into(),
             ty::TyKind::Uint(ty::UintTy::U128) => scalar_value.to_u128().unwrap().into(),
             ty::TyKind::Uint(ty::UintTy::Usize) => scalar_value.to_machine_usize(&self.env().tcx()).unwrap().into(),
+            ty::TyKind::Float(ty::FloatTy::F32) => {
+                let bits = scalar_value.to_u32().unwrap();
+                vir::Expr::Const(
+                    vir::ConstExpr {
+                        value: vir::Const::Float(vir::FloatConst::F32(bits)),
+                        position: vir::Position::default(),
+                    })
+            },
+            ty::TyKind::Float(ty::FloatTy::F64) => {
+                let bits = scalar_value.to_u64().unwrap();
+                vir::Expr::Const(
+                    vir::ConstExpr {
+                        value: vir::Const::Float(vir::FloatConst::F64(bits)),
+                        position: vir::Position::default(),
+                    })
+            }
             ty::TyKind::FnDef(def_id, _) => {
                 self.encode_spec_funcs(*def_id)?;
                 vir::Expr::Const( vir::ConstExpr {value: vir::Const::FnPtr, position: vir::Position::default()} )
@@ -998,14 +1012,20 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         &self,
         strct: vir::Expr,
         field_name: &str,
-        ty: ty::Ty<'tcx>
+        ty: ty::Ty<'tcx>,
     ) -> EncodingResult<vir::Expr> {
         let field = strct.field(self.encode_struct_field(field_name, ty)?);
         self.encode_value_expr(field, ty)
     }
 
-    pub fn add_discriminant_info(&self, enum_id: String, discr_id: String, proc_def_id: ProcedureDefId) {
-        self.discriminants_info.borrow_mut()
+    pub fn add_discriminant_info(
+        &self,
+        enum_id: String,
+        discr_id: String,
+        proc_def_id: ProcedureDefId,
+    ) {
+        self.discriminants_info
+            .borrow_mut()
             .entry((proc_def_id, enum_id))
             .or_default()
             .push(discr_id);
