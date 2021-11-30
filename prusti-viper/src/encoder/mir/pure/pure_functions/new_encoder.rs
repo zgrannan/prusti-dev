@@ -227,16 +227,16 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureEncoder<'p, 'v, 'tcx> {
         let ty = self.mir.return_ty();
         let span = self.get_local_span(mir::RETURN_PLACE);
         let param_env = self.encoder.env().tcx().param_env(self.proc_def_id);
-        if !self
-            .encoder
-            .env()
-            .type_is_allowed_in_pure_functions(ty, param_env)
-        {
-            return Err(SpannedEncodingError::incorrect(
-                "return type of pure function does not implement Copy",
-                span,
-            ));
-        }
+        // if !self
+        //     .encoder
+        //     .env()
+        //     .type_is_allowed_in_pure_functions(ty, param_env)
+        // {
+        //     return Err(SpannedEncodingError::incorrect(
+        //         "return type of pure function does not implement Copy",
+        //         span,
+        //     ));
+        // }
         self.encoder.encode_type_high(ty)
     }
 

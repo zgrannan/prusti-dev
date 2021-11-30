@@ -128,12 +128,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
             let return_span = self.get_local_span(mir::RETURN_PLACE);
 
             let param_env = self.encoder.env().tcx().param_env(self.proc_def_id);
-            if !self.encoder.env().type_is_copy(ty, param_env) {
-                return Err(SpannedEncodingError::unsupported(
-                    "return type of pure function does not implement Copy",
-                    return_span,
-                ));
-            }
+            // if !self.encoder.env().type_is_copy(ty, param_env) {
+            //     return Err(SpannedEncodingError::unsupported(
+            //         "return type of pure function does not implement Copy",
+            //         return_span,
+            //     ));
+            // }
 
             body_expr = vir::Expr::snap_app(body_expr);
         }
@@ -433,12 +433,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
 
         // Return an error for unsupported return types
         let param_env = self.encoder.env().tcx().param_env(self.proc_def_id);
-        if !self.encoder.env().type_is_copy(ty, param_env) {
-            return Err(SpannedEncodingError::incorrect(
-                "return type of pure function does not implement Copy",
-                return_span,
-            ));
-        }
+        // if !self.encoder.env().type_is_copy(ty, param_env) {
+        //     return Err(SpannedEncodingError::incorrect(
+        //         "return type of pure function does not implement Copy",
+        //         return_span,
+        //     ));
+        // }
 
         let return_local = mir::Place::return_place().as_local().unwrap();
         let span = self.interpreter.mir_encoder().get_local_span(return_local);
