@@ -43,7 +43,7 @@ where
         .env("CARGO_TARGET_DIR", cargo_target)
         .env("PRUSTI_QUIET", "true")
         .env("PRUSTI_FULL_COMPILATION", "true")
-        .env("RUSTC_WORKSPACE_WRAPPER", prusti_rustc_path)
+        .env("RUSTC_WRAPPER", prusti_rustc_path)
         .env("PRUSTI_LOG_DIR", prusti_log_dir)
         .status()
         .expect("could not run cargo");

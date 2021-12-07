@@ -443,8 +443,9 @@ impl<'p, 'v: 'p, 'tcx: 'v> vir::CfgReplacer<PathCtxt<'p>, ActionVec> for FoldUnf
     type Error = FoldUnfoldError;
 
     fn uniq_id(&mut self) -> Uuid {
-        self.uniq_id_counter += 1;
-        Uuid::from_u128(self.uniq_id_counter)
+        Uuid::new_v4()
+        // self.uniq_id_counter += 1;
+        // Uuid::from_u128(self.uniq_id_counter)
     }
 
 

@@ -372,15 +372,15 @@ fn verify_programs(env: &Environment, programs: Vec<vir::Program>)
         .to_owned();
     let verification_requests = programs
         .into_iter()
-        .filter(|program| {
-            if program.name.contains("increase_client_counter") {
-                println!("Include {}", program.name);
-                true
-            } else {
-                println!("Exclude {}", program.name);
-                false
-            }
-        })
+        // .filter(|program| {
+        //     if program.name.contains("increase_client_counter") {
+        //         println!("Include {}", program.name);
+        //         true
+        //     } else {
+        //         println!("Exclude {}", program.name);
+        //         false
+        //     }
+        // })
         .map(|program| {
         let program_name = program.name.clone();
         // Prepend the Rust file name to the program.

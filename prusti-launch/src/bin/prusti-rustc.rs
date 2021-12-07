@@ -4,6 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use std::fs::File;
+
 #[cfg(target_family = "unix")]
 use nix::unistd::{setpgid, Pid};
 use prusti_launch::{add_to_loader_path, find_viper_home, find_z3_exe, sigint_handler};
@@ -19,7 +21,13 @@ fn main() {
     }
 }
 
+fn log(str: String) {
+    let mut file = File::open("/Users/zgrannan/Desktop/output.txt")
+
+}
+
 fn process(mut args: Vec<String>) -> Result<(), i32> {
+    eprintln!("Launch Prusti!");
     let current_executable_dir = env::current_exe()
         .expect("current executable path invalid")
         .parent()

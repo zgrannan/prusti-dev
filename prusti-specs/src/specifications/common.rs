@@ -162,11 +162,12 @@ impl NameGenerator {
 }
 
 fn uuid_from_span(span: Span, index: u8) -> Uuid {
-    let mut hasher = DefaultHasher::new();
-    let lc = span.start();
-    let file = span.unstable().source_file();
-    (lc.line, lc.column, file.path().to_str()).hash(&mut hasher);
-    Uuid::from_u128((hasher.finish() + index as u64).into())
+    Uuid::new_v4()
+    // let mut hasher = DefaultHasher::new();
+    // let lc = span.start();
+    // let file = span.unstable().source_file();
+    // (lc.line, lc.column, file.path().to_str()).hash(&mut hasher);
+    // Uuid::from_u128((hasher.finish() + index as u64).into())
 }
 
 #[derive(Debug, Clone)]

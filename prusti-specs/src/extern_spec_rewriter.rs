@@ -92,7 +92,6 @@ pub fn rewrite_impl(
     impl_item: &mut syn::ItemImpl,
     new_ty: Box<syn::Type>,
 ) -> syn::Result<TokenStream> {
-    println!("{:?}", new_ty);
     let item_ty = &mut impl_item.self_ty;
     if let syn::Type::Path(type_path) = item_ty.as_mut() {
         for seg in type_path.path.segments.iter_mut() {
