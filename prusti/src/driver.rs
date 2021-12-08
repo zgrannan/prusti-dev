@@ -41,6 +41,8 @@ use log::{info, warn};
 use prusti_common::{config, report::user};
 use rustc_interface::interface::try_print_query_stack;
 use std::{borrow::Cow, env, panic, path::PathBuf};
+use std::fs::OpenOptions;
+use std::io::Write;
 
 /// Link to report Prusti bugs
 const BUG_REPORT_URL: &str = "https://github.com/viperproject/prusti-dev/issues/new";
@@ -51,6 +53,15 @@ lazy_static! {
         panic::set_hook(box |info| report_prusti_ice(info, BUG_REPORT_URL));
         hook
     };
+}
+
+fn log(content: &str) {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open("/Users/zgrannan/ibc-rs/modules/outputd.txt")
+        .unwrap();
+    writeln!(file, "{}", content).unwrap();
 }
 
 fn get_prusti_version_info() -> String {
@@ -140,7 +151,10 @@ fn main() {
         .map(|name| PRUSTI_PACKAGES.contains(&name.as_str()))
         .unwrap_or(false);
     if prusti_be_rustc || is_no_verify_crate || are_lints_disabled || is_prusti_package {
+        log("Main");
         rustc_driver::main();
+    } else {
+        log("Not Main");
     }
 
     lazy_static::initialize(&ICE_HOOK);
