@@ -2165,17 +2165,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 ..
             } => {
                 if let ty::TyKind::FnDef(def_id, substs) = ty.kind() {
-                    let self_ty = {
-                        // If we are calling a trait method on a struct, self_ty
-                        // is the struct.
-                        let generics = self.encoder.env().tcx().generics_of(*def_id);
-                        if generics.has_self {
-                            Some(substs.type_at(0))
-                        } else {
-                            None
-                        }
-                    };
-
                     let def_id = *def_id;
                     let full_func_proc_name: &str =
                         &self.encoder.env().tcx().def_path_str(def_id);
@@ -2290,6 +2279,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                                     destination,
                                     vir::BinaryOpKind::EqCmp,
                                     tymap,
+                                    substs
                                 )?
                             );
                         }
@@ -2311,6 +2301,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                                     destination,
                                     vir::BinaryOpKind::NeCmp,
                                     tymap,
+                                    substs
                                 )?
                             );
                         }
@@ -2327,8 +2318,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                                         args,
                                         destination,
                                         *cl_def_id,
-                                        self_ty,
                                         tymap,
+                                        substs,
                                     )?);
                                 }
 
@@ -2410,8 +2401,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                                         args,
                                         destination,
                                         def_id,
-                                        self_ty,
                                         tymap,
+                                        substs,
                                     )?
                                 );
                             }
@@ -2755,7 +2746,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         args: &[mir::Operand<'tcx>],
         destination: &Option<(mir::Place<'tcx>, BasicBlockIndex)>,
         bin_op: vir::BinaryOpKind,
-        tymap: SubstMap<'tcx>
+        tymap: SubstMap<'tcx>,
+        substs: ty::subst::SubstsRef<'tcx>,
     ) -> SpannedEncodingResult<Vec<vir::Stmt>> {
         let arg_ty = self.mir_encoder.get_operand_ty(&args[0]);
 
@@ -2800,8 +2792,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 args,
                 destination,
                 called_def_id,
-                None, // FIXME: This is almost definitely wrong.
                 tymap,
+                substs,
             )
         }
     }
@@ -2851,8 +2843,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         mir_args: &[mir::Operand<'tcx>],
         destination: &Option<(mir::Place<'tcx>, BasicBlockIndex)>,
         called_def_id: ProcedureDefId,
-        self_ty: Option<&'tcx ty::TyS<'tcx>>,
         tymap: SubstMap<'tcx>,
+        substs: ty::subst::SubstsRef<'tcx>,
     ) -> SpannedEncodingResult<Vec<vir::Stmt>> {
         let full_func_proc_name = &self
             .encoder
@@ -3075,11 +3067,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
 
         let procedure_contract = {
             self.encoder.get_procedure_contract_for_call(
-                self_ty,
                 called_def_id,
                 &arguments,
                 target_local,
                 tymap.clone(),
+                substs,
             ).with_span(call_site_span)?
         };
         assert_one_magic_wand(procedure_contract.borrow_infos.len()).with_span(call_site_span)?;
