@@ -39,7 +39,7 @@ pub fn optimize_method_encoding(cfg: CfgMethod, source_file_name: &str, optimiza
         };
     }
     let cfg = apply!(purify_vars, cfg);
-    // let cfg = apply!(fix_quantifiers, cfg);
+    let cfg = apply!(fix_quantifiers, cfg);
     let cfg = apply!(remove_empty_if, cfg);
     let cfg = apply!(remove_unused_vars, cfg);
     let cfg = apply!(remove_trivial_assertions, cfg);

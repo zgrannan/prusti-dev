@@ -372,15 +372,25 @@ fn verify_programs(env: &Environment, programs: Vec<vir::Program>)
         .to_owned();
     let verification_requests = programs
         .into_iter()
-        // .filter(|program| {
-        //     if program.name.contains("increase_client_counter") {
-        //         println!("Include {}", program.name);
-        //         true
-        //     } else {
-        //         println!("Exclude {}", program.name);
-        //         false
-        //     }
-        // })
+        .filter(|program| {
+            let allowed = vec![
+                "increase_client_counter0",
+                "store_client_result",
+                "store_client_state0",
+                "store_consensus_state0",
+                "store_client_type0",
+                "is_valid_client_result",
+                "dispatch"
+            ];
+            for name in allowed {
+                if program.name.contains(name) {
+                    println!("Include {}", program.name);
+                    return true;
+                }
+            }
+            println!("Exclude {}", program.name);
+            false
+        })
         .map(|program| {
         let program_name = program.name.clone();
         // Prepend the Rust file name to the program.
