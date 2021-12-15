@@ -2,10 +2,9 @@ use crate::specifications::common::NameGenerator;
 use super::parse_quote_spanned;
 use proc_macro2::{TokenStream, TokenTree, Group};
 use quote::{quote, quote_spanned, ToTokens};
-use syn::{ImplItemMethod, GenericParam};
+use syn::ImplItemMethod;
 use syn::spanned::Spanned;
 use crate::span_overrider::SpanOverrider;
-use std::str::FromStr;
 
 /// Process external specifications in Rust modules marked with the
 /// #[extern_spec] attribute. Nested modules are processed recursively.
@@ -204,14 +203,6 @@ fn rewrite_method_inputs(item_ty: &syn::Type, method: &mut ImplItemMethod) ->
         args.push_punct(syn::token::Comma::default());
     };
     args
-}
-
-pub fn get_param_ident(param: &GenericParam) -> &syn::Ident {
-    match param {
-        GenericParam::Type(t) => &t.ident,
-        GenericParam::Lifetime(_) => panic!("No"),
-        GenericParam::Const(c) => &c.ident
-    }
 }
 
 /// Generate an empty struct to be able to define impl blocks (in

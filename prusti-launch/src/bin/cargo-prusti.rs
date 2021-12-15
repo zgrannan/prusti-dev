@@ -35,15 +35,14 @@ where
     let prusti_log_dir =
         std::env::var("PRUSTI_LOG_DIR").unwrap_or_else(|_| format!("{}/log", cargo_target));
 
-    let clean_args : Vec<String> = clean_args.collect();
     let exit_status = Command::new(cargo_path)
         .arg("check")
         .args(clean_args)
         .env("RUST_TOOLCHAIN", get_rust_toolchain_channel())
+        .env("RUSTC_WRAPPER", prusti_rustc_path)
         .env("CARGO_TARGET_DIR", cargo_target)
         .env("PRUSTI_QUIET", "true")
         .env("PRUSTI_FULL_COMPILATION", "true")
-        .env("RUSTC_WRAPPER", prusti_rustc_path)
         .env("PRUSTI_LOG_DIR", prusti_log_dir)
         .status()
         .expect("could not run cargo");

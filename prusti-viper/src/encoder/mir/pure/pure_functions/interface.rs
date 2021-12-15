@@ -7,7 +7,7 @@ use crate::encoder::{
     snapshot::interface::SnapshotEncoderInterface,
     stub_function_encoder::StubFunctionEncoder,
 };
-use log::{debug, trace};
+use log::{debug, trace, info};
 use prusti_interface::{data::ProcedureDefId, environment::Environment};
 use rustc_middle::ty::TyCtxt;
 use std::{
@@ -198,7 +198,7 @@ impl<'v, 'tcx: 'v> PureFunctionEncoderInterface<'tcx>
                 .borrow()
                 .contains(&key)
         {
-            trace!("not encoded: {:?}", key);
+            info!("not encoded: {:?}", key);
 
             self.pure_function_encoder_state
                 .pure_functions_encoding_started

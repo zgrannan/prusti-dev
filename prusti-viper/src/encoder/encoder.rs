@@ -242,7 +242,8 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
 
     pub(super) fn insert_function(&self, function: vir::Function) -> vir::FunctionIdentifier {
         let identifier: vir::FunctionIdentifier = function.get_identifier().into();
-        assert!(self.functions.borrow_mut().insert(identifier.clone(), Rc::new(function)).is_none(), "identifier {:?} already exists!", identifier);
+        println!("Insert function {:?}", identifier);
+        // assert!(self.functions.borrow_mut().insert(identifier.clone(), Rc::new(function)).is_none(), "identifier {:?} already exists!", identifier);
         identifier
     }
 
@@ -254,14 +255,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         } else if self.contains_snapshot_function(identifier) {
             Ok(self.get_snapshot_function(identifier))
         } else {
-            panic!()
-            // let normal_funcs : Vec<String> =
-            //     self.functions.borrow().keys().map(|f| format!("{:?}", f)).into_iter().collect();
-            // let snapshot_funcs : Vec<String> =
-            //     self.snapshot_encoder.borrow().functions.keys().map(|f| format!("{:?}", f)).into_iter().collect();
-            // unreachable!(
-            //     "Not found function: {:?}.\nAvailable functions were:\n{}\n\nSnapshots:\n{}",
-            //     identifier, normal_funcs.join("\n"), snapshot_funcs.join("\n"))
+            panic!("No function {:?}", identifier)
         }
     }
 

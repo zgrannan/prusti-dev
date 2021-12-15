@@ -3,12 +3,8 @@
 //! Please see the `parser.rs` file for more information about
 //! specifications.
 
-use proc_macro2::Span;
 use serde::{Deserialize, Serialize};
-use syn::spanned::Spanned;
-use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
-use std::hash::{Hash, Hasher};
 use std::fmt::{Display, Debug};
 use uuid::Uuid;
 
@@ -19,12 +15,10 @@ pub enum SpecType {
     Precondition,
     /// Postcondition of a procedure.
     Postcondition,
-    /// Loop invariant
+    /// Loop invariant or struct invariant
     Invariant,
     /// Predicate
     Predicate,
-    /// Struct invariant
-    StructInvariant,
 }
 
 #[derive(Debug)]
@@ -158,7 +152,6 @@ impl NameGenerator {
         let uuid = Uuid::new_v4().to_simple();
         format!("{}_{}", ident, uuid)
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -322,22 +315,6 @@ impl<EID, ET, AT> LoopSpecification<EID, ET, AT> {
     }
 }
 
-/// Specification of a struct.
-#[derive(Debug, Clone)]
-pub struct StructSpecification<EID, ET, AT> {
-    pub invariant: Vec<(ET, Assertion<EID, ET, AT>)>
-}
-
-impl<EID, ET, AT> StructSpecification<EID, ET, AT> {
-    pub fn new(invariant: Vec<(ET, Assertion<EID, ET, AT>)>) -> Self {
-        Self { invariant }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.invariant.is_empty()
-    }
-}
-
 /// Specification of a procedure.
 #[derive(Debug, Clone)]
 pub struct ProcedureSpecification<EID, ET, AT> {
@@ -430,7 +407,7 @@ pub enum SpecificationSet<EID, ET, AT> {
     /// Loop invariant.
     Loop(LoopSpecification<EID, ET, AT>),
     /// Struct invariant.
-    Struct(StructSpecification<EID, ET, AT>),
+    Struct(Vec<Specification<EID, ET, AT>>),
 }
 
 impl<EID, ET, AT> SpecificationSet<EID, ET, AT> {
@@ -469,7 +446,7 @@ impl<EID: Clone + Debug, ET: Clone + Debug, AT: Clone + Debug> SpecificationSet<
     }
 
     #[track_caller]
-    pub fn expect_struct(&self) -> &StructSpecification<EID, ET, AT> {
+    pub fn expect_struct(&self) -> &Vec<Specification<EID, ET, AT>> {
         if let SpecificationSet::Struct(spec) = self {
             return spec;
         }
