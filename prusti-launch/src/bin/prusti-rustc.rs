@@ -22,17 +22,7 @@ fn main() {
     }
 }
 
-fn log(content: &str) {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .open("/Users/zgrannan/ibc-rs/modules/output.txt")
-        .unwrap();
-    writeln!(file, "{}", content);
-}
-
 fn process(mut args: Vec<String>) -> Result<(), i32> {
-    log("Launch Prusti!");
     let current_executable_dir = env::current_exe()
         .expect("current executable path invalid")
         .parent()
@@ -162,14 +152,12 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
     // Register the SIGINT handler; CTRL_C_EVENT or CTRL_BREAK_EVENT on Windows
     ctrlc::set_handler(sigint_handler).expect("Error setting Ctrl-C handler");
 
-    log(format!("Do command {:?}", cmd).as_str());
 
     let exit_status = cmd
         .status()
         .unwrap_or_else(|_| panic!("failed to execute prusti-driver ({:?})", prusti_driver_path));
 
     if exit_status.success() {
-        log("Got to end\n");
         Ok(())
     } else {
         Err(exit_status.code().unwrap_or(-1))

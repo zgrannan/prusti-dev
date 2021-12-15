@@ -97,8 +97,8 @@ impl SpecificationIdGenerator {
     pub(crate) fn new() -> Self {
         Self {}
     }
-    pub(crate) fn generate(&mut self, span: Span, index: u8) -> SpecificationId {
-        SpecificationId(uuid_from_span(span, index))
+    pub(crate) fn generate(&mut self) -> SpecificationId {
+        SpecificationId(Uuid::new_v4())
     }
 }
 
@@ -149,25 +149,16 @@ impl NameGenerator {
                 return Err("expected a path".to_string());
             }
         };
-        let uuid = uuid_from_span(item.span(), 0);
+        let uuid = Uuid::new_v4().to_simple();
 
-        Ok(format!("PrustiStruct{}_{}", path_str, uuid.to_simple()))
+        Ok(format!("PrustiStruct{}_{}", path_str, uuid))
     }
 
     pub(crate) fn generate_mod_name(&self, ident: &syn::Ident) -> String {
-        let uuid = uuid_from_span(ident.span(), 0);
-        format!("{}_{}", ident, uuid.to_simple())
+        let uuid = Uuid::new_v4().to_simple();
+        format!("{}_{}", ident, uuid)
     }
 
-}
-
-fn uuid_from_span(span: Span, index: u8) -> Uuid {
-    Uuid::new_v4()
-    // let mut hasher = DefaultHasher::new();
-    // let lc = span.start();
-    // let file = span.unstable().source_file();
-    // (lc.line, lc.column, file.path().to_str()).hash(&mut hasher);
-    // Uuid::from_u128((hasher.finish() + index as u64).into())
 }
 
 #[derive(Debug, Clone)]

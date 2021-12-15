@@ -7,31 +7,13 @@
 use crate::{VerificationRequest, ViperBackendConfig};
 use log::info;
 use prusti_common::{config, report::log::report, vir::ToViper, Stopwatch};
-use serde::Serialize;
-use std::{collections::hash_map::DefaultHasher, fs::create_dir_all, hash::Hash, path::PathBuf};
+use std::{fs::create_dir_all, path::PathBuf};
 use viper::{VerificationBackend, VerificationContext};
-use std::hash::Hasher;
-
-fn show_hash<T: Serialize>(name: &str, thing: &T) {
-    let mut hasher = DefaultHasher::new();
-    serde_json::to_string(thing).unwrap().hash(&mut hasher);
-    info!("{} hash: {:x}", name, hasher.finish());
-}
 
 pub fn process_verification_request<'v, 't: 'v>(
     verification_context: &'v VerificationContext<'t>,
     request: VerificationRequest,
 ) -> viper::VerificationResult {
-    show_hash("Domains", &request.program.domains);
-    show_hash("Fields", &request.program.fields);
-    show_hash("Builtin Methods", &request.program.builtin_methods);
-    show_hash("Methods", &request.program.methods);
-    for m in &request.program.methods {
-        info!("{}", serde_json::to_string_pretty(m).unwrap());
-    }
-    show_hash("Functions", &request.program.functions);
-    show_hash("Predicates", &request.program.viper_predicates);
-    show_hash("Program", &request.program);
     let ast_utils = verification_context.new_ast_utils();
     ast_utils.with_local_frame(16, || {
         // Create a new verifier each time.

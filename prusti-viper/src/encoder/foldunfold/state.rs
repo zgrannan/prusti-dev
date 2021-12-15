@@ -46,7 +46,7 @@ impl State {
 
     pub fn check_consistency(&self) {
         // Skip consistency checks in release mode
-        if true || cfg!(not(debug_assertions)) {
+        if cfg!(not(debug_assertions)) {
             return;
         }
 
@@ -229,13 +229,7 @@ impl State {
     }
 
     pub fn contains_pred(&self, place: &vir::Expr) -> bool {
-        if self.pred.contains_key(place) {
-            // println!("Pred {:?} contains place {:?}", self.pred, place);
-            true
-        } else {
-            // println!("Pred {:?} does not contain place {:?}", self.pred, place);
-            false
-        }
+        self.pred.contains_key(place)
     }
 
     /// Note: the permission amount is currently ignored
