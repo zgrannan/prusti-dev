@@ -6,7 +6,6 @@
 
 use crate::legacy::{ast::*, cfg::method::*, to_string::ToString};
 use std::fmt::Debug;
-use uuid::Uuid;
 
 pub trait CheckNoOpAction {
     /// Is the action a no operation?
@@ -36,8 +35,6 @@ pub trait CfgReplacer<PathCtxt: Debug + Clone, Action: CheckNoOpAction + Debug> 
         _final_pctxt: &[Option<PathCtxt>],
     ) {
     }
-
-    fn uniq_id(&mut self) -> Uuid;
 
     /// Are two branch context compatible for a back edge?
     fn check_compatible_back_edge(left: &PathCtxt, right: &PathCtxt);
@@ -99,10 +96,8 @@ pub trait CfgReplacer<PathCtxt: Debug + Clone, Action: CheckNoOpAction + Debug> 
 
     /// The main method: visit and replace the reachable blocks of a CFG.
     fn replace_cfg(&mut self, cfg: &CfgMethod) -> Result<CfgMethod, Self::Error> {
-        let new_cfg_id = self.uniq_id();
         // Initialize the variables of the new cfg
         let mut new_cfg = CfgMethod::new(
-            new_cfg_id,
             cfg.method_name.clone(),
             cfg.formal_arg_count,
             cfg.formal_returns.clone(),

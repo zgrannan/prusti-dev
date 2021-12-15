@@ -27,7 +27,6 @@ use prusti_common::{
     vir::{ToGraphViz, fixes::fix_ghost_vars},
     vir_local, vir_expr, vir_stmt
 };
-use uuid::Uuid;
 use vir_crate::{
     polymorphic::{
         self as vir,
@@ -59,13 +58,11 @@ use rustc_index::vec::Idx;
 // use std;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use rustc_attr::IntType::SignedInt;
 // use syntax::codemap::{MultiSpan, Span};
 use rustc_span::{MultiSpan, Span};
 use prusti_interface::specs::typed;
-use ::log::{trace, debug, info};
+use ::log::{trace, debug};
 use std::borrow::Borrow as StdBorrow;
 use prusti_interface::environment::borrowck::regions::PlaceRegionsError;
 use crate::encoder::errors::EncodingErrorKind;
@@ -137,16 +134,9 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let init_info = InitInfo::new(mir, tcx, def_id, &mir_encoder)
             .with_default_span(procedure.get_span())?;
 
-        let method_name = encoder.encode_item_name(def_id);
-        // let mut hasher = DefaultHasher::new();
-        // method_name.hash(&mut hasher);
-        // let uuid = Uuid::from_u128(hasher.finish().into());
-        let uuid = Uuid::new_v4();
-
         let cfg_method = vir::CfgMethod::new(
-            uuid,
             // method name
-            method_name,
+            encoder.encode_item_name(def_id),
             // formal args
             mir.arg_count,
             // formal returns
@@ -1713,7 +1703,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let (expiring, restored, is_mut, mut stmts) = self.encode_loan_places(&loan_places)
             .with_span(span)?;
         let borrowed_places = restored.clone().into_iter().collect();
-        info!("construct_vir_reborrowing_node_for_assignment(loan={:?}, loan_places={:?}, expiring={:?}, restored={:?}, stmts={:?}", loan, loan_places, expiring, restored, stmts);
+        trace!("construct_vir_reborrowing_node_for_assignment(loan={:?}, loan_places={:?}, expiring={:?}, restored={:?}, stmts={:?}", loan, loan_places, expiring, restored, stmts);
 
         let mut used_lhs_label = false;
 
@@ -2852,7 +2842,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             .tcx()
             .def_path_str(called_def_id);
             // .absolute_item_path_str(called_def_id);
-        info!("Encoding non-pure function call '{}' with args {:?}", full_func_proc_name, mir_args);
+        debug!("Encoding non-pure function call '{}' with args {:?}", full_func_proc_name, mir_args);
 
         // First we construct the "operands" vector. This construction differs
         // for closure calls, where we need to unpack a tuple into the actual
@@ -6115,9 +6105,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         } else {
                             // TODO: Inhale the predicate rooted at dst_field
                             return Err(SpannedEncodingError::unsupported(
-                                format!(
-                                "the encoding of this reference copy {:?} has not \
-                                been implemented", field.typ),
+                                "the encoding of this reference copy has not \
+                                been implemented",
                                 self.mir_encoder.get_span_of_location(location),
                             ));
                         }

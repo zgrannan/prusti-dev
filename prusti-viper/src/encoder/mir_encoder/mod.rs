@@ -23,7 +23,7 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::{mir, ty};
 use rustc_index::vec::{Idx, IndexVec};
 use rustc_span::{Span, DUMMY_SP};
-use log::{trace, debug, info};
+use log::{trace, debug};
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -69,7 +69,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         &self,
         place: &mir::Place<'tcx>,
     ) -> EncodingResult<(PlaceEncoding<'tcx>, ty::Ty<'tcx>, Option<usize>)> {
-        info!("Encode place {:?}", place);
+        trace!("Encode place {:?}", place);
         self.encode_projection(place.local, place.projection)
     }
 
@@ -82,9 +82,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         local: mir::Local,
         projection: &[mir::PlaceElem<'tcx>],
     ) -> EncodingResult<(PlaceEncoding<'tcx>, ty::Ty<'tcx>, Option<usize>)> {
-        info!("Encode projection {:?}, {:?}", local, projection);
-        info!("LT: {:?}", self.get_local_ty(local));
-        info!("LT Span: {:?}", self.get_local_span(local));
+        trace!("Encode projection {:?}, {:?}", local, projection);
 
         if projection.is_empty() {
             return Ok((
@@ -98,40 +96,30 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
             local,
             &projection[..projection.len() - 1]
         )?;
-        info!("end recurse {:?}, {:?}", local, projection);
-        info!("encoded_base: {:?}", encoded_base);
-        info!("base_ty: {:?}", base_ty);
+        trace!("base_ty: {:?}", base_ty);
 
         let elem = projection.last().unwrap();
         Ok(match elem {
-            mir::ProjectionElem::Field(ref field, fty) => {
+            mir::ProjectionElem::Field(ref field, _) => {
                 match base_ty.kind() {
                     ty::TyKind::Tuple(elems) => {
                         let field_name = format!("tuple_{}", field.index());
                         let field_ty = elems[field.index()].expect_ty();
-                        let encoded_field =
-                            self.encoder()
+                        let encoded_field = self.encoder()
                             .encode_raw_ref_field(field_name, field_ty)?;
                         let encoded_projection = encoded_base.field(encoded_field);
                         (encoded_projection, field_ty, None)
                     }
 
                     ty::TyKind::Adt(adt_def, ref subst) if !adt_def.is_box() => {
-                        debug!("subst {:?} {:?}", subst, fty);
+                        debug!("subst {:?}", subst);
                         let num_variants = adt_def.variants.len();
                         // FIXME: why this can be None?
                         let variant_index = if let Some(num) = opt_variant_index {
                             num
                         } else {
                             if num_variants != 1 {
-                                // panic!(
-                                //     "tried to encode a projection that accesses the field {} \
-                                //     of a variant without first downcasting its enumeration \
-                                //     {:?}",
-                                //     field.index(),
-                                //     base_ty,
-                                // );
-                                return Err(EncodingError::unsupported(
+                                return Err(EncodingError::internal(
                                     format!(
                                         "tried to encode a projection that accesses the field {} \
                                         of a variant without first downcasting its enumeration \
@@ -212,9 +200,8 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                     }
 
                     x => {
-                        panic!("{:?} has no fields", x);
                         return Err(EncodingError::internal(
-                            format!("{:?} has no fields", x)
+                            format!("{} has no fields", utils::ty_to_string(x))
                         ));
                     }
                 }

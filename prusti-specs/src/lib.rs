@@ -147,7 +147,7 @@ fn generate_spec_and_assertions(
 /// Generate spec items and attributes to typecheck the and later retrieve "requires" annotations.
 fn generate_for_requires(attr: TokenStream, item: &untyped::AnyFnItem) -> GeneratedResult {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id(attr.span(), 0);
+    let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
     let assertion = rewriter.parse_assertion(spec_id, attr)?;
     let spec_item = rewriter.generate_spec_item_fn(
@@ -167,7 +167,7 @@ fn generate_for_requires(attr: TokenStream, item: &untyped::AnyFnItem) -> Genera
 /// Generate spec items and attributes to typecheck the and later retrieve "ensures" annotations.
 fn generate_for_ensures(attr: TokenStream, item: &untyped::AnyFnItem) -> GeneratedResult {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id(attr.span(), 0);
+    let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
     let assertion = rewriter.parse_assertion(spec_id, attr)?;
     let spec_item = rewriter.generate_spec_item_fn(
@@ -204,7 +204,7 @@ fn check_is_result(reference: &Option<untyped::Expression>) -> syn::Result<()> {
 /// Generate spec items and attributes to typecheck and later retrieve "after_expiry" annotations.
 fn generate_for_after_expiry(attr: TokenStream, item: &untyped::AnyFnItem) -> GeneratedResult {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id_rhs = rewriter.generate_spec_id(attr.span(), 0);
+    let spec_id_rhs = rewriter.generate_spec_id();
     let spec_id_rhs_str = format!(":{}", spec_id_rhs);
     let pledge = rewriter.parse_pledge(None, spec_id_rhs, attr)?;
     check_is_result(&pledge.reference)?;
@@ -227,8 +227,8 @@ fn generate_for_after_expiry(attr: TokenStream, item: &untyped::AnyFnItem) -> Ge
 /// annotations.
 fn generate_for_after_expiry_if(attr: TokenStream, item: &untyped::AnyFnItem) -> GeneratedResult {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id_lhs = rewriter.generate_spec_id(attr.span(), 0);
-    let spec_id_rhs = rewriter.generate_spec_id(attr.span(), 1);
+    let spec_id_lhs = rewriter.generate_spec_id();
+    let spec_id_rhs = rewriter.generate_spec_id();
     let spec_id_str = format!("{}:{}", spec_id_lhs, spec_id_rhs);
     let pledge = rewriter.parse_pledge(
         Some(spec_id_lhs),
@@ -292,7 +292,7 @@ fn generate_for_trusted(attr: TokenStream, item: &untyped::AnyFnItem) -> Generat
 
 pub fn body_invariant(tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id(tokens.span(), 0);
+    let spec_id = rewriter.generate_spec_id();
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
     let check = rewriter.generate_spec_loop(spec_id, invariant);
     let callsite_span = Span::call_site();
@@ -326,7 +326,7 @@ pub fn closure(tokens: TokenStream, drop_spec: bool) -> TokenStream {
         let mut cl_annotations = TokenStream::new();
 
         for r in cl_spec.pres {
-            let spec_id = rewriter.generate_spec_id(r.span(), 0);
+            let spec_id = rewriter.generate_spec_id();
             let precond = handle_result!(rewriter.parse_assertion(spec_id, r.to_token_stream()));
             preconds.push((spec_id, precond));
             let spec_id_str = spec_id.to_string();
@@ -336,7 +336,7 @@ pub fn closure(tokens: TokenStream, drop_spec: bool) -> TokenStream {
         }
 
         for e in cl_spec.posts {
-            let spec_id = rewriter.generate_spec_id(e.span(), 0);
+            let spec_id = rewriter.generate_spec_id();
             let postcond = handle_result!(rewriter.parse_assertion(spec_id, e.to_token_stream()));
             postconds.push((spec_id, postcond));
             let spec_id_str = spec_id.to_string();
@@ -447,7 +447,7 @@ pub fn refine_trait_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream
 
 pub fn invariant(attr: TokenStream, tokens:TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id(attr.span(), 0);
+    let spec_id = rewriter.generate_spec_id();
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, attr));
     let item: syn::DeriveInput = handle_result!(syn::parse2(tokens));
     let item_span = item.span();
@@ -548,7 +548,7 @@ pub fn predicate(tokens: TokenStream) -> TokenStream {
     );
 
     let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id(tokens_span, 0);
+    let spec_id = rewriter.generate_spec_id();
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, pred_fn.body));
 
     let vis = match pred_fn.visibility {

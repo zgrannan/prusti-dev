@@ -35,8 +35,8 @@ impl AstRewriter {
         }
     }
 
-    pub fn generate_spec_id(&mut self, span: Span, index: u8) -> untyped::SpecificationId {
-        self.spec_id_generator.generate(span, index)
+    pub fn generate_spec_id(&mut self) -> untyped::SpecificationId {
+        self.spec_id_generator.generate()
     }
 
     /// Parse an assertion.

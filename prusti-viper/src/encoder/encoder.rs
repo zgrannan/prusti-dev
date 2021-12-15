@@ -242,7 +242,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
 
     pub(super) fn insert_function(&self, function: vir::Function) -> vir::FunctionIdentifier {
         let identifier: vir::FunctionIdentifier = function.get_identifier().into();
-        assert!(self.functions.borrow_mut().insert(identifier.clone(), Rc::new(function)).is_none());
+        assert!(self.functions.borrow_mut().insert(identifier.clone(), Rc::new(function)).is_none(), "identifier {:?} already exists!", identifier);
         identifier
     }
 
