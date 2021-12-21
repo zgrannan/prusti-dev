@@ -1674,6 +1674,8 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "prusti-specs",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1720,6 +1722,7 @@ dependencies = [
  "prusti-common",
  "reqwest",
  "serde 1.0.131",
+ "serde_json",
  "tokio 0.2.25",
  "url",
  "viper",
@@ -1768,6 +1771,7 @@ dependencies = [
  "prusti-specs",
  "regex",
  "serde 1.0.131",
+ "uuid",
  "viper",
  "vir",
 ]

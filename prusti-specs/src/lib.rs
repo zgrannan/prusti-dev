@@ -445,7 +445,7 @@ pub fn refine_trait_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream
     }
 }
 
-#[proc_macro_attribute]
+// #[proc_macro_attribute]
 pub fn invariant(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     tokens
 }
