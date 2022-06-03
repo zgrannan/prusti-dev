@@ -425,7 +425,10 @@ impl Type {
                     Self::encode_arguments(&[val_type.clone()])
                 )
             }
-            Type::TypeVar(TypeVar { label }) => format!("__TYPARAM__$_{}$__", label),
+            Type::TypeVar(TypeVar { label }) => {
+                assert!(TypeVar::is_valid_label(label), "Label {} is not valid", label);
+                format!("__TYPARAM__$_{}$__", label)
+            },
             x => unreachable!("{}", x),
         }
     }
@@ -619,6 +622,12 @@ impl From<TypeVar> for SnapshotType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeVar {
     pub label: String,
+}
+
+impl TypeVar {
+    pub fn is_valid_label(label: &String) -> bool {
+        !label.contains(" ")
+    }
 }
 
 impl fmt::Display for TypeVar {
