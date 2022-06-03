@@ -325,7 +325,11 @@ impl Type {
     }
 
     pub fn type_var<S: Into<String>>(name: S) -> Self {
-        Type::TypeVar(TypeVar { label: name.into() })
+        let label: String = name.into();
+        println!("I'm here");
+        assert!(false);
+        assert!(TypeVar::is_valid_label(&label));
+        Type::TypeVar(TypeVar { label })
     }
 
     pub fn get_type_var(&self) -> Option<TypeVar> {
@@ -425,7 +429,11 @@ impl Type {
                     Self::encode_arguments(&[val_type.clone()])
                 )
             }
-            Type::TypeVar(TypeVar { label }) => format!("__TYPARAM__$_{}$__", label),
+            Type::TypeVar(TypeVar { label }) => {
+                println!("!!!!");
+                assert!(TypeVar::is_valid_label(label));
+                format!("__TYPARAM__$_{}$__", label)
+            },
             x => unreachable!("{}", x),
         }
     }
@@ -619,6 +627,12 @@ impl From<TypeVar> for SnapshotType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeVar {
     pub label: String,
+}
+
+impl TypeVar {
+    pub fn is_valid_label(label: &String) -> bool {
+        !label.contains(" ")
+    }
 }
 
 impl fmt::Display for TypeVar {

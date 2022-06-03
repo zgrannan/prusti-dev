@@ -63,13 +63,15 @@ impl IntoPolymorphic<Vec<vir_poly::TypeVar>> for Vec<vir_high::ty::TypeVar> {
 
 impl IntoPolymorphic<vir_poly::TypeVar> for vir_high::ty::TypeVar {
     fn lower(&self, _encoder: &impl HighTypeEncoderInterfacePrivate) -> vir_poly::TypeVar {
-        vir_poly::TypeVar {
-            label: match self {
+        let label = match self {
                 vir_high::ty::TypeVar::GenericType(generic_type) => generic_type.get_identifier(),
                 vir_high::ty::TypeVar::LifetimeConst(lifetime_const) => {
                     lifetime_const.get_identifier()
                 }
-            },
+        };
+        assert!(vir_poly::TypeVar::is_valid_label(&label), "Label {} of {} is not valid", label, self);
+        vir_poly::TypeVar {
+            label
         }
     }
 }

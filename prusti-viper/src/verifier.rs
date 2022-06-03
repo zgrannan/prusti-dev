@@ -296,7 +296,7 @@ impl<'v, 'tcx> Verifier<'v, 'tcx> {
 
         for (method, error) in consistency_errors.into_iter() {
             PrustiError::internal(
-                format!("consistency error in {}: {}", method, error), DUMMY_SP.into()
+                format!("consistency error in {}: {}!", method, error), DUMMY_SP.into()
             ).emit(self.env);
             result = VerificationResult::Failure;
         }
