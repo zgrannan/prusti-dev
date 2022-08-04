@@ -10,6 +10,8 @@ pub use self::error_manager::*;
 pub use self::encoding_error::*;
 pub use self::encoding_error_kind::*;
 pub use self::with_span::*;
+pub use self::position_manager::*;
+pub use prusti_rustc_interface::errors::MultiSpan;
 
 mod conversions;
 mod spanned_encoding_error;
@@ -17,3 +19,4 @@ mod error_manager;
 mod encoding_error;
 mod encoding_error_kind;
 mod with_span;
+mod position_manager;

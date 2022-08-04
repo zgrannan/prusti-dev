@@ -7,16 +7,12 @@
 //! The log keeps track of actions performed by the fold-unfold algorithm so that they can be
 //! undone when restoring borrowed permissions.
 
-use crate::encoder::foldunfold::action::Action;
-use crate::encoder::foldunfold::perm::Perm;
-use crate::encoder::foldunfold::FoldUnfoldError;
-use prusti_common::utils::to_string::ToString;
-use prusti_common::vir;
-use std::cmp::Ordering;
-use std::collections::HashMap;
+use crate::encoder::foldunfold::{action::Action, perm::Perm, FoldUnfoldError};
 use log::trace;
-use std::rc::Rc;
-use std::sync::RwLock;
+use prusti_common::utils::to_string::ToString;
+use rustc_hash::FxHashMap;
+use std::{cmp::Ordering, rc::Rc, sync::RwLock};
+use vir_crate::polymorphic as vir;
 
 // Note: Now every PathCtxt has its own EventLog, because a Borrow no longer unique
 // (e.g. we duplicate the evaluation of the loop condition in the encoding of loops).
@@ -27,7 +23,7 @@ pub(super) struct EventLog {
     /// Actions performed by the fold-unfold algorithm before the join. We can use a single
     /// CfgBlockIndex because fold-unfold algorithms generates a new basic block for dropped
     /// permissions.
-    prejoin_actions: HashMap<vir::CfgBlockIndex, Rc<RwLock<Vec<Action>>>>,
+    prejoin_actions: FxHashMap<vir::CfgBlockIndex, Rc<RwLock<Vec<Action>>>>,
 
     /// A list of accessibility predicates for which we inhaled `Read`
     /// permission when creating a borrow and original places from which
@@ -38,14 +34,14 @@ pub(super) struct EventLog {
     /// 1.  The access predicate.
     /// 2.  The rhs of the assignment that created this borrow.
     /// 3.  A unique number.
-    duplicated_reads: HashMap<vir::borrows::Borrow, Vec<(vir::Expr, vir::Expr, u32)>>,
+    duplicated_reads: FxHashMap<vir::borrows::Borrow, Vec<(vir::Expr, vir::Expr, u32)>>,
 
     /// The place that is blocked by a given borrow.
-    blocked_place: HashMap<vir::borrows::Borrow, vir::Expr>,
+    blocked_place: FxHashMap<vir::borrows::Borrow, vir::Expr>,
 
     /// A list of accessibility predicates that were converted from
     /// `Write` to `Read` when creating a borrow.
-    converted_to_read_places: HashMap<vir::borrows::Borrow, Vec<vir::Expr>>,
+    converted_to_read_places: FxHashMap<vir::borrows::Borrow, Vec<vir::Expr>>,
 
     /// A generator of unique IDs.
     id_generator: u32,
@@ -54,10 +50,10 @@ pub(super) struct EventLog {
 impl EventLog {
     pub fn new() -> Self {
         Self {
-            prejoin_actions: HashMap::new(),
-            duplicated_reads: HashMap::new(),
-            blocked_place: HashMap::new(),
-            converted_to_read_places: HashMap::new(),
+            prejoin_actions: FxHashMap::default(),
+            duplicated_reads: FxHashMap::default(),
+            blocked_place: FxHashMap::default(),
+            converted_to_read_places: FxHashMap::default(),
             id_generator: 0,
         }
     }
@@ -71,7 +67,7 @@ impl EventLog {
         let entry_rc = self
             .prejoin_actions
             .entry(block_index)
-            .or_insert(Rc::new(RwLock::new(Vec::new())));
+            .or_insert_with(|| Rc::new(RwLock::new(Vec::new())));
         let mut entry = entry_rc.write().unwrap();
         entry.push(action);
         trace!("[exit] log_prejoin_action {}", entry.iter().to_string());
@@ -82,12 +78,14 @@ impl EventLog {
         path: &[vir::CfgBlockIndex],
         dag: &vir::borrows::DAG,
     ) -> Vec<Perm> {
-        assert!(path.len() > 0);
+        assert!(!path.is_empty());
         let relevant_path = &path[0..path.len() - 1];
         let mut dropped_permissions = Vec::new();
         for curr_block_index in relevant_path {
             if let Some(actions) = self.prejoin_actions.get(curr_block_index) {
-                for action in actions.read().unwrap().iter() {
+                let actions_read = actions.read().unwrap();
+                let actions_iter = actions_read.iter();
+                for action in actions_iter {
                     if let Action::Drop(perm, missing_perm) = action {
                         if dag.in_borrowed_places(missing_perm.get_place()) {
                             dropped_permissions.push(perm.clone());
@@ -106,7 +104,7 @@ impl EventLog {
         perm: vir::Expr,
         original_place: vir::Expr,
     ) {
-        let entry = self.duplicated_reads.entry(borrow).or_insert(Vec::new());
+        let entry = self.duplicated_reads.entry(borrow).or_insert_with(Vec::new);
         entry.push((perm, original_place, self.id_generator));
         self.id_generator += 1;
     }
@@ -120,24 +118,28 @@ impl EventLog {
             .duplicated_reads
             .get(&borrow)
             .cloned()
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         result.sort_by(
             |(access1, _, id1), (access2, _, id2)| match (access1, access2) {
                 (
-                    vir::Expr::PredicateAccessPredicate(_, _, _, _),
-                    vir::Expr::PredicateAccessPredicate(_, _, _, _),
+                    vir::Expr::PredicateAccessPredicate(..),
+                    vir::Expr::PredicateAccessPredicate(..),
                 ) => Ordering::Equal,
+                (vir::Expr::PredicateAccessPredicate(..), vir::Expr::FieldAccessPredicate(..)) => {
+                    Ordering::Less
+                }
+                (vir::Expr::FieldAccessPredicate(..), vir::Expr::PredicateAccessPredicate(..)) => {
+                    Ordering::Greater
+                }
                 (
-                    vir::Expr::PredicateAccessPredicate(_, _, _, _),
-                    vir::Expr::FieldAccessPredicate(_, _, _),
-                ) => Ordering::Less,
-                (
-                    vir::Expr::FieldAccessPredicate(_, _, _),
-                    vir::Expr::PredicateAccessPredicate(_, _, _, _),
-                ) => Ordering::Greater,
-                (
-                    vir::Expr::FieldAccessPredicate(box ref place1, _, _),
-                    vir::Expr::FieldAccessPredicate(box ref place2, _, _),
+                    vir::Expr::FieldAccessPredicate(vir::FieldAccessPredicate {
+                        base: box ref place1,
+                        ..
+                    }),
+                    vir::Expr::FieldAccessPredicate(vir::FieldAccessPredicate {
+                        base: box ref place2,
+                        ..
+                    }),
                 ) => {
                     let key1 = (place1.place_depth(), id1);
                     let key2 = (place2.place_depth(), id2);
@@ -166,7 +168,7 @@ impl EventLog {
         let entry = self
             .converted_to_read_places
             .entry(borrow)
-            .or_insert(Vec::new());
+            .or_insert_with(Vec::new);
         entry.push(perm);
     }
 
@@ -187,27 +189,23 @@ impl EventLog {
     /// Join `other` into `self`
     pub(super) fn join(&mut self, mut other: Self) -> Result<(), FoldUnfoldError> {
         for (other_key, other_value) in other.prejoin_actions.drain() {
-            if !self.prejoin_actions.contains_key(&other_key) {
-                self.prejoin_actions.insert(other_key, other_value);
-            }
+            self.prejoin_actions.entry(other_key).or_insert(other_value);
         }
         // FIXME: This is not enough if the same borrow is created in two different paths
         for (other_key, other_value) in other.duplicated_reads.drain() {
-            if !self.duplicated_reads.contains_key(&other_key) {
-                self.duplicated_reads.insert(other_key, other_value);
-            }
+            self.duplicated_reads
+                .entry(other_key)
+                .or_insert(other_value);
         }
         // FIXME: This is not enough if the same borrow is created in two different paths
         for (other_key, other_value) in other.blocked_place.drain() {
-            if !self.blocked_place.contains_key(&other_key) {
-                self.blocked_place.insert(other_key, other_value);
-            }
+            self.blocked_place.entry(other_key).or_insert(other_value);
         }
         // FIXME: This is not enough if the same borrow is created in two different paths
         for (other_key, other_value) in other.converted_to_read_places.drain() {
-            if !self.converted_to_read_places.contains_key(&other_key) {
-                self.converted_to_read_places.insert(other_key, other_value);
-            }
+            self.converted_to_read_places
+                .entry(other_key)
+                .or_insert(other_value);
         }
         self.id_generator = self.id_generator.max(other.id_generator);
         Ok(())

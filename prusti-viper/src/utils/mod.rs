@@ -4,7 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use rustc_middle::ty;
+use prusti_rustc_interface::middle::ty;
+
 
 pub mod to_string;
 pub mod type_visitor;
@@ -38,4 +39,8 @@ pub fn ty_to_string(typ: &ty::TyKind) -> String {
         &ty::TyKind::Infer(_) => "inference type",
         &ty::TyKind::Error(_) => "error type",
     }).to_string()
+}
+
+pub fn is_reference(base_ty: ty::Ty) -> bool {
+    matches!(base_ty.kind(), ty::TyKind::RawPtr(..) | ty::TyKind::Ref(..))
 }

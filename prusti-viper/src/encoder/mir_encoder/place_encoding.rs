@@ -7,11 +7,10 @@
 
 use std::fmt::Display;
 
-use rustc_middle::ty;
-use prusti_common::vir;
+use prusti_rustc_interface::middle::ty;
+use vir_crate::polymorphic as vir;
 
 use crate::encoder::{
-    Encoder,
     errors::{EncodingError, EncodingResult},
 };
 
@@ -81,7 +80,7 @@ impl<'tcx> PlaceEncoding<'tcx> {
             PlaceEncoding::Variant { base, field } => {
                 match base.into_array_base() {
                     ExprOrArrayBase::Expr(e) => ExprOrArrayBase::Expr(
-                        vir::Expr::Variant(box e, field, vir::Position::default())
+                        vir::Expr::Variant( vir::Variant {base: box e, variant_index: field, position: vir::Position::default()} )
                     ),
                     base@ExprOrArrayBase::ArrayBase(_) => base,
                     base@ExprOrArrayBase::SliceBase(_) => base,

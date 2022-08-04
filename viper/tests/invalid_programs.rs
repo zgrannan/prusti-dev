@@ -1,16 +1,10 @@
-extern crate env_logger;
-extern crate error_chain;
-#[macro_use]
-extern crate lazy_static;
-extern crate viper;
-
 use std::sync::Once;
 use viper::*;
 
 static INIT: Once = Once::new();
 
-lazy_static! {
-    static ref VIPER: Viper = Viper::new();
+lazy_static::lazy_static! {
+    static ref VIPER: Viper = Viper::new_for_tests();
 }
 
 /// Setup function that is only run once, even if called multiple times.
@@ -24,21 +18,22 @@ fn setup() {
 fn runtime_error() {
     setup();
 
-    let verification_context: VerificationContext = VIPER.new_verification_context();
+    let verification_context: VerificationContext = VIPER.attach_current_thread();
     let ast = verification_context.new_ast_factory();
 
     // This is an error, as Silicon expects the method body to be a Seqn statement.
-    let method_body = ast.assert(
-        ast.true_lit(),
-        ast.no_position(),
-    );
+    let method_body = ast.assert(ast.true_lit(), ast.no_position());
     let method = ast.method("foo", &[], &[], &[], &[], Some(method_body));
     let program = ast.program(&[], &[], &[], &[], &[method]);
 
-    let verifier = verification_context.new_verifier(viper::VerificationBackend::Silicon, None);
+    let mut verifier =
+        verification_context.new_verifier_with_default_smt(viper::VerificationBackend::Silicon);
     let verification_result = verifier.verify(program);
 
-    assert!(matches!(verification_result, VerificationResult::JavaException(_)));
+    assert!(matches!(
+        verification_result,
+        VerificationResult::JavaException(_)
+    ));
 }
 
 #[test]
@@ -90,7 +85,7 @@ where
 {
     setup();
 
-    let verification_context: VerificationContext = VIPER.new_verification_context();
+    let verification_context: VerificationContext = VIPER.attach_current_thread();
     let ast = verification_context.new_ast_factory();
 
     let method_body = body_constructor(&ast);
@@ -99,7 +94,8 @@ where
 
     let program = ast.program(&[], &[], &[], &[], &[method]);
 
-    let verifier = verification_context.new_verifier(viper::VerificationBackend::Silicon, None);
+    let mut verifier =
+        verification_context.new_verifier_with_default_smt(viper::VerificationBackend::Silicon);
 
     let verification_result = verifier.verify(program);
     match verification_result {

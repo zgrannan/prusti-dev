@@ -4,9 +4,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use prusti_common::vir;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::io;
+use vir_crate::{common::graphviz::escape_html, polymorphic as vir};
 
 pub(super) struct BasicBlock<'a> {
     pub guard: vir::Expr,
@@ -17,18 +17,19 @@ pub(super) struct BasicBlock<'a> {
     pub successors: Vec<usize>,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 pub(super) struct CFG<'a> {
     pub basic_blocks: Vec<BasicBlock<'a>>,
     /// Basic blocks that connect a pair of basic blocks. They are needed for performing
     /// fold-unfold operations on an edge.
-    pub edges: HashMap<(usize, usize), Vec<vir::Stmt>>,
+    pub edges: FxHashMap<(usize, usize), Vec<vir::Stmt>>,
 }
 
 impl<'a> CFG<'a> {
     pub(super) fn new() -> Self {
         Self {
             basic_blocks: Vec::new(),
-            edges: HashMap::new(),
+            edges: FxHashMap::default(),
         }
     }
     pub(super) fn add_block(&mut self, block: BasicBlock<'a>) {
@@ -48,14 +49,6 @@ impl<'a> CFG<'a> {
         graph: &mut dyn io::Write,
         curr_block_index: usize,
     ) -> Result<(), io::Error> {
-        fn escape_html<S: ToString>(s: S) -> String {
-            s.to_string()
-                .replace("&", "&amp;")
-                .replace(">", "&gt;")
-                .replace("<", "&lt;")
-                .replace("\n", "<br/>")
-        }
-
         writeln!(graph, "digraph CFG {{")?;
         writeln!(graph, "graph [fontname=monospace];")?;
         writeln!(graph, "node [fontname=monospace];")?;
@@ -70,8 +63,15 @@ impl<'a> CFG<'a> {
             write!(graph, "<table>")?;
             write!(
                 graph,
-                "<tr><td>borrow:</td><td>{:?}</td></tr>",
-                block.node.borrow
+                "<tr><td>borrow:</td><td>{:?}<br/>{}</td></tr>",
+                block.node.borrow,
+                block
+                    .node
+                    .stmts
+                    .iter()
+                    .map(|s| escape_html(s.to_string()))
+                    .collect::<Vec<_>>()
+                    .join("<br/>"),
             )?;
             for (i, stmt) in block.statements.iter().enumerate() {
                 write!(

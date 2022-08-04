@@ -5,8 +5,10 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use cargo_test_support::{cargo_test, project, symlink_supported};
-use std::path::{Path, PathBuf};
-use std::fs;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 fn cargo_prusti_path() -> PathBuf {
     let target_directory = if cfg!(debug_assertions) {
@@ -19,17 +21,27 @@ fn cargo_prusti_path() -> PathBuf {
     } else {
         "cargo-prusti"
     };
-    let local_prusti_rustc_path: PathBuf = ["target", target_directory, executable_name].iter().collect();
+    let local_prusti_rustc_path: PathBuf = ["target", target_directory, executable_name]
+        .iter()
+        .collect();
     if local_prusti_rustc_path.exists() {
-        return fs::canonicalize(&local_prusti_rustc_path).expect(
-            &format!("Failed to canonicalize the path {:?}", local_prusti_rustc_path)
-        );
+        return fs::canonicalize(&local_prusti_rustc_path).unwrap_or_else(|_| {
+            panic!(
+                "Failed to canonicalize the path {:?}",
+                local_prusti_rustc_path
+            )
+        });
     }
-    let workspace_prusti_rustc_path: PathBuf = ["..", "target", target_directory, executable_name].iter().collect();
+    let workspace_prusti_rustc_path: PathBuf = ["..", "target", target_directory, executable_name]
+        .iter()
+        .collect();
     if workspace_prusti_rustc_path.exists() {
-        return fs::canonicalize(&workspace_prusti_rustc_path).expect(
-            &format!("Failed to canonicalize the path {:?}", workspace_prusti_rustc_path)
-        );
+        return fs::canonicalize(&workspace_prusti_rustc_path).unwrap_or_else(|_| {
+            panic!(
+                "Failed to canonicalize the path {:?}",
+                workspace_prusti_rustc_path
+            )
+        });
     }
     panic!(
         "Could not find the {:?} cargo-prusti binary to be used in tests. \
@@ -43,8 +55,7 @@ fn simple_assert_true() {
     let p = project()
         .file("src/main.rs", "fn main() { assert!(true); }")
         .build();
-    p.process(cargo_prusti_path())
-        .run();
+    p.process(cargo_prusti_path()).run();
 }
 
 #[cargo_test]
@@ -61,15 +72,11 @@ fn simple_assert_false() {
  --> src/main.rs:1:13
   |
 1 | fn main() { assert!(false); }
-  |             ^^^^^^^^^^^^^^^
+  |             ^^^^^^^^^^^^^^
   |
   = note: this error originates in the macro `assert` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-[ERROR] aborting due to previous error
-
-[ERROR] could not compile `foo`
-
-To learn more, run the command again with --verbose.
+error: could not compile `foo` due to previous error
 ",
         )
         .run();
@@ -90,22 +97,31 @@ To learn more, run the command again with --verbose.
 fn test_local_project<T: Into<PathBuf>>(project_name: T) {
     let mut project_builder = project().no_manifest();
     let relative_project_path = Path::new("tests/cargo_verify").join(project_name.into());
-    let project_path = fs::canonicalize(&relative_project_path).expect(
-        &format!("Failed to canonicalize the path {}", relative_project_path.display())
-    );
+    let project_path = fs::canonicalize(&relative_project_path).unwrap_or_else(|_| {
+        panic!(
+            "Failed to canonicalize the path {}",
+            relative_project_path.display()
+        )
+    });
 
     // Populate the test project with symlinks to the local project
     let project_path_content = fs::read_dir(&project_path)
-        .expect(&format!("Failed to read directory {}", project_path.display()));
+        .unwrap_or_else(|_| panic!("Failed to read directory {}", project_path.display()));
     for entry in project_path_content {
-        let entry = entry.expect(&format!("Failed to read content of {}", project_path.display()));
+        let entry = entry
+            .unwrap_or_else(|_| panic!("Failed to read content of {}", project_path.display()));
         let path = entry.path();
-        let file_name = path.as_path().file_name()
-            .expect(&format!("Failed to obtain the name of {}", path.display()));
+        let file_name = path
+            .as_path()
+            .file_name()
+            .unwrap_or_else(|| panic!("Failed to obtain the name of {}", path.display()));
+        if file_name == "target" {
+            continue;
+        }
         if path.is_dir() {
-            project_builder = project_builder.symlink_dir(path.as_path(), &Path::new(file_name));
+            project_builder = project_builder.symlink_dir(path.as_path(), Path::new(file_name));
         } else {
-            project_builder = project_builder.symlink(path.as_path(), &Path::new(file_name));
+            project_builder = project_builder.symlink(path.as_path(), Path::new(file_name));
         }
     }
 
@@ -115,8 +131,14 @@ fn test_local_project<T: Into<PathBuf>>(project_name: T) {
         .and_then(|p| p.parent())
         .and_then(|p| p.parent())
         .and_then(|p| p.parent())
-        .expect(&format!("Failed to obtain parent folders of {}", project_path.display()));
+        .unwrap_or_else(|| {
+            panic!(
+                "Failed to obtain parent folders of {}",
+                project_path.display()
+            )
+        });
     let prusti_contract_deps = [
+        "prusti-utils",
         "prusti-specs",
         "prusti-contracts",
         "prusti-contracts-impl",
@@ -125,20 +147,27 @@ fn test_local_project<T: Into<PathBuf>>(project_name: T) {
     for crate_name in &prusti_contract_deps {
         project_builder = project_builder.symlink_dir(
             prusti_dev_path.join(crate_name).as_path(),
-            &Path::new(crate_name)
+            Path::new(crate_name),
         );
     }
 
-    // Fetch dependencies
+    // Fetch dependencies using the same target folder of cargo-prusti
     let project = project_builder.build();
-    project.process("cargo").arg("build").run();
+    project
+        .process("cargo")
+        .arg("build")
+        .env("CARGO_TARGET_DIR", "target/verify")
+        .run();
 
     // Set the expected exit status, stdout and stderr
     let mut test_builder = project.process(cargo_prusti_path());
+    test_builder.arg("--quiet");
     let opt_expected_stdout = fs::read_to_string(project_path.join("output.stdout")).ok();
     let opt_expected_stderr = fs::read_to_string(project_path.join("output.stderr")).ok();
     if let Some(ref expected_stdout) = opt_expected_stdout {
-        test_builder.with_stdout(expected_stdout);
+        // In some cases, Prusti outputs more macro definitions than needed.
+        // See: https://github.com/viperproject/prusti-dev/pull/762
+        test_builder.with_stdout_contains(expected_stdout);
     }
     if let Some(ref expected_stderr) = opt_expected_stderr {
         test_builder.with_status(101).with_stderr(expected_stderr);
@@ -157,6 +186,45 @@ fn test_symlinks() {
 #[cargo_test]
 fn test_failing_crate() {
     test_local_project("failing_crate");
+}
+
+#[cargo_test]
+fn test_no_deps() {
+    test_local_project("no_deps");
+}
+
+#[cargo_test]
+fn test_prusti_toml() {
+    test_local_project("prusti_toml");
+}
+
+#[cargo_test]
+fn test_prusti_toml_fail() {
+    let old_value = if let Ok(value) = std::env::var("RUST_BACKTRACE") {
+        // We need to remove this environment variable because it affects the
+        // compiler output.
+        std::env::remove_var("RUST_BACKTRACE");
+        Some(value)
+    } else {
+        None
+    };
+    test_local_project("prusti_toml_fail");
+    if let Some(value) = old_value {
+        std::env::set_var("RUST_BACKTRACE", value)
+    }
+}
+
+// `#![no_std]` binaries on Windows are not a thing yet,
+// see <https://github.com/viperproject/prusti-dev/pull/762>.
+#[cfg_attr(windows, ignore)]
+#[cargo_test]
+fn test_no_std() {
+    test_local_project("test_no_std");
+}
+
+#[cargo_test]
+fn test_overflow_checks() {
+    test_local_project("overflow_checks");
 }
 
 // TODO: automatically create a test for each folder in `test/cargo_verify`.

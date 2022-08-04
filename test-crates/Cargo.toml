@@ -2,15 +2,18 @@
 name = "test-crates"
 version = "0.1.0"
 authors = ["Federico Poli <federpoli@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 prusti-launch = { path = "../prusti-launch" }
 prusti = { path = "../prusti" }
 color-backtrace = "0.5"
-rustwide = "0.13.1"
+rustwide = "0.15.0"
 env_logger = "0.9"
-log = "0.4.14"
+log = "0.4"
 csv = "1.1.5"
 serde = "1.0"
 toml = "0.5.8"
+glob = "0.3.0"
+clap = { version = "3.1", features = ["derive"] }
+failure = "0.1.3"

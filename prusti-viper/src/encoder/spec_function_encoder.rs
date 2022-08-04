@@ -1,21 +1,25 @@
-use crate::encoder::{Encoder, borrows::ProcedureContract};
-use crate::encoder::errors::{SpannedEncodingResult, ErrorCtxt, WithSpan};
-use crate::encoder::borrows::compute_procedure_contract;
+use crate::encoder::snapshot::interface::SnapshotEncoderInterface;
+use crate::encoder::Encoder;
+use crate::encoder::errors::{ErrorCtxt, SpannedEncodingResult, WithSpan};
 use crate::encoder::mir_encoder::{MirEncoder, PlaceEncoder};
+use crate::encoder::mir::{
+    contracts::{
+        ContractsEncoderInterface,
+        ProcedureContract,
+    },
+    pure::SpecificationEncoderInterface,
+    specifications::SpecificationsInterface,
+};
 use prusti_interface::{
     environment::{
-        Procedure,
-        Environment
+        Procedure
     },
     data::ProcedureDefId,
-    specs::typed,
 };
-use prusti_common::vir;
-use prusti_common::vir::ExprIterator;
-use rustc_middle::{ty, mir};
-use rustc_span::Span;
-use log::{debug, trace};
-use rustc_hir as hir;
+use vir_crate::polymorphic as vir;
+use vir_crate::polymorphic::ExprIterator;
+use prusti_rustc_interface::middle::{mir, ty::subst::SubstsRef};
+use prusti_rustc_interface::span::Span;
 
 pub enum SpecFunctionKind {
     Pre,
@@ -25,25 +29,27 @@ pub enum SpecFunctionKind {
 
 pub struct SpecFunctionEncoder<'p, 'v: 'p, 'tcx: 'v> {
     encoder: &'p Encoder<'v, 'tcx>,
-    procedure: &'p Procedure<'p, 'tcx>,
+    procedure: &'p Procedure<'tcx>,
     span: Span,
     proc_def_id: ProcedureDefId,
     is_closure: bool,
-    mir: &'p mir::Body<'tcx>,
     mir_encoder: MirEncoder<'p, 'v, 'tcx>,
+    // TODO(tymap): which substs are these?
+    substs: SubstsRef<'tcx>,
 }
 
 impl<'p, 'v: 'p, 'tcx: 'v> SpecFunctionEncoder<'p, 'v, 'tcx> {
     pub fn new(encoder: &'p Encoder<'v, 'tcx>,
-               procedure: &'p Procedure<'p, 'tcx>) -> Self {
+               procedure: &'p Procedure<'tcx>,
+               substs: SubstsRef<'tcx>) -> Self {
         Self {
-            encoder: encoder,
-            procedure: procedure,
+            encoder,
+            procedure,
             span: procedure.get_span(),
             proc_def_id: procedure.get_id(),
             is_closure: encoder.env().tcx().is_closure(procedure.get_id()),
-            mir: procedure.get_mir(),
-            mir_encoder: MirEncoder::new(encoder, procedure.get_mir(), procedure.get_id())
+            mir_encoder: MirEncoder::new(encoder, procedure.get_mir(), procedure.get_id()),
+            substs,
         }
     }
 
@@ -53,18 +59,12 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecFunctionEncoder<'p, 'v, 'tcx> {
         let _post_name = self.encoder.encode_spec_func_name(self.procedure.get_id(),
                                                            SpecFunctionKind::Post);
 
-        let specs = if let Some(specs) = self.encoder.get_procedure_specs(self.proc_def_id) {
-            specs
-        } else {
+        if self.encoder.get_procedure_specs(self.proc_def_id, self.substs).is_none() {
             return Ok(vec![]);
-        };
+        }
 
-        let contract = compute_procedure_contract(
-            self.proc_def_id,
-            self.encoder.env().tcx(),
-            typed::SpecificationSet::Procedure(specs),
-            Some(&self.encoder.current_tymap())
-        ).with_span(self.span)?.to_def_site_contract();
+        let contract = self.encoder.get_procedure_contract_for_def(self.proc_def_id, self.substs)
+            .with_span(self.span)?;
 
         let pre_func = self.encode_pre_spec_func(&contract)?;
         let post_func = self.encode_post_spec_func(&contract)?;
@@ -79,27 +79,32 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecFunctionEncoder<'p, 'v, 'tcx> {
         let encoded_args: Vec<vir::LocalVar> = contract
             .args
             .iter()
-            .map(|local| self.encode_local(local.clone().into()).into())
+            .map(|local| self.encode_local((*local).into()))
             .collect::<Result<Vec<_>, _>>()?;
 
-        for item in contract.functional_precondition() {
-            func_spec.push(self.encoder.encode_assertion(
-                &item,
-                &self.mir,
+        for (assertion, assertion_substs) in contract.functional_precondition(self.encoder.env(), self.substs) {
+            let encoded_assertion = self.encoder.encode_assertion(
+                &assertion,
                 None,
                 &encoded_args
                     .iter()
                     .map(|e| -> vir::Expr { e.into() }).collect::<Vec<_>>(),
                 None,
                 true,
-                None,
-                ErrorCtxt::GenericExpression,
-            )?);
+                self.proc_def_id,
+                assertion_substs,
+            )?;
+            self.encoder.error_manager().set_error(
+                encoded_assertion.pos(),
+                ErrorCtxt::PureFunctionDefinition,
+            );
+            func_spec.push(encoded_assertion);
         }
 
         Ok(vir::Function {
             name: self.encoder.encode_spec_func_name(self.procedure.get_id(),
                                                      SpecFunctionKind::Pre),
+            type_arguments: Vec::new(), // FIXME: This is probably wrong.
             formal_args: encoded_args.into_iter()
                                      .skip(if self.is_closure { 1 } else { 0 }) // FIXME: "self" is skipped, see TypeEncoder
                                      .collect(),
@@ -117,32 +122,37 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecFunctionEncoder<'p, 'v, 'tcx> {
         let encoded_args: Vec<vir::LocalVar> = contract
             .args
             .iter()
-            .map(|local| self.encode_local(local.clone().into()).into())
+            .map(|local| self.encode_local((*local).into()))
             .collect::<Result<Vec<_>, _>>()?;
-        let encoded_return = self.encode_local(contract.returned_value.clone().into())?;
+        let encoded_return = self.encode_local(contract.returned_value.into())?;
         // encoded_args:
         // _1    - closure "self"
         // _2... - additional arguments
         // encoded return: _0
 
-        for item in contract.functional_postcondition() {
-            func_spec.push(self.encoder.encode_assertion(
-                &item,
-                &self.mir,
+        for (assertion, assertion_substs) in contract.functional_postcondition(self.encoder.env(), self.substs) {
+            let encoded_assertion = self.encoder.encode_assertion(
+                &assertion,
                 None,
                 &encoded_args
                     .iter()
                     .map(|e| -> vir::Expr { e.into() }).collect::<Vec<_>>(),
                 Some(&encoded_return.clone().into()),
                 true,
-                None,
-                ErrorCtxt::GenericExpression,
-            )?);
+                self.proc_def_id,
+                assertion_substs,
+            )?;
+            self.encoder.error_manager().set_error(
+                encoded_assertion.pos(),
+                ErrorCtxt::PureFunctionDefinition,
+            );
+            func_spec.push(encoded_assertion);
         }
 
         Ok(vir::Function {
             name: self.encoder.encode_spec_func_name(self.procedure.get_id(),
                                                      SpecFunctionKind::Post),
+            type_arguments: Vec::new(), // FIXME: This is probably wrong.
             formal_args: encoded_args.into_iter()
                                      .skip(if self.is_closure { 1 } else { 0 }) // FIXME: "self" is skipped, see TypeEncoder
                                      .chain(std::iter::once(encoded_return))

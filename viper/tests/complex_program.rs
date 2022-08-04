@@ -1,20 +1,14 @@
-extern crate env_logger;
-extern crate error_chain;
-#[macro_use]
-extern crate lazy_static;
-extern crate viper;
-
 use viper::*;
 
-lazy_static! {
-    static ref VIPER: Viper = Viper::new();
+lazy_static::lazy_static! {
+    static ref VIPER: Viper = Viper::new_for_tests();
 }
 
 #[test]
 fn success_with_complex_program() {
     env_logger::init();
 
-    let verification_context: VerificationContext = VIPER.new_verification_context();
+    let verification_context: VerificationContext = VIPER.attach_current_thread();
     let ast = verification_context.new_ast_factory();
 
     let wrapper_type = ast.domain_type(
@@ -33,10 +27,7 @@ fn success_with_complex_program() {
 
     let unwrap_domain_function = ast.domain_func(
         "unwrap",
-        &[ast.local_var_decl(
-            "x",
-            wrapper_type,
-        )],
+        &[ast.local_var_decl("x", wrapper_type)],
         ast.type_var("T"),
         false,
         "Wrapper",
@@ -191,9 +182,10 @@ fn success_with_complex_program() {
         &[method],
     );
 
-    let verifier = verification_context.new_verifier(viper::VerificationBackend::Silicon, None);
+    let mut verifier =
+        verification_context.new_verifier_with_default_smt(viper::VerificationBackend::Silicon);
 
     let verification_result = verifier.verify(program);
 
-    assert_eq!(verification_result, VerificationResult::Success());
+    assert!(verification_result.is_success());
 }

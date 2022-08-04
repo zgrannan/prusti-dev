@@ -1,25 +1,23 @@
 //! A module that invokes the verifier `prusti-viper`
 
-use prusti_interface::specs::typed;
 use log::{debug, trace, warn};
+use prusti_common::{config, report::user};
 use prusti_interface::{
     data::{VerificationResult, VerificationTask},
     environment::Environment,
+    specs::typed,
 };
 use prusti_viper::verifier::Verifier;
-use prusti_common::config;
-use prusti_common::report::user;
 
-pub fn verify<'tcx>(
-    env: Environment<'tcx>,
-    def_spec: typed::DefSpecificationMap<'tcx>
-) {
+pub fn verify(env: Environment<'_>, def_spec: typed::DefSpecificationMap) {
     trace!("[verify] enter");
 
     if env.has_errors() {
         warn!("The compiler reported an error, so the program will not be verified.");
     } else {
         debug!("Prepare verification task...");
+        // TODO: can we replace `get_annotated_procedures` with information
+        // that is already in `def_spec`?
         let annotated_procedures = env.get_annotated_procedures();
         let verification_task = VerificationTask {
             procedures: annotated_procedures,
@@ -32,9 +30,16 @@ pub fn verify<'tcx>(
         ));
 
         if config::print_collected_verification_items() {
-            println!("Collected verification items {}:", verification_task.procedures.len());
+            println!(
+                "Collected verification items {}:",
+                verification_task.procedures.len()
+            );
             for procedure in &verification_task.procedures {
-                println!("procedure: {} at {:?}", env.get_item_def_path(*procedure), env.get_item_span(*procedure));
+                println!(
+                    "procedure: {} at {:?}",
+                    env.get_item_def_path(*procedure),
+                    env.get_def_span(*procedure)
+                );
             }
         }
 
@@ -44,7 +49,7 @@ pub fn verify<'tcx>(
             debug!("Dump borrow checker info...");
             env.dump_borrowck_info(&verification_task.procedures);
 
-            let mut verifier = Verifier::new(&env, &def_spec);
+            let mut verifier = Verifier::new(&env, def_spec);
             let verification_result = verifier.verify(&verification_task);
             debug!("Verifier returned {:?}", verification_result);
 
@@ -54,7 +59,10 @@ pub fn verify<'tcx>(
         match verification_result {
             VerificationResult::Success => {
                 if env.has_errors() {
-                    user::message("Verification result is inconclusive.");
+                    user::message(
+                        "Verification result is inconclusive because errors \
+                                       were encountered during encoding.",
+                    );
                 } else {
                     user::message(format!(
                         "Successful verification of {} items",
@@ -64,7 +72,7 @@ pub fn verify<'tcx>(
             }
             VerificationResult::Failure => {
                 user::message("Verification failed");
-                debug_assert!(env.has_errors());
+                assert!(env.has_errors() || config::internal_errors_as_warnings());
             }
         };
     }

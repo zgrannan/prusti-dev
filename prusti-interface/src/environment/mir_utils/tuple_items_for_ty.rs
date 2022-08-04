@@ -1,4 +1,4 @@
-use rustc_middle::ty;
+use prusti_rustc_interface::middle::ty;
 
 pub trait TupleItemsForTy<'tcx> {
     /// Tries to interpret the given `mir::Ty` as a tuple type. If this succeeds, it returns the
@@ -8,14 +8,10 @@ pub trait TupleItemsForTy<'tcx> {
 
 impl<'tcx> TupleItemsForTy<'tcx> for ty::Ty<'tcx> {
     fn tuple_items(&self) -> Option<Vec<ty::Ty<'tcx>>> {
-        if let ty::TyKind::Tuple(items) = self.kind() {
-            let types = items.iter()
-                .map(|ga| ga.expect_ty())
-                .collect();
-            Some(types)
+        if let ty::TyKind::Tuple(types) = self.kind() {
+            Some(types.to_vec())
         } else {
             None
         }
     }
 }
-

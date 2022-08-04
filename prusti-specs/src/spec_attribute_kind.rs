@@ -6,10 +6,12 @@ pub enum SpecAttributeKind {
     Requires,
     Ensures,
     AfterExpiry,
-    AfterExpiryIf,
+    AssertOnExpiry,
     Pure,
     Trusted,
     Predicate,
+    Invariant,
+    GhostConstraint,
 }
 
 impl TryFrom<String> for SpecAttributeKind {
@@ -20,10 +22,12 @@ impl TryFrom<String> for SpecAttributeKind {
             "requires" => Ok(SpecAttributeKind::Requires),
             "ensures" => Ok(SpecAttributeKind::Ensures),
             "after_expiry" => Ok(SpecAttributeKind::AfterExpiry),
-            "after_expiry_if" => Ok(SpecAttributeKind::AfterExpiryIf),
+            "assert_on_expiry" => Ok(SpecAttributeKind::AssertOnExpiry),
             "pure" => Ok(SpecAttributeKind::Pure),
             "trusted" => Ok(SpecAttributeKind::Trusted),
             "predicate" => Ok(SpecAttributeKind::Predicate),
+            "invariant" => Ok(SpecAttributeKind::Invariant),
+            "ghost_constraint" => Ok(SpecAttributeKind::GhostConstraint),
             _ => Err(name),
         }
     }

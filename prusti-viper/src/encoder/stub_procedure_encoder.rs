@@ -4,16 +4,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crate::encoder::high::types::HighTypeEncoderInterface;
 use crate::encoder::mir_encoder::{MirEncoder, PlaceEncoder};
 use crate::encoder::Encoder;
-use prusti_common::vir;
-use prusti_common::vir::Successor;
+use prusti_common::vir::ToGraphViz;
+use vir_crate::polymorphic::{self as vir, Successor};
 use prusti_common::config;
 use prusti_interface::environment::Procedure;
 use prusti_common::report::log;
-use rustc_hir::def_id::DefId;
-use rustc_middle::mir;
+use prusti_rustc_interface::hir::def_id::DefId;
+use prusti_rustc_interface::middle::mir;
 use ::log::trace;
+
 
 pub struct StubProcedureEncoder<'p, 'v: 'p, 'tcx: 'v>
  {
@@ -21,11 +23,11 @@ pub struct StubProcedureEncoder<'p, 'v: 'p, 'tcx: 'v>
     mir: &'p mir::Body<'tcx>,
     mir_encoder: MirEncoder<'p, 'v, 'tcx>,
     def_id: DefId,
-    procedure: &'p Procedure<'v, 'tcx>,
+    procedure: &'p Procedure<'tcx>,
 }
 
 impl<'p, 'v: 'p, 'tcx: 'v> StubProcedureEncoder<'p, 'v, 'tcx> {
-    pub fn new(encoder: &'p Encoder<'v, 'tcx>, procedure: &'p Procedure<'v, 'tcx>) -> Self {
+    pub fn new(encoder: &'p Encoder<'v, 'tcx>, procedure: &'p Procedure<'tcx>) -> Self {
         let def_id = procedure.get_id();
         trace!("StubProcedureEncoder constructor: {:?}", def_id);
 
@@ -59,10 +61,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> StubProcedureEncoder<'p, 'v, 'tcx> {
         // Declare the formal return
         for local in self.mir.local_decls.indices().take(1) {
             let name = self.mir_encoder.encode_local_var_name(local);
-            let type_name = self
+            let typ = self
                 .encoder
-                .encode_type_predicate_use(self.mir_encoder.get_local_ty(local)).unwrap(); // will panic if attempting to encode unsupported type
-            cfg_method.add_formal_return(&name, vir::Type::TypedRef(type_name))
+                .encode_type(self.mir_encoder.get_local_ty(local)).unwrap(); // will panic if attempting to encode unsupported type
+            cfg_method.add_formal_return(&name, typ)
         }
 
         // Initialize a single CFG block

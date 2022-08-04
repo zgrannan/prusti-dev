@@ -6,13 +6,15 @@
 
 //! This module defines functions for log messages, meant for developers
 
-use crate::config;
-use std::fs;
-use std::io::{self, Write};
-use std::path::PathBuf;
+use crate::{config, utils::identifiers::encode_identifier};
+use std::{
+    fs,
+    io::{self, Write},
+    path::PathBuf,
+};
 
 fn log_dir() -> Option<PathBuf> {
-    let log_dir: PathBuf = config::log_dir().into();
+    let log_dir = config::log_dir();
     fs::create_dir_all(&log_dir).ok()?;
     if log_dir.is_dir() {
         Some(log_dir)
@@ -21,17 +23,38 @@ fn log_dir() -> Option<PathBuf> {
     }
 }
 
+pub fn to_legal_file_name<S: ToString>(name: S) -> String {
+    to_legal_file_name_of_max_length(name.to_string(), config::max_log_file_name_length())
+}
+
+pub fn to_legal_file_name_of_max_length(name: String, max_length: usize) -> String {
+    let mut name_string = encode_identifier(name);
+    if cfg!(target_os = "windows") {
+        name_string = name_string
+            .chars()
+            .map(|x| match x {
+                '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+                _ => x,
+            })
+            .collect();
+    }
+    if name_string.len() > max_length {
+        let mut end = name_string.rfind('.').unwrap();
+        if name_string.len() - end > 5 {
+            end = name_string.len() - 1;
+        };
+        let start = end - (name_string.len() - max_length);
+        name_string.drain(start..end);
+    }
+    name_string
+}
+
 pub fn build_writer<S: ToString>(namespace: &str, name: S) -> io::Result<Box<dyn Write>> {
     Ok(match log_dir() {
         Some(log_dir) => {
             let mut path = log_dir.join(namespace);
             fs::create_dir_all(&path)?;
-            let mut name_string = name.to_string();
-            if name_string.len() > config::max_log_file_name_length() {
-                let end = name_string.rfind('.').unwrap();
-                let start = end - (name_string.len() - config::max_log_file_name_length());
-                name_string.drain(start..end);
-            }
+            let name_string = to_legal_file_name(name);
             let name_path = PathBuf::from(name_string);
             debug_assert!(!name_path.is_absolute(), "The name cannot be absolute");
             path.push(name_path);
@@ -40,7 +63,7 @@ pub fn build_writer<S: ToString>(namespace: &str, name: S) -> io::Result<Box<dyn
         // fallback
         None => {
             let mut stdout = io::stdout();
-            write!(&mut stdout, "# {}: {}\n\n", namespace, name.to_string())?;
+            write!(stdout, "# {}: {}\n\n", namespace, name.to_string())?;
             box stdout
         }
     })

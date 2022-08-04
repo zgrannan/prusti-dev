@@ -4,13 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use class_name::*;
-use errors::*;
-use jni::objects::JObject;
-use jni::objects::JValue;
-use jni::JNIEnv;
+use crate::{class_name::*, errors::*, utils::*};
+use jni::{
+    objects::{JObject, JValue},
+    JNIEnv,
+};
 use std::collections::HashMap;
-use utils::*;
 
 pub fn generate_method(
     env: &JNIEnv,
@@ -22,12 +21,7 @@ pub fn generate_method(
     let clazz = env.find_class(class.path())?;
 
     let methods = env
-        .call_method(
-            clazz,
-            "getMethods",
-            "()[Ljava/lang/reflect/Method;",
-            &[],
-        )?
+        .call_method(clazz, "getMethods", "()[Ljava/lang/reflect/Method;", &[])?
         .l()?;
     let num_methods = env.get_array_length(methods.into_inner())?;
 
@@ -234,20 +228,22 @@ fn generate(
         for i in 0..parameter_names.len() {
             let par_name = &parameter_names[i];
             let par_sign = &parameter_signatures[i];
-            if par_sign.chars().next() == Some('L') {
-                let par_class = &par_sign[1..(par_sign.len()-1)];
+            if par_sign.starts_with('L') {
+                let par_class = &par_sign[1..(par_sign.len() - 1)];
                 code.push("    debug_assert!(".to_string());
                 code.push(format!(
                     "        self.env.is_instance_of({}, self.env.find_class(\"{}\")?)?",
-                    par_name,
-                    par_class
+                    par_name, par_class
                 ));
                 code.push("    );".to_string());
             }
         }
     }
 
-    code.push(format!("    let class = self.env.find_class(\"{}\")?;", class.path()));
+    code.push(format!(
+        "    let class = self.env.find_class(\"{}\")?;",
+        class.path()
+    ));
 
     // Generate dynamic type check for `receiver`
     if cfg!(debug_assertions) {
@@ -293,18 +289,16 @@ fn generate(
     ));
 
     // Generate dynamic type check for the result
-    if cfg!(debug_assertions) {
-        if return_signature.chars().next() == Some('L') {
-            let return_class = &return_signature[1..(return_signature.len()-1)];
-            code.push("    if let Ok(result) = result {".to_string());
-            code.push("        debug_assert!(".to_string());
-            code.push(format!(
-                "            self.env.is_instance_of(result, self.env.find_class(\"{}\")?)?",
-                return_class
-            ));
-            code.push("        );".to_string());
-            code.push("    }".to_string());
-        }
+    if cfg!(debug_assertions) && return_signature.starts_with('L') {
+        let return_class = &return_signature[1..(return_signature.len() - 1)];
+        code.push("    if let Ok(result) = result {".to_string());
+        code.push("        debug_assert!(".to_string());
+        code.push(format!(
+            "            self.env.is_instance_of(result, self.env.find_class(\"{}\")?)?",
+            return_class
+        ));
+        code.push("        );".to_string());
+        code.push("    }".to_string());
     }
 
     code.push("    self.env.delete_local_ref(class.into()).unwrap();".to_string());
@@ -440,6 +434,6 @@ fn generate_static(
 }
 
 fn java_method_to_rust(method_name: &str) -> String {
-    method_name.replace("_", "__").replace("$", "_dollar_")
+    method_name.replace('_', "__").replace('$', "_dollar_")
     // If needed, replace other charachters with "_{something}_"
 }

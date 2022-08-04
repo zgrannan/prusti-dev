@@ -4,7 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use rustc_span::{Span, MultiSpan};
+use prusti_rustc_interface::span::Span;
+use prusti_rustc_interface::errors::MultiSpan;
 use crate::environment::Environment;
 use prusti_common::config;
 use ::log::warn;
@@ -18,24 +19,51 @@ use ::log::warn;
 ///
 /// A `PrustiError` can be displayed as a *warning* to the user. (We should rename `PrustiError`,
 /// `SpannedEncodingError` and similar types to something less confusing.)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrustiError {
-    is_error: bool,
+    kind: PrustiErrorKind,
+    /// If `true`, it should not be reported to the user. We need this in cases
+    /// when the same error could be reported twice.
+    ///
+    /// FIXME: This is a workaround: we get duplicate errors because we
+    /// currently verify functions multiple times. Once this is fixed, this
+    /// field should be removed.
+    is_disabled: bool,
     message: String,
     span: MultiSpan,
     help: Option<String>,
-    note: Option<(String, MultiSpan)>,
+    notes: Vec<(String, Option<MultiSpan>)>,
+}
+/// Determines how a `PrustiError` is reported.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PrustiErrorKind {
+    Error, Warning,
+    /// A warning which is only shown if at least one error is emitted.
+    WarningOnError,
+}
+
+impl PartialOrd for PrustiError {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.span.primary_span().partial_cmp(&other.span.primary_span())
+    }
+}
+
+impl Ord for PrustiError {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
 
 impl PrustiError {
     /// Private constructor. Use one of the following methods.
     fn new(message: String, span: MultiSpan) -> Self {
         PrustiError {
-            is_error: true,
+            kind: PrustiErrorKind::Error,
+            is_disabled: false,
             message,
             span,
             help: None,
-            note: None,
+            notes: vec![],
         }
     }
 
@@ -46,6 +74,16 @@ impl PrustiError {
             format!("[Prusti: verification error] {}", message.to_string()),
             span
         )
+    }
+
+    pub fn disabled_verification<S: ToString>(message: S, span: MultiSpan) -> Self {
+        check_message(message.to_string());
+        let mut error = PrustiError::new(
+            format!("[Prusti: verification error] {}", message.to_string()),
+            span
+        );
+        error.is_disabled = true;
+        error
     }
 
     /// Report an unsupported feature of the verified Rust code (e.g. dereferencing raw pointers)
@@ -70,59 +108,120 @@ impl PrustiError {
         )
     }
 
+    /// Report a non-fatal issue
+    pub fn warning<S: ToString>(message: S, span: MultiSpan) -> Self {
+        check_message(message.to_string());
+        let mut err = PrustiError::new(
+            format!("[Prusti: warning] {}", message.to_string()),
+            span
+        );
+        err.kind = PrustiErrorKind::Warning;
+        err
+    }
+
+    /// Report a non-fatal issue only if there are errors
+    /// (e.g. cannot automatically include loop guard as an invariant)
+    pub fn warning_on_error<S: ToString>(message: S, span: MultiSpan) -> Self {
+        check_message(message.to_string());
+        let mut err = PrustiError::new(
+            format!("[Prusti: warning] {}", message.to_string()),
+            span
+        );
+        err.kind = PrustiErrorKind::WarningOnError;
+        err
+    }
+
     /// Report an internal error of Prusti (e.g. failure of the fold-unfold)
     pub fn internal<S: ToString>(message: S, span: MultiSpan) -> Self {
         check_message(message.to_string());
-        PrustiError::new(
-            format!("[Prusti internal error] {}", message.to_string()),
+        let mut error = PrustiError::new(
+            "[Prusti internal error] Prusti encountered an unexpected internal error".to_string(),
             span
-        )
+        ).add_note(
+            "We would appreciate a bug report: https://github.com/viperproject/prusti-dev/issues/new",
+            None
+        ).add_note(
+            format!("Details: {}", message.to_string()),
+            None
+        );
+        if config::internal_errors_as_warnings() {
+            error.set_warning();
+        }
+        error
     }
 
     /// Set that this Prusti error should be reported as a warning to the user
     pub fn set_warning(&mut self) {
-        self.is_error = false;
+        self.kind = PrustiErrorKind::Warning;
     }
 
     pub fn is_error(&self) -> bool {
-        self.is_error
+        matches!(self.kind, PrustiErrorKind::Error)
     }
 
+    // FIXME: This flag is a temporary workaround for having duplicate errors
+    // coming from verifying functions multiple times. We should verify each
+    // function only once.
+    pub fn is_disabled(&self) -> bool {
+        self.is_disabled
+    }
+
+    #[must_use]
     pub fn set_help<S: ToString>(mut self, message: S) -> Self {
         self.help = Some(message.to_string());
         self
     }
 
-    pub fn set_note<S: ToString>(mut self, note: S, note_span: Span) -> Self {
-        self.note = Some((note.to_string(), MultiSpan::from_span(note_span)));
+    #[must_use]
+    pub fn add_note<S: ToString>(mut self, message: S, opt_span: Option<Span>) -> Self {
+        self.notes.push((message.to_string(), opt_span.map(MultiSpan::from)));
         self
     }
 
-    /// Report the encoding error using the compiler's interface
+    pub fn add_note_mut<S: ToString>(&mut self, message: S, opt_span: Option<MultiSpan>) {
+        self.notes.push((message.to_string(), opt_span));
+    }
+
+    /// Report the encoding error using the compiler's interface.
+    /// Warnings are not immediately emitted, but buffered and only shown
+    /// if an error is emitted (i.e. verification failure)
     pub fn emit(self, env: &Environment) {
-        if self.is_error {
-            env.span_err_with_help_and_note(
+        assert!(!self.is_disabled);
+        match self.kind {
+            PrustiErrorKind::Error => env.span_err_with_help_and_notes(
                 self.span,
                 &self.message,
                 &self.help,
-                &self.note,
-            );
-        } else {
-            env.span_warn_with_help_and_note(
+                &self.notes,
+            ),
+            PrustiErrorKind::Warning => env.span_warn_with_help_and_notes(
                 self.span,
                 &self.message,
                 &self.help,
-                &self.note,
-            );
-        }
+                &self.notes,
+            ),
+            PrustiErrorKind::WarningOnError => env.span_warn_on_err_with_help_and_notes(
+                self.span,
+                &self.message,
+                &self.help,
+                &self.notes,
+            ),
+        };
+    }
+
+    /// Cancel the error.
+    pub fn cancel(self) {
+        assert!(self.is_disabled);
     }
 
     /// Set the span of the failing assertion expression.
     ///
     /// Note: this is a noop if `opt_span` is None
+    #[must_use]
     pub fn set_failing_assertion(mut self, opt_span: Option<&MultiSpan>) -> Self {
         if let Some(span) = opt_span {
-            self.note = Some(("the failing assertion is here".to_string(), span.clone()));
+            let note = "the failing assertion is here".to_string();
+            self.notes.push((note, Some(span.clone())));
         }
         self
     }
@@ -130,9 +229,10 @@ impl PrustiError {
     /// Convert the original error span to a note, and add a new error span.
     ///
     /// Note: this is a noop if `opt_span` is None
+    #[must_use]
     pub fn push_primary_span(mut self, opt_span: Option<&MultiSpan>) -> Self {
         if let Some(span) = opt_span {
-            self.note = Some(("the error originates here".to_string(), self.span));
+            self.notes.push(("the error originates here".to_string(), Some(self.span)));
             self.span = span.clone();
         }
         self

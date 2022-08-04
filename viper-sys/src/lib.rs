@@ -6,14 +6,11 @@
 
 #![deny(unused_must_use)]
 
-extern crate jni;
-
+#[rustfmt::skip]
 #[path = "../gen/mod.rs"]
 pub mod wrappers;
 
-use jni::errors::Result;
-use jni::objects::JObject;
-use jni::JNIEnv;
+use jni::{errors::Result, objects::JObject, JNIEnv};
 
 pub fn get_system_out<'a>(env: &'a JNIEnv) -> Result<JObject<'a>> {
     env.get_static_field("java/lang/System", "out", "Ljava/io/PrintStream;")

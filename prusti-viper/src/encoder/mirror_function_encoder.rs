@@ -4,19 +4,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use rustc_hir::def_id::DefId;
-use std::collections::HashSet;
+use rustc_hash::{FxHashSet};
+use prusti_rustc_interface::hir::def_id::DefId;
 
-use prusti_common::vir::{self, ExprIterator, WithIdentifier};
-use prusti_interface::environment::borrowck::facts::Loan;
-use crate::encoder::encoder::Encoder;
-use std::collections::HashMap;
+use vir_crate::polymorphic::{self as vir};
+
+
 
 const MIRROR_DOMAIN_NAME: &str = "MirrorDomain";
 
 pub struct MirrorEncoder {
     domain: vir::Domain,
-    encoded: HashSet<DefId>,
+    encoded: FxHashSet<DefId>,
 }
 
 // mirror_caller_functions: RefCell<Vec<vir::Function>>
@@ -30,21 +29,17 @@ impl MirrorEncoder {
                 axioms: vec![],
                 type_vars: vec![],
             },
-            encoded: HashSet::new(),
+            encoded: FxHashSet::default(),
         }
     }
 
-    /// Returns a list of Viper domains needed by the encoded mirrors.
-    pub fn get_viper_domains(&self) -> Vec<vir::Domain> {
+
+    pub fn get_domain(&self) -> Option<&vir::Domain> {
         if self.encoded.is_empty() {
-            vec![]
+            None
         } else {
-            vec![self.domain.clone()]
+            Some(&self.domain)
         }
-    }
-
-    pub fn get_viper_functions(&self) -> Vec<vir::Function> {
-        vec![]
     }
 
     pub fn encode_mirrors(
@@ -71,6 +66,7 @@ impl MirrorEncoder {
         // create mirror function
         let mirror_func = vir::DomainFunc {
             name: format!("mirror_simple${}", function.name),
+            type_arguments: function.type_arguments.clone(),
             formal_args: function.formal_args.clone(),
             return_type: function.return_type.clone(),
             unique: false,
@@ -79,8 +75,8 @@ impl MirrorEncoder {
 
         // add postcondition to the original function
         // [result == mirror(args), true]
-        function.posts.push(vir::Expr::InhaleExhale(
-            box vir::Expr::eq_cmp(
+        function.posts.push(vir::Expr::InhaleExhale( vir::InhaleExhale {
+            inhale_expr: box vir::Expr::eq_cmp(
                 vir::Expr::local(
                     vir::LocalVar::new("__result", function.return_type.clone()),
                 ),
@@ -92,9 +88,9 @@ impl MirrorEncoder {
                         .collect(),
                 ),
             ),
-            box true.into(),
-            vir::Position::default(),
-        ));
+            exhale_expr: box true.into(),
+            position: vir::Position::default(),
+        }));
 
         // add mirror function to mirror domain
         self.domain.functions.push(mirror_func);
@@ -119,7 +115,7 @@ pub fn encode_mirror_of_pure_function(
     function: &vir::Function,
 ) {
     /*
-    let snapshots: &HashMap<String, Box<Snapshot>> = &encoder.get_snapshots();
+    let snapshots: &FxHashMap<String, Box<Snapshot>> = &encoder.get_snapshots();
     let formal_args_without_nat: Vec<vir::LocalVar> =
         snapshot::encode_mirror_function_args_without_nat(&function.formal_args, &snapshots).unwrap();
 

@@ -1,6 +1,7 @@
-use rustc_index::vec::Idx;
-use rustc_middle::mir;
-use rustc_middle::ty;
+use prusti_rustc_interface::{
+    index::vec::Idx,
+    middle::{mir, ty},
+};
 
 pub trait AllPlaces<'tcx> {
     /// Returns all places that are below the given local variable. Right now, this only handles
@@ -16,7 +17,6 @@ impl<'tcx> AllPlaces<'tcx> for mir::Local {
         if let ty::TyKind::Tuple(types) = ty.kind() {
             for (i, ty) in types.iter().enumerate() {
                 let field = mir::Field::new(i);
-                let ty = ty.expect_ty();
                 let place = tcx.mk_place_field(self.into(), field, ty);
                 places.push(place);
             }
@@ -24,4 +24,3 @@ impl<'tcx> AllPlaces<'tcx> for mir::Local {
         places
     }
 }
-

@@ -52,9 +52,9 @@ checksum = "5600b4e6efc5421841a2138a6b082e07fe12f9aaa12783d50e5d13325b26b4fc"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.27"
+version = "1.0.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d8caf72986c1a598726adc988bb5984792ef84f5ee5aa50209145ee8077038"
+checksum = "2f84e92c0f7c9d58328b85a78557813e4bd845130db68d7184635344399423b1"
 dependencies = [
  "unicode-xid",
 ]
@@ -71,11 +71,6 @@ dependencies = [
 [[package]]
 name = "prusti-contracts-impl"
 version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "prusti-specs",
- "quote",
-]
 
 [[package]]
 name = "prusti-contracts-internal"
@@ -90,12 +85,17 @@ name = "prusti-specs"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
+ "prusti-utils",
  "quote",
  "serde",
  "serde_json",
  "syn",
  "uuid",
 ]
+
+[[package]]
+name = "prusti-utils"
+version = "0.1.0"
 
 [[package]]
 name = "quote"
@@ -145,9 +145,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.73"
+version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f71489ff30030d2ae598524f61326b902466f72a0fb1a8564c001cc63425bcc7"
+checksum = "8daf5dd0bb60cbd4137b1b587d2fc0ae729bc07cf01cd70b36a1ed5ade3b9d59"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -194,9 +194,9 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
 name = "uuid"
-version = "0.8.2"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom",
  "serde",

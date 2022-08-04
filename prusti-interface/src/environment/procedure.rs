@@ -6,39 +6,41 @@
 
 use super::loops;
 use crate::data::ProcedureDefId;
-use rustc_middle::mir::{self, Body as Mir, Rvalue, AggregateKind};
-use rustc_middle::mir::{BasicBlock, BasicBlockData, Terminator, TerminatorKind};
-use rustc_middle::ty::{self, Ty, TyCtxt};
-use std::cell::Ref;
+use prusti_rustc_interface::middle::mir::{self, Body as Mir, Rvalue, AggregateKind};
+use prusti_rustc_interface::middle::mir::{BasicBlock, BasicBlockData};
+use prusti_rustc_interface::middle::ty::{Ty, TyCtxt};
+use std::rc::Rc;
 use std::collections::{HashSet, HashMap};
-use rustc_span::Span;
+use prusti_rustc_interface::span::Span;
 use log::{trace, debug};
-use rustc_middle::mir::StatementKind;
-use rustc_hir::def_id;
-use std::iter::FromIterator;
+use prusti_rustc_interface::middle::mir::StatementKind;
+use prusti_rustc_interface::hir::def_id;
 use crate::environment::mir_utils::RealEdges;
+use crate::environment::debug_utils::to_text::ToText;
+use crate::environment::Environment;
 
 /// Index of a Basic Block
 pub type BasicBlockIndex = mir::BasicBlock;
 
 /// A facade that provides information about the Rust procedure.
-pub struct Procedure<'a, 'tcx: 'a> {
+pub struct Procedure<'tcx> {
     tcx: TyCtxt<'tcx>,
     proc_def_id: ProcedureDefId,
-    mir: Ref<'a, Mir<'tcx>>,
+    mir: Rc<Mir<'tcx>>,
     real_edges: RealEdges,
     loop_info: loops::ProcedureLoops,
     reachable_basic_blocks: HashSet<BasicBlock>,
     nonspec_basic_blocks: HashSet<BasicBlock>,
 }
 
-impl<'a, 'tcx> Procedure<'a, 'tcx> {
+impl<'tcx> Procedure<'tcx> {
     /// Builds an implementation of the Procedure interface, given a typing context and the
     /// identifier of a procedure
-    pub fn new(tcx: TyCtxt<'tcx>, proc_def_id: ProcedureDefId) -> Self {
+    pub fn new(env: &Environment<'tcx>, proc_def_id: ProcedureDefId) -> Self {
         trace!("Encoding procedure {:?}", proc_def_id);
-        let (mir, _) = tcx.mir_promoted(ty::WithOptConstParam::unknown(proc_def_id.expect_local()));
-        let mir = mir.borrow();
+        let tcx = env.tcx();
+        // TOOD(tymap): add substs to procedure? check usages
+        let mir = env.local_mir(proc_def_id.expect_local(), env.identity_substs(proc_def_id));
         let real_edges = RealEdges::new(&mir);
         let reachable_basic_blocks = build_reachable_basic_blocks(&mir, &real_edges);
         let nonspec_basic_blocks = build_nonspec_basic_blocks(&mir, &real_edges, &tcx);
@@ -73,6 +75,42 @@ impl<'a, 'tcx> Procedure<'a, 'tcx> {
         // types.into_iter().collect()
         unimplemented!();
 
+    }
+
+    pub fn get_lifetime_of_var(&self, var: mir::Local) -> Option<String>{
+        fn get_lifetime_if_matches(local: mir::Local, var: mir::Local, mir: &Mir) -> Option<String>{
+            if local == var {
+                let ty_kind = mir.local_decls[local].ty.kind();
+                if let prusti_rustc_interface::middle::ty::TyKind::Ref(region, _ty, _mutability) = ty_kind {
+                    return Some(region.to_text());
+                }
+            }
+            None
+        }
+        let mir = self.get_mir();
+        for local in mir.vars_and_temps_iter() {
+            if let Some(lifetime) = get_lifetime_if_matches(local, var, mir) {
+                return Some(lifetime);
+            }
+        }
+        for local in mir.args_iter() {
+            if let Some(lifetime) = get_lifetime_if_matches(local, var, mir) {
+                return Some(lifetime);
+            }
+        }
+        None
+    }
+
+    pub fn get_var_of_lifetime(&self, lft: &str) -> Option<mir::Local>{
+        let mir = self.get_mir();
+        for local in mir.vars_and_temps_iter() {
+            if let prusti_rustc_interface::middle::ty::TyKind::Ref(region, _, _) = &mir.local_decls[local].ty.kind() {
+                if region.to_text() == lft {
+                    return Some(local)
+                }
+            }
+        }
+        None
     }
 
     /// Get definition ID of the procedure.
@@ -149,36 +187,6 @@ impl<'a, 'tcx> Procedure<'a, 'tcx> {
         self.reachable_basic_blocks.contains(&bbi)
     }
 
-    pub fn is_panic_block(&self, bbi: BasicBlockIndex) -> bool {
-        if let TerminatorKind::Call {
-            args: ref _args,
-            destination: ref _destination,
-            func:
-                mir::Operand::Constant(box mir::Constant {
-                    literal: mir::ConstantKind::Ty(
-                        ty::Const {
-                            ty,
-                            ..
-                        },
-                    ),
-                    ..
-                }),
-            ..
-        } = self.mir[bbi].terminator().kind {
-            if let ty::TyKind::FnDef(def_id, ..) = ty.kind() {
-                // let func_proc_name = self.tcx.absolute_item_path_str(def_id);
-                let func_proc_name = self.tcx.def_path_str(*def_id);
-                &func_proc_name == "std::rt::begin_panic"
-                    || &func_proc_name == "core::panicking::panic"
-                    || &func_proc_name == "core::panicking::panic_fmt"
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
     pub fn successors(&self, bbi: BasicBlockIndex) -> &[BasicBlockIndex] {
         self.real_edges.successors(bbi)
     }
@@ -188,8 +196,7 @@ impl<'a, 'tcx> Procedure<'a, 'tcx> {
 fn build_reachable_basic_blocks(mir: &Mir, real_edges: &RealEdges) -> HashSet<BasicBlock> {
     let mut reachable_basic_blocks: HashSet<BasicBlock> = HashSet::new();
     let mut visited: HashSet<BasicBlock> = HashSet::new();
-    let mut to_visit: Vec<BasicBlock> = vec![];
-    to_visit.push(mir.basic_blocks().indices().next().unwrap());
+    let mut to_visit: Vec<BasicBlock> = vec![mir.basic_blocks().indices().next().unwrap()];
 
     while !to_visit.is_empty() {
         let source = to_visit.pop().unwrap();
@@ -212,22 +219,52 @@ fn build_reachable_basic_blocks(mir: &Mir, real_edges: &RealEdges) -> HashSet<Ba
 }
 
 fn is_spec_closure(def_id: def_id::DefId, tcx: &TyCtxt) -> bool {
-    crate::utils::has_spec_only_attr(tcx.get_attrs(def_id))
+    crate::utils::has_spec_only_attr(crate::utils::get_attributes(*tcx, def_id))
 }
 
-fn is_spec_basic_block(bb_data: &BasicBlockData, tcx: &TyCtxt) -> bool {
+pub fn is_marked_specification_block(bb_data: &BasicBlockData, tcx: &TyCtxt) -> bool {
     for stmt in &bb_data.statements {
-        if let StatementKind::Assign(box (_, rvalue)) = &stmt.kind {
-            if let Rvalue::Aggregate(box aggr, _) = rvalue {
-                if let AggregateKind::Closure(def_id, _) = aggr {
-                    if is_spec_closure(*def_id, tcx) {
-                        return true;
-                    }
-                }
+        if let StatementKind::Assign(box (_, Rvalue::Aggregate(box AggregateKind::Closure(def_id, _), _))) = &stmt.kind {
+            if is_spec_closure(*def_id, tcx) {
+                return true;
             }
         }
     }
-    return false;
+    false
+}
+
+pub fn get_loop_invariant<'tcx>(bb_data: &BasicBlockData<'tcx>, tcx: TyCtxt<'tcx>) -> Option<(ProcedureDefId, prusti_rustc_interface::middle::ty::subst::SubstsRef<'tcx>)> {
+    for stmt in &bb_data.statements {
+        if let StatementKind::Assign(box (_, Rvalue::Aggregate(box AggregateKind::Closure(def_id, substs), _))) = &stmt.kind {
+            if is_spec_closure(*def_id, &tcx) && crate::utils::has_prusti_attr(crate::utils::get_attributes(tcx, *def_id), "loop_body_invariant_spec") {
+                return Some((*def_id, substs))
+            }
+        }
+    }
+    None
+}
+
+pub fn is_loop_invariant_block<'tcx>(bb_data: &BasicBlockData<'tcx>, tcx: TyCtxt<'tcx>) -> bool {
+    get_loop_invariant(bb_data, tcx).is_some()
+}
+
+pub fn is_ghost_begin_marker<'tcx>(bb: &BasicBlockData<'tcx>, tcx: TyCtxt<'tcx>) -> bool {
+    is_spec_block_kind(bb, tcx, "ghost_begin")
+}
+
+pub fn is_ghost_end_marker<'tcx>(bb: &BasicBlockData<'tcx>, tcx: TyCtxt<'tcx>) -> bool {
+    is_spec_block_kind(bb, tcx, "ghost_end")
+}
+
+fn is_spec_block_kind(bb_data: &BasicBlockData, tcx: TyCtxt, kind: &str) -> bool {
+    for stmt in &bb_data.statements {
+        if let StatementKind::Assign(box (_, Rvalue::Aggregate(box AggregateKind::Closure(def_id, _), _))) = &stmt.kind {
+            if is_spec_closure(*def_id, &tcx) && crate::utils::has_prusti_attr(crate::utils::get_attributes(tcx, *def_id), kind) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[derive(Debug)]
@@ -247,21 +284,33 @@ fn _blocks_definitely_leading_to<'a>(bb_graph: &'a HashMap<BasicBlock, BasicBloc
             _blocks_definitely_leading_to(bb_graph, *pred, blocks);
         }
     }
-    return blocks;
+    blocks
 }
 
-fn blocks_definitely_leading_to<'a>(bb_graph: &HashMap<BasicBlock, BasicBlockNode>, target: BasicBlock) -> HashSet<BasicBlock> {
+fn blocks_definitely_leading_to(bb_graph: &HashMap<BasicBlock, BasicBlockNode>, target: BasicBlock) -> HashSet<BasicBlock> {
     let mut blocks = HashSet::new();
     _blocks_definitely_leading_to(bb_graph, target, &mut blocks);
+    blocks
+}
+
+fn blocks_dominated_by(mir: &Mir, dominator: BasicBlock) -> HashSet<BasicBlock> {
+    let dominators = mir.basic_blocks.dominators();
+    let mut blocks = HashSet::new();
+    for bb in mir.basic_blocks().indices() {
+        if dominators.is_dominated_by(bb, dominator) {
+            blocks.insert(bb);
+        }
+    }
     blocks
 }
 
 fn get_nonspec_basic_blocks(bb_graph: HashMap<BasicBlock, BasicBlockNode>, mir: &Mir, tcx: &TyCtxt) -> HashSet<BasicBlock>{
     let mut spec_basic_blocks: HashSet<BasicBlock> = HashSet::new();
     for (bb, _) in bb_graph.iter() {
-        if is_spec_basic_block(&mir[*bb], &tcx) {
+        if is_marked_specification_block(&mir[*bb], tcx) {
             spec_basic_blocks.insert(*bb);
             spec_basic_blocks.extend(blocks_definitely_leading_to(&bb_graph, *bb).into_iter());
+            spec_basic_blocks.extend(blocks_dominated_by(mir, *bb).into_iter());
         }
     }
     debug!("spec basic blocks: {:#?}", spec_basic_blocks);
@@ -272,7 +321,7 @@ fn get_nonspec_basic_blocks(bb_graph: HashMap<BasicBlock, BasicBlockNode>, mir: 
 
 /// Returns the set of basic blocks that are not used as part of the typechecking of Prusti specifications
 fn build_nonspec_basic_blocks(mir: &Mir, real_edges: &RealEdges, tcx: &TyCtxt) -> HashSet<BasicBlock> {
-    let dominators = mir.dominators();
+    let dominators = mir.basic_blocks.dominators();
     let mut loop_heads: HashSet<BasicBlock> = HashSet::new();
 
     for source in mir.basic_blocks().indices() {
@@ -284,8 +333,7 @@ fn build_nonspec_basic_blocks(mir: &Mir, real_edges: &RealEdges, tcx: &TyCtxt) -
     }
 
     let mut visited: HashSet<BasicBlock> = HashSet::new();
-    let mut to_visit: Vec<BasicBlock> = vec![];
-    to_visit.push(mir.basic_blocks().indices().next().unwrap());
+    let mut to_visit: Vec<BasicBlock> = vec![mir.basic_blocks().indices().next().unwrap()];
 
     let mut bb_graph: HashMap<BasicBlock, BasicBlockNode> = HashMap::new();
 
@@ -296,12 +344,10 @@ fn build_nonspec_basic_blocks(mir: &Mir, real_edges: &RealEdges, tcx: &TyCtxt) -
             continue;
         }
 
-        if !bb_graph.contains_key(&source) {
-            bb_graph.insert(source, BasicBlockNode {
+        bb_graph.entry(source).or_insert_with(|| BasicBlockNode {
                 successors: HashSet::new(),
                 predecessors: HashSet::new(),
             });
-        }
 
         visited.insert(source);
 
@@ -314,12 +360,10 @@ fn build_nonspec_basic_blocks(mir: &Mir, real_edges: &RealEdges, tcx: &TyCtxt) -
                 to_visit.push(target);
             }
 
-            if !bb_graph.contains_key(&target) {
-                bb_graph.insert(target, BasicBlockNode {
+            bb_graph.entry(target).or_insert_with(|| BasicBlockNode {
                     successors: HashSet::new(),
                     predecessors: HashSet::new(),
                 });
-            }
             bb_graph.get_mut(&target).unwrap().predecessors.insert(source);
             bb_graph.get_mut(&source).unwrap().successors.insert(target);
         }

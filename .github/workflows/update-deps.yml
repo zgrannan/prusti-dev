@@ -19,16 +19,22 @@ jobs:
 
       - name: Update dependencies
         run: |
+          VIPER_VERSION="$(
+            curl https://api.github.com/repos/viperproject/viper-ide/releases | jq -r 'first | .tag_name'
+          )"
+          echo "The latest Viper version is $VIPER_VERSION"
+          echo "$VIPER_VERSION" > viper-toolchain
           NIGHTLY_VERSION="nightly-$(
             curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/rustc-dev
           )"
           echo "The latest usable version of rustc is $NIGHTLY_VERSION"
           sed -i 's/^channel\s*=.*$/channel = "'"$NIGHTLY_VERSION"'"/' rust-toolchain
-          declare -a DEVELOPERS=(Aurel300 fpoli vakaras)
-          UPDATE_NUMBER=$(( $(date +%m) * 2 + ($(date +%d) / 15) - 2 ))
+          declare -a DEVELOPERS=(Aurel300 JonasAlaif vakaras) # fpoli
+          UPDATE_NUMBER=$(( 10#$(date +%m) * 2 + (10#$(date +%d) / 15) - 0 ))
           DEVELOPER="${DEVELOPERS[ $UPDATE_NUMBER % ${#DEVELOPERS[@]} ]}"
           echo "The assigned developer is $DEVELOPER"
-          OUTDATED_DEPENDENCIES="$(cargo outdated --root-deps-only --workspace)"
+          OUTDATED_DEPENDENCIES="$(cargo outdated --root-deps-only --workspace 2>&1 || echo "cargo outdated failed to execute")"
+          echo "VIPER_VERSION=$VIPER_VERSION" >> $GITHUB_ENV
           echo "NIGHTLY_VERSION=$NIGHTLY_VERSION" >> $GITHUB_ENV
           echo "DEVELOPER=$DEVELOPER" >> $GITHUB_ENV
           echo "OUTDATED_DEPENDENCIES<<EOF" >> $GITHUB_ENV
@@ -41,13 +47,15 @@ jobs:
           # Use viper-admin's token to workaround a restriction of GitHub.
           # See: https://github.com/peter-evans/create-pull-request/issues/48
           token: ${{ secrets.VIPER_ADMIN_TOKEN }}
-          commit-message: Update rustc to ${{ env.NIGHTLY_VERSION }}
-          title: Update dependencies (${{ env.NIGHTLY_VERSION }})
-          branch: auto-update-deps
+          commit-message: Update dependencies (rustc ${{ env.NIGHTLY_VERSION }}, viper ${{ env.VIPER_VERSION }})
+          title: Update dependencies (rustc ${{ env.NIGHTLY_VERSION }}, viper ${{ env.VIPER_VERSION }})
+          branch: auto-update-${{ env.NIGHTLY_VERSION }}
           delete-branch: true
           assignees: ${{ env.DEVELOPER }}
           body: |
+            * [x] Update Viper version to `${{ env.VIPER_VERSION }}`.
             * [x] Update rustc version to `${{ env.NIGHTLY_VERSION }}`.
+            * [ ] Run `cargo audit` and fix the issues.
             * [ ] Manualy update outdated dependencies (see the list below).
             * [ ] Manualy run `cargo update`.
             

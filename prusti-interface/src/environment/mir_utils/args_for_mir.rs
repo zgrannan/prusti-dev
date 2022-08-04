@@ -1,6 +1,7 @@
-use rustc_index::vec::Idx;
-use rustc_middle::mir;
-use rustc_middle::ty;
+use prusti_rustc_interface::{
+    index::vec::Idx,
+    middle::{mir, ty},
+};
 
 pub trait ArgsForMir<'tcx> {
     fn get_args(&self) -> Vec<(mir::Local, ty::Ty<'tcx>)>;
@@ -9,7 +10,7 @@ pub trait ArgsForMir<'tcx> {
 impl<'tcx> ArgsForMir<'tcx> for mir::Body<'tcx> {
     fn get_args(&self) -> Vec<(mir::Local, ty::Ty<'tcx>)> {
         (1..=self.arg_count)
-            .map(|i| mir::Local::new(i))
+            .map(mir::Local::new)
             .map(|l| (l, self.local_decls[l].clone().ty))
             .collect()
     }

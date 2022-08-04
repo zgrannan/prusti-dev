@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use errors::*;
+use crate::errors::*;
 use jni::strings::JavaStr;
 use std::ffi::CStr;
 
@@ -14,7 +14,7 @@ pub fn get_return_signature(signature: &str) -> String {
 }
 
 pub fn generate_jni_type(signature: &str) -> String {
-    match signature.chars().nth(0).unwrap() {
+    match signature.chars().next().unwrap() {
         '[' | 'L' => "JObject".to_string(),
         'B' => "jbyte".to_string(),
         'C' => "jchar".to_string(),
@@ -25,12 +25,12 @@ pub fn generate_jni_type(signature: &str) -> String {
         'F' => "jfloat".to_string(),
         'D' => "jdouble".to_string(),
         'V' => "()".to_string(),
-        x => unreachable!(x),
+        x => unreachable!("{}", x),
     }
 }
 
 pub fn generate_return_jni_type(signature: &str) -> String {
-    match signature.chars().nth(0).unwrap() {
+    match signature.chars().next().unwrap() {
         '[' | 'L' => "JObject<'a>".to_string(),
         'B' => "jbyte".to_string(),
         'C' => "jchar".to_string(),
@@ -41,19 +41,19 @@ pub fn generate_return_jni_type(signature: &str) -> String {
         'F' => "jfloat".to_string(),
         'D' => "jdouble".to_string(),
         'V' => "()".to_string(),
-        x => unreachable!(x),
+        x => unreachable!("{}", x),
     }
 }
 
 pub fn generate_jni_type_char(signature: &str) -> String {
-    match signature.chars().nth(0).unwrap() {
+    match signature.chars().next().unwrap() {
         '[' => "l".to_string(),
         x => x.to_lowercase().to_string(),
     }
 }
 
 pub fn generate_jvalue_wrapper(par: &str, signature: &str) -> String {
-    match signature.chars().nth(0).unwrap() {
+    match signature.chars().next().unwrap() {
         '[' | 'L' => format!("JValue::Object({})", par),
         'B' => format!("JValue::Byte({})", par),
         'C' => format!("JValue::Char({})", par),
@@ -63,7 +63,7 @@ pub fn generate_jvalue_wrapper(par: &str, signature: &str) -> String {
         'Z' => format!("JValue::Bool({} as jboolean)", par),
         'F' => format!("JValue::Float({})", par),
         'D' => format!("JValue::Double({})", par),
-        x => unreachable!(x),
+        x => unreachable!("{}", x),
     }
 }
 
@@ -75,8 +75,8 @@ pub fn java_str_to_valid_rust_argument_name(string: &JavaStr) -> Result<String> 
     let mut res = "arg_".to_string();
     res.push_str(
         &java_str_to_string(string)?
-            .replace("_", "___")
-            .replace("$", "_d_"),
+            .replace('_', "___")
+            .replace('$', "_d_"),
     );
     Ok(res)
 }

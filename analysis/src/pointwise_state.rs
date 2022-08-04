@@ -1,30 +1,25 @@
-// © 2020, ETH Zurich
+// © 2021, ETH Zurich
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::collections::{BTreeMap, HashMap};
-use std::fmt;
-use serde::{Serialize, Serializer};
-use serde::ser::SerializeMap;
-use rustc_middle::ty::TyCtxt;
-use rustc_middle::mir;
-use crate::AbstractState;
+use prusti_rustc_interface::{data_structures::fx::FxHashMap, middle::mir};
+use serde::{ser::SerializeMap, Serialize, Serializer};
+use std::{collections::BTreeMap, fmt};
 
-/// Records the abstract state at every program point and CFG edge of `mir`.
-pub struct PointwiseState<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> {
-    state_before: HashMap<mir::Location, S>,
+/// Records the state of the analysis at every program point and CFG edge of `mir`.
+pub struct PointwiseState<'mir, 'tcx: 'mir, S: Serialize> {
+    state_before: FxHashMap<mir::Location, S>,
     /// Maps each basic block to a map of its successor blocks to the state on the CFG edge.
-    state_after_block: HashMap<mir::BasicBlock, HashMap<mir::BasicBlock, S>>,
+    state_after_block: FxHashMap<mir::BasicBlock, FxHashMap<mir::BasicBlock, S>>,
     // Needed for translation of location to statement/terminator in serialization.
-    mir: &'a mir::Body<'tcx>,
-    // Needed for construction of bottom element in serialization.
-    tcx: TyCtxt<'tcx>,
+    pub(crate) mir: &'mir mir::Body<'tcx>,
 }
 
-impl<'a, 'tcx: 'a, S> fmt::Debug for PointwiseState<'a, 'tcx, S>
-    where S: AbstractState<'a, 'tcx> + fmt::Debug
+impl<'mir, 'tcx: 'mir, S> fmt::Debug for PointwiseState<'mir, 'tcx, S>
+where
+    S: Serialize + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // ignore tcx
@@ -36,12 +31,10 @@ impl<'a, 'tcx: 'a, S> fmt::Debug for PointwiseState<'a, 'tcx, S>
     }
 }
 
-impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> Serialize for PointwiseState<'a, 'tcx, S> {
+impl<'mir, 'tcx: 'mir, S: Serialize> Serialize for PointwiseState<'mir, 'tcx, S> {
     /// Serialize PointwiseState by translating it to a combination of vectors, tuples and maps,
     /// such that serde can automatically translate it.
     fn serialize<Se: Serializer>(&self, serializer: Se) -> Result<Se::Ok, Se::Error> {
-        let bottom = S::new_bottom(self.mir, self.tcx);
-
         let mut map = serializer.serialize_map(Some(self.mir.basic_blocks().len()))?;
 
         for bb in self.mir.basic_blocks().indices() {
@@ -52,21 +45,22 @@ impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> Serialize for PointwiseState<'a, 
                     block: bb,
                     statement_index,
                 };
+                let state = self.lookup_before(location).unwrap();
 
-                let state = self.lookup_before(location).unwrap_or(&bottom);
                 // output statement
                 stmt_vec.push(("state:", state, format!("statement: {:?}", stmt)));
             }
 
             let term_location = self.mir.terminator_loc(bb);
-            let state_before = self.lookup_before(term_location).unwrap_or(&bottom);
+            let state_before = self.lookup_before(term_location).unwrap();
 
             let terminator_str = format!("terminator: {:?}", self.mir[bb].terminator().kind);
 
-            let new_map = HashMap::new();
+            let new_map = FxHashMap::default();
             let map_after = self.lookup_after_block(bb).unwrap_or(&new_map);
-            let ordered_succ_map: BTreeMap<_, _> = map_after.iter()
-                .map(|(bb,s)| (format!("{:?}", bb) , ("state:", s)))
+            let ordered_succ_map: BTreeMap<_, _> = map_after
+                .iter()
+                .map(|(bb, s)| (format!("{:?}", bb), ("state:", s)))
                 .collect();
 
             map.serialize_entry(
@@ -76,21 +70,20 @@ impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> Serialize for PointwiseState<'a, 
                     "state before terminator:",
                     state_before,
                     terminator_str,
-                    ordered_succ_map
-                )
+                    ordered_succ_map,
+                ),
             )?;
         }
         map.end()
     }
 }
 
-impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> PointwiseState<'a, 'tcx, S> {
-    pub fn new(mir: &'a mir::Body<'tcx>, tcx: TyCtxt<'tcx>) -> Self {
+impl<'mir, 'tcx: 'mir, S: Serialize> PointwiseState<'mir, 'tcx, S> {
+    pub fn new(mir: &'mir mir::Body<'tcx>) -> Self {
         Self {
-            state_before: HashMap::new(),
-            state_after_block: HashMap::new(),
+            state_before: FxHashMap::default(),
+            state_after_block: FxHashMap::default(),
             mir,
-            tcx
         }
     }
 
@@ -98,6 +91,12 @@ impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> PointwiseState<'a, 'tcx, S> {
     /// The `location` can point to a statement or terminator.
     pub fn lookup_before(&self, location: mir::Location) -> Option<&S> {
         self.state_before.get(&location)
+    }
+
+    /// Look up the mutable state before the `location`.
+    /// The `location` can point to a statement or terminator.
+    pub fn lookup_mut_before(&mut self, location: mir::Location) -> Option<&mut S> {
+        self.state_before.get_mut(&location)
     }
 
     /// Look up the state after the `location`.
@@ -111,24 +110,64 @@ impl<'a, 'tcx: 'a, S: AbstractState<'a, 'tcx>> PointwiseState<'a, 'tcx, S> {
     /// The return value maps all successor blocks to the state on the CFG edge from `block` to
     /// that block.
     pub fn lookup_after_block(
-        &self, block: mir::BasicBlock
-    ) -> Option<&HashMap<mir::BasicBlock, S>> {
+        &self,
+        block: mir::BasicBlock,
+    ) -> Option<&FxHashMap<mir::BasicBlock, S>> {
         self.state_after_block.get(&block)
     }
 
-    /// Return the mutable abstract state on the outgoing CFG edges of `block`.
+    /// Return the mutable state of the analysis on the outgoing CFG edges of `block`.
     /// The return value maps all successor blocks to the state on the CFG edge from `block` to
     /// that block.
     pub(crate) fn lookup_mut_after_block(
         &mut self,
         block: mir::BasicBlock,
-    ) -> &mut HashMap<mir::BasicBlock, S> {
-        self.state_after_block.entry(block).or_insert(HashMap::new())
+    ) -> &mut FxHashMap<mir::BasicBlock, S> {
+        self.state_after_block
+            .entry(block)
+            .or_insert_with(FxHashMap::default)
     }
 
     /// Update the state before the `location`.
     /// The `location` can point to a statement or terminator.
     pub(crate) fn set_before(&mut self, location: mir::Location, state: S) {
         self.state_before.insert(location, state);
+    }
+}
+
+impl<'mir, 'tcx: 'mir, S: Serialize + Default> PointwiseState<'mir, 'tcx, S> {
+    pub fn default(mir: &'mir mir::Body<'tcx>) -> Self {
+        let state_before: FxHashMap<_, _> = mir
+            .basic_blocks()
+            .iter_enumerated()
+            .flat_map(|(block, bb_data)| {
+                (0..=bb_data.statements.len()).map(move |statement_index| {
+                    (
+                        mir::Location {
+                            block,
+                            statement_index,
+                        },
+                        S::default(),
+                    )
+                })
+            })
+            .collect();
+        let state_after_block: FxHashMap<_, _> = mir
+            .basic_blocks()
+            .iter_enumerated()
+            .map(|(block, bb_data)| {
+                let successors: FxHashMap<_, _> = bb_data
+                    .terminator()
+                    .successors()
+                    .map(|successor| (successor, S::default()))
+                    .collect();
+                (block, successors)
+            })
+            .collect();
+        Self {
+            state_before,
+            state_after_block,
+            mir,
+        }
     }
 }

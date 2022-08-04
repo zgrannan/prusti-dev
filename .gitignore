@@ -8,7 +8,6 @@
 perf.*
 callgrind.*
 core
-*.svg
 Prusti.toml
 report.csv
 *.profraw
@@ -20,7 +19,7 @@ ViperToolsNightly*.zip
 
 .project
 .settings
-.vscode/
+.vscode/launch.json
 .idea/
 tmp/
 gen/
@@ -28,6 +27,5 @@ target/
 
 log/
 nll-facts/
-/design/book/
 benchmark-output/
 oprofile_data/
