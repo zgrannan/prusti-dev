@@ -4,19 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-extern crate env_logger;
-extern crate error_chain;
-extern crate jni_gen;
-extern crate tempdir;
-
 use error_chain::ChainedError;
 use jni_gen::*;
-use std::env;
-use std::fs;
-use std::fs::File;
-use std::io::copy;
+use std::{env, fs, fs::File, io::copy, path::Path};
 use tempdir::TempDir;
-use std::path::Path;
 
 fn main() {
     env_logger::init();
@@ -43,7 +34,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=VIPER_HOME");
     let viper_home = env::var("VIPER_HOME").expect("failed to get VIPER_HOME");
     let mut viper_jars: Vec<String> = fs::read_dir(&viper_home)
-        .expect(&format!("Could not open VIPER_HOME='{}'", viper_home))
+        .unwrap_or_else(|_| panic!("Could not open VIPER_HOME='{}'", viper_home))
         .map(|x| x.unwrap().path().to_str().unwrap().to_string())
         .collect();
 
@@ -89,6 +80,7 @@ fn main() {
             ]),
             // Scala
             java_class!("scala.Some", vec![
+                method!("get"),
                 constructor!(),
             ]),
             java_class!("scala.None$", vec![
@@ -119,6 +111,15 @@ fn main() {
                 method!("length"),
                 method!("apply", "(I)Ljava/lang/Object;"),
                 method!("toArray"),
+            ]),
+            java_class!("scala.collection.immutable.List", vec![
+                method!("toSeq"),
+            ]),
+            java_class!("scala.collection.Iterable", vec![
+                method!("toSeq"),
+            ]),
+            java_class!("scala.Product", vec![
+                method!("productElement", "(I)Ljava/lang/Object;"),
             ]),
             java_class!("scala.reflect.ClassTag$", vec![
                 object_getter!(),
@@ -196,6 +197,83 @@ fn main() {
             ]),
             java_class!("viper.silver.ast.Bool$", vec![
                 object_getter!(),
+            ]),
+            java_class!("viper.silver.ast.utility.BVFactory", vec![
+                constructor!(),
+                method!("typ"),
+                method!("xor"),
+                method!("and"),
+                method!("or"),
+                method!("add"),
+                method!("sub"),
+                method!("mul"),
+                method!("udiv"),
+                method!("urem"),
+                method!("srem"),
+                method!("shl"),
+                method!("lshr"),
+                method!("ashr"),
+                method!("not"),
+                method!("neg"),
+                method!("from_int"),
+                method!("to_int"),
+                method!("from_nat"),
+                method!("to_nat"),
+            ]),
+            java_class!("viper.silver.ast.utility.BVFactory$", vec![
+                object_getter!(),
+                method!("apply", "(I)Lviper/silver/ast/utility/BVFactory;"),
+            ]),
+            java_class!("viper.silver.ast.utility.RoundingMode", vec![
+                method!("RNE"),
+                method!("RNA"),
+                method!("RTP"),
+                method!("RTN"),
+                method!("RTZ"),
+            ]),
+            java_class!("viper.silver.ast.utility.FloatFactory", vec![
+                constructor!(),
+                method!("typ"),
+                method!("neg"),
+                method!("abs"),
+                method!("add"),
+                method!("sub"),
+                method!("mul"),
+                method!("div"),
+                method!("min"),
+                method!("max"),
+                method!("eq"),
+                method!("leq"),
+                method!("geq"),
+                method!("lt"),
+                method!("gt"),
+                method!("isZero"),
+                method!("isInfinite"),
+                method!("isNaN"),
+                method!("isNegative"),
+                method!("isPositive"),
+                method!("from_bv"),
+                method!("to_bv"),
+            ]),
+            java_class!("viper.silver.ast.utility.FloatFactory$", vec![
+                object_getter!(),
+                method!("apply", "(IILscala/Enumeration$Value;)Lviper/silver/ast/utility/FloatFactory;"),
+            ]),
+            java_class!("viper.silver.ast.BackendType", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.BackendType$", vec![
+                object_getter!(),
+            ]),
+            java_class!("viper.silver.ast.BackendFunc", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.BackendFuncApp", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.BackendFuncApp$", vec![
+                object_getter!(),
+                method!("apply", "(Lviper/silver/ast/BackendFunc;Lscala/collection/immutable/Seq;Lviper/silver/ast/Position;Lviper/silver/ast/Info;Lviper/silver/ast/ErrorTrafo;)Lviper/silver/ast/BackendFuncApp;"),
             ]),
             java_class!("viper.silver.ast.CondExp", vec![
                 constructor!(),
@@ -494,6 +572,9 @@ fn main() {
             java_class!("viper.silver.ast.PermDiv", vec![
                 constructor!(),
             ]),
+            java_class!("viper.silver.ast.Positioned", vec![
+                method!("pos"),
+            ]),
             java_class!("viper.silver.ast.Predicate", vec![
                 constructor!(),
             ]),
@@ -540,6 +621,36 @@ fn main() {
                 constructor!(),
             ]),
             java_class!("viper.silver.ast.SeqUpdate", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapType", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.EmptyMap", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.ExplicitMap", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.Maplet", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapUpdate", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapLookup", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapContains", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapCardinality", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapDomain", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.MapRange", vec![
                 constructor!(),
             ]),
             java_class!("viper.silver.ast.SetType", vec![
@@ -599,10 +710,23 @@ fn main() {
             ]),
             java_class!("viper.silver.verifier.VerificationError", vec![
                 method!("id"),
+                method!("offendingNode"),
                 method!("pos"),
                 method!("fullId"),
                 method!("reason"),
                 method!("readableMessage", "()Ljava/lang/String;"),
+                method!("failureContexts")
+            ]),
+            java_class!("viper.silver.verifier.FailureContext", vec![
+                method!("counterExample"),
+                method!("toString")
+            ]),
+            java_class!("viper.silver.verifier.Counterexample", vec![
+                method!("model"),
+                method!("toString")
+            ]),
+            java_class!("viper.silicon.interfaces.SiliconMappedCounterexample", vec![
+                method!("converter")
             ]),
             java_class!("viper.silver.verifier.ErrorReason", vec![
                 method!("id"),
@@ -612,6 +736,64 @@ fn main() {
             java_class!("viper.silver.verifier.ConsistencyError", vec![
                 constructor!(),
             ]),
+            java_class!("viper.silicon.reporting.Converter", vec![
+                method!("extractedHeap"),
+                method!("extractedHeaps"),
+                method!("extractedModel"),
+                method!("modelAtLabel"),
+            ]),
+            java_class!("viper.silicon.reporting.ExtractedModel", vec![
+                method!("entries"),
+            ]),
+            java_class!("viper.silicon.reporting.ExtractedModelEntry", vec![
+                method!("toString"),
+            ]),
+            java_class!("viper.silicon.reporting.LitIntEntry", vec![
+                method!("value"),
+            ]),
+            java_class!("viper.silicon.reporting.LitBoolEntry", vec![
+                method!("value"),
+            ]),
+            java_class!("viper.silicon.reporting.LitPermEntry", vec![
+                method!("value"),
+            ]),
+            java_class!("viper.silicon.reporting.RefEntry", vec![
+                method!("name"),
+                method!("fields"),
+            ]),
+            java_class!("viper.silicon.reporting.NullRefEntry", vec![
+                method!("name"),
+            ]),
+            java_class!("viper.silicon.reporting.RecursiveRefEntry", vec![
+                method!("name"),
+            ]),
+            java_class!("viper.silicon.reporting.VarEntry", vec![
+                method!("name"),
+            ]),
+            java_class!("viper.silicon.reporting.OtherEntry", vec![
+                method!("value"),
+                method!("problem"),
+            ]),
+            java_class!("viper.silicon.reporting.SeqEntry", vec![
+                method!("name"),
+                method!("values"),
+            ]),
+            java_class!("viper.silicon.reporting.ExtractedHeap", vec![
+                method!("entries"),
+            ]),
+            java_class!("viper.silicon.reporting.HeapEntry", vec![
+                method!("toString"),
+            ]),
+            java_class!("viper.silicon.reporting.PredHeapEntry", vec![
+                method!("name"),
+                method!("args"),
+            ]),
+            java_class!("viper.silicon.reporting.FieldHeapEntry", vec![
+                method!("recv"),
+                method!("field"),
+                method!("perm"),
+                method!("entry"),
+            ])
         ])
         .generate(&generated_dir)
         .unwrap_or_else(|e| {

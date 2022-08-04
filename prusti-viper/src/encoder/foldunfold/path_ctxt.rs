@@ -4,32 +4,25 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::encoder::foldunfold::action::*;
-use crate::encoder::foldunfold::log::EventLog;
-use crate::encoder::foldunfold::perm::*;
-use crate::encoder::foldunfold::requirements::*;
-use crate::encoder::foldunfold::footprint::*;
-use crate::encoder::foldunfold::places_utils::*;
-use crate::encoder::foldunfold::semantics::ApplyOnState;
-use crate::encoder::foldunfold::state::*;
-use crate::encoder::foldunfold::FoldUnfoldError;
-use crate::encoder::foldunfold::FoldUnfoldError::FailedToObtain;
-use prusti_common::utils::to_string::ToString;
-use prusti_common::vir;
-use prusti_common::vir::PermAmount;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::iter::FromIterator;
+use super::Predicates;
+use crate::encoder::foldunfold::{
+    action::*, footprint::*, log::EventLog, perm::*, places_utils::*, semantics::ApplyOnState,
+    state::*, FoldUnfoldError, FoldUnfoldError::FailedToObtain,
+};
 use log::{debug, trace};
+use prusti_common::utils::to_string::ToString;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::iter::FromIterator;
+use vir_crate::polymorphic::{self as vir, PermAmount};
 
 /// The fold-unfold context of a CFG path
 #[derive(Debug, Clone)]
 pub struct PathCtxt<'a> {
     state: State,
     /// The definition of the predicates
-    predicates: &'a HashMap<String, vir::Predicate>,
+    predicates: &'a Predicates,
     /// All usages of old expressions to consider
-    old_exprs: &'a HashMap<String, Vec<vir::Expr>>,
+    old_exprs: &'a FxHashMap<String, Vec<vir::Expr>>,
     /// A log of some of the relevant actions that lead to this fold-unfold context
     log: EventLog,
 }
@@ -37,18 +30,18 @@ pub struct PathCtxt<'a> {
 impl<'a> PathCtxt<'a> {
     pub fn new(
         local_vars: Vec<vir::LocalVar>,
-        predicates: &'a HashMap<String, vir::Predicate>,
-        old_exprs: &'a HashMap<String, Vec<vir::Expr>>,
+        predicates: &'a Predicates,
+        old_exprs: &'a FxHashMap<String, Vec<vir::Expr>>,
     ) -> Self {
         PathCtxt {
             state: State::new(
-                HashMap::from_iter(
+                FxHashMap::from_iter(
                     local_vars
                         .into_iter()
                         .map(|v| (vir::Expr::local(v), PermAmount::Write)),
                 ),
-                HashMap::new(),
-                HashSet::new(),
+                FxHashMap::default(),
+                FxHashSet::default(),
             ),
             predicates,
             old_exprs,
@@ -76,11 +69,11 @@ impl<'a> PathCtxt<'a> {
         &mut self.state
     }
 
-    pub fn predicates(&self) -> &HashMap<String, vir::Predicate> {
+    pub fn predicates(&self) -> &Predicates {
         self.predicates
     }
 
-    pub fn old_exprs(&self) -> &HashMap<String, Vec<vir::Expr>> {
+    pub fn old_exprs(&self) -> &FxHashMap<String, Vec<vir::Expr>> {
         self.old_exprs
     }
 
@@ -91,7 +84,12 @@ impl<'a> PathCtxt<'a> {
         perm_amount: PermAmount,
         variant: vir::MaybeEnumVariantIndex,
     ) -> Result<Action, FoldUnfoldError> {
-        debug!("We want to unfold {} with {}", pred_place, perm_amount);
+        trace!(
+            "We want to unfold {} (variant {:?}) with {}",
+            pred_place,
+            variant,
+            perm_amount
+        );
         //assert!(self.state.contains_acc(pred_place), "missing acc({}) in {}", pred_place, self.state);
         assert!(
             self.state.contains_pred(pred_place),
@@ -104,22 +102,14 @@ impl<'a> PathCtxt<'a> {
             "Invalid permission amount."
         );
 
-        let predicate_name = pred_place.typed_ref_name().unwrap();
-        let predicate = self.predicates.get(&predicate_name)
+        let predicate_type = pred_place.get_type();
+        let predicate = self
+            .predicates
+            .get(predicate_type)
             .map(Ok)
-            .unwrap_or(
-                Err(FoldUnfoldError::MissingPredicate(predicate_name.clone()))
-            )?;
+            .unwrap_or_else(|| Err(FoldUnfoldError::MissingPredicate(predicate_type.clone())))?;
 
         let pred_self_place: vir::Expr = predicate.self_place();
-        let places_in_pred: Vec<Perm> = predicate
-            .get_body_footprint(&variant)
-            .into_iter()
-            .map(|perm| {
-                perm.map_place(|p| p.replace_place(&pred_self_place, pred_place))
-                    .update_perm_amount(perm_amount)
-            })
-            .collect();
 
         trace!(
             "Pred state before unfold: {{\n{}\n}}",
@@ -127,10 +117,20 @@ impl<'a> PathCtxt<'a> {
         );
 
         // Simulate unfolding of `pred_place`
-        self.state.remove_pred(&pred_place, perm_amount)?;
-        self.state.insert_all_perms(places_in_pred.into_iter())?;
+        self.state.remove_pred(pred_place, perm_amount)?;
+        self.state
+            .insert_all_perms(
+                predicate
+                    .get_body_footprint(&variant)
+                    .into_iter()
+                    .map(|perm| {
+                        // TODO polymorphic
+                        perm.map_place(|p| p.replace_place(&pred_self_place, pred_place))
+                            .update_perm_amount(perm_amount)
+                    }),
+            )?;
 
-        debug!("We unfolded {}", pred_place);
+        trace!("We unfolded {}", pred_place);
 
         trace!(
             "Acc state after unfold: {{\n{}\n}}",
@@ -141,12 +141,12 @@ impl<'a> PathCtxt<'a> {
             self.state.display_pred()
         );
 
-        Ok(Action::Unfold(
-            predicate_name.clone(),
-            vec![pred_place.clone().into()],
-            perm_amount,
-            variant,
-        ))
+        Ok(Action::Unfold(vir::Unfold {
+            predicate: predicate_type.clone(),
+            arguments: vec![pred_place.clone()],
+            permission: perm_amount,
+            enum_variant: variant,
+        }))
     }
 
     /// left is self, right is other
@@ -158,7 +158,7 @@ impl<'a> PathCtxt<'a> {
         let mut left_actions: Vec<Action> = vec![];
         let mut right_actions: Vec<Action> = vec![];
 
-        debug!("Join branches");
+        trace!("Join branches");
         trace!("Left branch: {}", self.state);
         trace!("Right branch: {}", other.state);
         self.state.check_consistency();
@@ -167,7 +167,7 @@ impl<'a> PathCtxt<'a> {
         if self.state != other.state {
             // Compute which paths are moved out
             /*
-            let moved_paths: HashSet<_> = if anti_join {
+            let moved_paths: FxHashSet<_> = if anti_join {
                 filter_with_prefix_in_other(
                     self.state.moved(),
                     other.state.moved()
@@ -179,7 +179,7 @@ impl<'a> PathCtxt<'a> {
             };
             */
             // TODO: Remove all paths that are not definitely initialised.
-            let moved_paths: HashSet<_> = ancestors(
+            let moved_paths: FxHashSet<_> = ancestors(
                 &self
                     .state
                     .moved()
@@ -190,7 +190,7 @@ impl<'a> PathCtxt<'a> {
             );
             self.state.set_moved(moved_paths.clone());
             other.state.set_moved(moved_paths.clone());
-            debug!("moved_paths: {}", moved_paths.iter().to_string());
+            trace!("moved_paths: {}", moved_paths.iter().to_string());
 
             trace!("left acc: {{\n{}\n}}", self.state.display_acc());
             trace!("right acc: {{\n{}\n}}", other.state.display_acc());
@@ -210,11 +210,11 @@ impl<'a> PathCtxt<'a> {
             // Compute which access permissions may be preserved
             let (unfold_potential_acc, fold_potential_pred) =
                 compute_fold_target(&self.state.acc_places(), &other.state.acc_places());
-            debug!(
+            trace!(
                 "unfold_potential_acc: {}",
                 unfold_potential_acc.iter().to_sorted_multiline_string()
             );
-            debug!(
+            trace!(
                 "fold_potential_pred: {}",
                 fold_potential_pred.iter().to_sorted_multiline_string()
             );
@@ -222,20 +222,20 @@ impl<'a> PathCtxt<'a> {
             // Remove access permissions that can not be obtained due to a moved path
             let unfold_actual_acc =
                 filter_not_proper_extensions_of(&unfold_potential_acc, &moved_paths);
-            debug!(
+            trace!(
                 "unfold_actual_acc: {}",
                 unfold_actual_acc.iter().to_sorted_multiline_string()
             );
             let fold_actual_pred =
                 filter_not_proper_extensions_of(&fold_potential_pred, &moved_paths);
-            debug!(
+            trace!(
                 "fold_actual_pred: {}",
                 fold_actual_pred.iter().to_sorted_multiline_string()
             );
 
             // Obtain predicates by folding.
             for pred_place in fold_actual_pred {
-                debug!("try to obtain predicate: {}", pred_place);
+                trace!("try to obtain predicate: {}", pred_place);
                 let get_perm_amount = |ctxt: &PathCtxt| {
                     ctxt.state
                         .acc()
@@ -257,9 +257,10 @@ impl<'a> PathCtxt<'a> {
                             left_actions.extend(new_actions);
                         }
                         ObtainResult::Failure(missing_perm) => {
-                            debug!(
+                            trace!(
                                 "Failed to obtain: {} because of {}",
-                                pred_perm, missing_perm
+                                pred_perm,
+                                missing_perm
                             );
                             let remove_places = |ctxt: &mut PathCtxt, actions: &mut Vec<_>| {
                                 ctxt.state.remove_moved_matching(|moved_place| {
@@ -269,22 +270,24 @@ impl<'a> PathCtxt<'a> {
                                     if acc_place.has_proper_prefix(&pred_place) {
                                         let perm_amount = ctxt.state.remove_acc_place(&acc_place);
                                         let perm = Perm::acc(acc_place, perm_amount);
-                                        debug!(
+                                        trace!(
                                             "dropping perm={} missing_perm={}",
-                                            perm, missing_perm
+                                            perm,
+                                            missing_perm
                                         );
-                                        actions.push(Action::Drop(perm, missing_perm.clone()));
+                                        actions.push(Action::Drop(perm, (*missing_perm).clone()));
                                     }
                                 }
                                 for place in ctxt.state.pred_places() {
                                     if place.has_prefix(&pred_place) {
                                         let perm_amount = ctxt.state.remove_pred_place(&place);
                                         let perm = Perm::pred(place, perm_amount);
-                                        debug!(
+                                        trace!(
                                             "dropping perm={} missing_perm={}",
-                                            perm, missing_perm
+                                            perm,
+                                            missing_perm
                                         );
-                                        actions.push(Action::Drop(perm, missing_perm.clone()));
+                                        actions.push(Action::Drop(perm, (*missing_perm).clone()));
                                     }
                                 }
                             };
@@ -305,7 +308,7 @@ impl<'a> PathCtxt<'a> {
                                   right_actions: &mut Vec<_>|
                  -> Result<bool, FoldUnfoldError> {
                     if !ctxt_left.state.acc().contains_key(acc_place) {
-                        debug!(
+                        trace!(
                             "The left branch needs to obtain an access permission: {}",
                             acc_place
                         );
@@ -319,7 +322,7 @@ impl<'a> PathCtxt<'a> {
                             }
                             ObtainResult::Failure(missing_perm) => {
                                 ctxt_right.state.remove_perm(&perm)?;
-                                right_actions.push(Action::Drop(perm, missing_perm));
+                                right_actions.push(Action::Drop(perm, *missing_perm));
                                 Ok(false)
                             }
                         }
@@ -335,72 +338,72 @@ impl<'a> PathCtxt<'a> {
             // Drop predicate permissions that can not be obtained due to a move
             for pred_place in &filter_proper_extensions_of(&self.state.pred_places(), &moved_paths)
             {
-                debug!(
+                trace!(
                     "Drop pred {} in left branch (it is moved out in the other branch)",
                     pred_place
                 );
-                assert!(self.state.pred().contains_key(&pred_place));
-                let perm_amount = self.state.remove_pred_place(&pred_place);
+                assert!(self.state.pred().contains_key(pred_place));
+                let perm_amount = self.state.remove_pred_place(pred_place);
                 let perm = Perm::pred(pred_place.clone(), perm_amount);
                 left_actions.push(Action::Drop(perm.clone(), perm));
             }
             for pred_place in &filter_proper_extensions_of(&other.state.pred_places(), &moved_paths)
             {
-                debug!(
+                trace!(
                     "Drop pred {} in right branch (it is moved out in the other branch)",
                     pred_place
                 );
-                assert!(other.state.pred().contains_key(&pred_place));
-                let perm_amount = other.state.remove_pred_place(&pred_place);
+                assert!(other.state.pred().contains_key(pred_place));
+                let perm_amount = other.state.remove_pred_place(pred_place);
                 let perm = Perm::pred(pred_place.clone(), perm_amount);
                 right_actions.push(Action::Drop(perm.clone(), perm));
             }
 
             // Compute preserved predicate permissions
-            let preserved_preds: HashSet<_> =
+            let preserved_preds: FxHashSet<_> =
                 intersection(&self.state.pred_places(), &other.state.pred_places());
-            debug!("preserved_preds: {}", preserved_preds.iter().to_string());
+            trace!("preserved_preds: {}", preserved_preds.iter().to_string());
 
             // Drop predicate permissions that are not in the other branch
             for pred_place in self.state.pred_places().difference(&preserved_preds) {
-                debug!(
+                trace!(
                     "Drop pred {} in left branch (it is not in the other branch)",
                     pred_place
                 );
-                assert!(self.state.pred().contains_key(&pred_place));
-                let perm_amount = self.state.remove_pred_place(&pred_place);
+                assert!(self.state.pred().contains_key(pred_place));
+                let perm_amount = self.state.remove_pred_place(pred_place);
                 let perm = Perm::pred(pred_place.clone(), perm_amount);
                 left_actions.push(Action::Drop(perm.clone(), perm));
             }
             for pred_place in other.state.pred_places().difference(&preserved_preds) {
-                debug!(
+                trace!(
                     "Drop pred {} in right branch (it is not in the other branch)",
                     pred_place
                 );
-                assert!(other.state.pred().contains_key(&pred_place));
-                let perm_amount = other.state.remove_pred_place(&pred_place);
+                assert!(other.state.pred().contains_key(pred_place));
+                let perm_amount = other.state.remove_pred_place(pred_place);
                 let perm = Perm::pred(pred_place.clone(), perm_amount);
                 right_actions.push(Action::Drop(perm.clone(), perm));
             }
 
             // Drop access permissions that can not be obtained due to a move
             for acc_place in &filter_proper_extensions_of(&self.state.acc_places(), &moved_paths) {
-                debug!(
+                trace!(
                     "Drop acc {} in left branch (it is moved out in the other branch)",
                     acc_place
                 );
-                assert!(self.state.acc().contains_key(&acc_place));
-                let perm_amount = self.state.remove_acc_place(&acc_place);
+                assert!(self.state.acc().contains_key(acc_place));
+                let perm_amount = self.state.remove_acc_place(acc_place);
                 let perm = Perm::acc(acc_place.clone(), perm_amount);
                 left_actions.push(Action::Drop(perm.clone(), perm));
             }
             for acc_place in &filter_proper_extensions_of(&other.state.acc_places(), &moved_paths) {
-                debug!(
+                trace!(
                     "Drop acc {} in right branch (it is moved out in the other branch)",
                     acc_place
                 );
-                assert!(other.state.acc().contains_key(&acc_place));
-                let perm_amount = other.state.remove_acc_place(&acc_place);
+                assert!(other.state.acc().contains_key(acc_place));
+                let perm_amount = other.state.remove_acc_place(acc_place);
                 let perm = Perm::acc(acc_place.clone(), perm_amount);
                 right_actions.push(Action::Drop(perm.clone(), perm));
             }
@@ -411,12 +414,12 @@ impl<'a> PathCtxt<'a> {
                 .acc_places()
                 .difference(&other.state.acc_places())
             {
-                debug!(
+                trace!(
                     "Drop acc {} in left branch (not present in the other branch)",
                     acc_place
                 );
-                assert!(self.state.acc().contains_key(&acc_place));
-                let perm_amount = self.state.remove_acc_place(&acc_place);
+                assert!(self.state.acc().contains_key(acc_place));
+                let perm_amount = self.state.remove_acc_place(acc_place);
                 self.state
                     .remove_moved_matching(|moved_place| moved_place.has_prefix(acc_place));
                 let perm = Perm::acc(acc_place.clone(), perm_amount);
@@ -427,12 +430,12 @@ impl<'a> PathCtxt<'a> {
                 .acc_places()
                 .difference(&self.state.acc_places())
             {
-                debug!(
+                trace!(
                     "Drop acc {} in right branch (not present in the other branch)",
                     acc_place
                 );
-                assert!(other.state.acc().contains_key(&acc_place));
-                let perm_amount = other.state.remove_acc_place(&acc_place);
+                assert!(other.state.acc().contains_key(acc_place));
+                let perm_amount = other.state.remove_acc_place(acc_place);
                 other
                     .state
                     .remove_moved_matching(|moved_place| moved_place.has_prefix(acc_place));
@@ -442,8 +445,11 @@ impl<'a> PathCtxt<'a> {
 
             // If we have `Read` and `Write`, make both `Read`.
             for acc_place in self.state.acc_places() {
-                assert!(other.state.acc().contains_key(&acc_place),
-                        "acc_place = {}", acc_place);
+                assert!(
+                    other.state.acc().contains_key(&acc_place),
+                    "acc_place = {}",
+                    acc_place
+                );
                 let left_perm = self.state.acc()[&acc_place];
                 let right_perm = other.state.acc()[&acc_place];
                 if left_perm == PermAmount::Write && right_perm == PermAmount::Read {
@@ -467,7 +473,9 @@ impl<'a> PathCtxt<'a> {
                     left_actions.push(Action::Drop(perm.clone(), perm));
                 }
                 if left_perm == PermAmount::Read && right_perm == PermAmount::Write {
-                    other.state.remove_pred(&pred_place, PermAmount::Remaining)?;
+                    other
+                        .state
+                        .remove_pred(&pred_place, PermAmount::Remaining)?;
                     let perm = Perm::pred(pred_place.clone(), PermAmount::Remaining);
                     right_actions.push(Action::Drop(perm.clone(), perm));
                 }
@@ -498,12 +506,13 @@ impl<'a> PathCtxt<'a> {
         // Merge the event logs
         self.log_mut().join(other.drain_log())?;
 
-        return Ok((left_actions, right_actions));
+        Ok((left_actions, right_actions))
     }
 
     /// Obtain the required permissions, changing the state inplace and returning the statements.
-    fn obtain_all(&mut self, reqs: Vec<Perm>) -> Result<Vec<Action>, FoldUnfoldError> {
-        debug!("[enter] obtain_all: {{{}}}", reqs.iter().to_string());
+    fn obtain_all(&mut self, mut reqs: Vec<Perm>) -> Result<Vec<Action>, FoldUnfoldError> {
+        reqs.sort_unstable();
+        trace!("[enter] obtain_all: {{{}}}", reqs.iter().to_string());
         reqs.iter()
             .map(|perm| self.obtain(perm, false).and_then(|x| x.get_actions()))
             .collect::<Result<Vec<Vec<Action>>, _>>()
@@ -532,7 +541,7 @@ impl<'a> PathCtxt<'a> {
             return Ok(ObtainResult::Success(actions));
         }
 
-        debug!("Try to satisfy requirement {}", req);
+        trace!("Try to satisfy requirement {}", req);
 
         // 3. Obtain with an unfold
         // Find a predicate on a proper prefix of req
@@ -544,7 +553,7 @@ impl<'a> PathCtxt<'a> {
             .cloned();
         if let Some(existing_pred_to_unfold) = existing_prefix_pred_opt {
             let perm_amount = self.state.pred()[&existing_pred_to_unfold];
-            debug!(
+            trace!(
                 "We want to unfold {} with permission {} (we need at least {})",
                 existing_pred_to_unfold,
                 perm_amount,
@@ -556,17 +565,10 @@ impl<'a> PathCtxt<'a> {
                 perm_amount,
                 req.get_perm_amount(),
             );
-            let variant = find_variant(
-                &existing_pred_to_unfold,
-                req.get_place()
-            );
-            let action = self.unfold(
-                &existing_pred_to_unfold,
-                perm_amount,
-                variant,
-            )?;
+            let variant = find_variant(&existing_pred_to_unfold, req.get_place());
+            let action = self.unfold(&existing_pred_to_unfold, perm_amount, variant)?;
             actions.push(action);
-            debug!("We unfolded {}", existing_pred_to_unfold);
+            trace!("We unfolded {}", existing_pred_to_unfold);
 
             // Check if we are done
             let new_actions = self.obtain(req, false)?.get_actions()?;
@@ -578,9 +580,12 @@ impl<'a> PathCtxt<'a> {
         // 4. Obtain with a fold
         if req.is_pred() {
             // We want to fold `req`
-            debug!("We want to fold {}", req);
-            let predicate_name = req.typed_ref_name().unwrap();
-            let predicate = self.predicates.get(&predicate_name).unwrap();
+            trace!("We want to fold {}", req);
+            let predicate_type = req.get_type();
+            let predicate = self
+                .predicates
+                .get(predicate_type)
+                .unwrap_or_else(|| panic!("not found: {}", predicate_type));
 
             let variant = find_unfolded_variant(&self.state, req.get_place());
 
@@ -592,6 +597,8 @@ impl<'a> PathCtxt<'a> {
                 .find(|p| p.has_proper_prefix(req.get_place()));
 
             let pred_self_place: vir::Expr = predicate.self_place();
+
+            // TODO polymorphic
             let places_in_pred: Vec<Perm> = predicate
                 .get_body_footprint(&variant)
                 .into_iter()
@@ -616,7 +623,7 @@ impl<'a> PathCtxt<'a> {
                             .chain(self.state.pred().iter())
                             .filter(|(place, _)| place.has_prefix(p.get_place()))
                             .map(|(place, perm_amount)| {
-                                debug!("Place {} can offer {}", place, perm_amount);
+                                trace!("Place {} can offer {}", place, perm_amount);
                                 *perm_amount
                             })
                             .min()
@@ -624,7 +631,7 @@ impl<'a> PathCtxt<'a> {
                     })
                     .min()
                     .unwrap_or(PermAmount::Write);
-                debug!(
+                trace!(
                     "We want to fold {} with permission {} (we need at least {})",
                     req,
                     perm_amount,
@@ -651,13 +658,13 @@ impl<'a> PathCtxt<'a> {
                     .collect();
 
                 let pos = req.get_place().pos();
-                let fold_action = Action::Fold(
-                    predicate_name.clone(),
-                    vec![req.get_place().clone().into()],
-                    perm_amount,
-                    variant,
-                    pos,
-                );
+                let fold_action = Action::Fold(vir::Fold {
+                    predicate: predicate_type.clone(),
+                    arguments: vec![req.get_place().clone()],
+                    permission: perm_amount,
+                    enum_variant: variant,
+                    position: pos,
+                });
                 actions.push(fold_action);
 
                 // Simulate folding of `req`
@@ -670,12 +677,13 @@ impl<'a> PathCtxt<'a> {
                 );
                 debug_assert!(!self.state.contains_pred(req.get_place()));
                 self.state.remove_all_perms(scaled_places_in_pred.iter())?;
-                self.state.insert_pred(req.get_place().clone(), perm_amount)?;
+                self.state
+                    .insert_pred(req.get_place().clone(), perm_amount)?;
 
                 // Done. Continue checking the remaining requirements
-                debug!("We folded {}", req);
+                trace!("We folded {}", req);
                 trace!("[exit] obtain");
-                return Ok(ObtainResult::Success(actions));
+                Ok(ObtainResult::Success(actions))
             } else {
                 debug!(
                     r"It is not possible to obtain {} ({:?}).
@@ -692,12 +700,12 @@ Predicates: {{
                     self.state.display_acc(),
                     self.state.display_pred()
                 );
-                return Ok(ObtainResult::Failure(req.clone()));
+                Ok(ObtainResult::Failure(Box::new(req.clone())))
             }
-        } else if in_join && req.get_perm_amount() == vir::PermAmount::Read {
+        } else if in_join && req.get_perm_amount() == PermAmount::Read {
             // Permissions held by shared references can be dropped
-            // without being explicitly moved becauce &T implements Copy.
-            return Ok(ObtainResult::Failure(req.clone()));
+            // without being explicitly moved because &T implements Copy.
+            Ok(ObtainResult::Failure(Box::new(req.clone())))
         } else {
             // We have no predicate to obtain the access permission `req`
             debug!(
@@ -715,13 +723,13 @@ Predicates: {{
                 self.state.display_acc(),
                 self.state.display_pred()
             );
-            return Ok(ObtainResult::Failure(req.clone()));
-        };
+            Ok(ObtainResult::Failure(Box::new(req.clone())))
+        }
     }
 
     /// Returns some of the dropped permissions
     pub fn apply_stmt(&mut self, stmt: &vir::Stmt) -> Result<(), FoldUnfoldError> {
-        debug!("apply_stmt: {}", stmt);
+        trace!("apply_stmt: {}", stmt);
 
         trace!("Acc state before: {{\n{}\n}}", self.state.display_acc());
         trace!("Pred state before: {{\n{}\n}}", self.state.display_pred());
@@ -772,12 +780,8 @@ Predicates: {{
     }
 }
 
-
 /// Find in `variant_place` the variant index of the enum encoded by `enum_place`.
-fn find_variant(
-    enum_place: &vir::Expr,
-    variant_place: &vir::Expr,
-) -> vir::MaybeEnumVariantIndex {
+fn find_variant(enum_place: &vir::Expr, variant_place: &vir::Expr) -> vir::MaybeEnumVariantIndex {
     trace!(
         "[enter] find_variant(enum_place={}, variant_place={})",
         enum_place,
@@ -786,7 +790,7 @@ fn find_variant(
     let parent = variant_place.get_parent_ref().unwrap();
     let result = if enum_place == parent {
         match variant_place {
-            vir::Expr::Variant(_, field, _) => Some(field.into()),
+            vir::Expr::Variant(vir::Variant { variant_index, .. }) => Some(variant_index.into()),
             _ => None,
         }
     } else {
@@ -806,7 +810,7 @@ fn find_variant(
 pub fn find_unfolded_variant(state: &State, enum_place: &vir::Expr) -> vir::MaybeEnumVariantIndex {
     debug_assert!(enum_place.is_place());
     // Find an access permission for which req is a proper suffix and extract variant from it.
-    let variants: HashSet<_> = state
+    let variants: FxHashSet<_> = state
         .acc_places()
         .into_iter()
         .filter(|place| place.has_proper_prefix(enum_place) && place.is_variant())
@@ -840,14 +844,14 @@ pub fn find_unfolded_variant(state: &State, enum_place: &vir::Expr) -> vir::Mayb
 /// The elements from the first set that have any element in the second
 /// set as a prefix are dropped.
 pub fn compute_fold_target(
-    left: &HashSet<vir::Expr>,
-    right: &HashSet<vir::Expr>,
-) -> (HashSet<vir::Expr>, HashSet<vir::Expr>) {
-    let mut conflicting_base = HashSet::new();
+    left: &FxHashSet<vir::Expr>,
+    right: &FxHashSet<vir::Expr>,
+) -> (FxHashSet<vir::Expr>, FxHashSet<vir::Expr>) {
+    let mut conflicting_base = FxHashSet::default();
     // If we have an enum unfolded only in one, then we add that enum to
     // conflicting places.
-    let mut conflicting_base_check = |item: &vir::Expr, second_set: &HashSet<vir::Expr>| {
-        if let vir::Expr::Variant(box ref base, _, _) = item {
+    let mut conflicting_base_check = |item: &vir::Expr, second_set: &FxHashSet<vir::Expr>| {
+        if let vir::Expr::Variant(vir::Variant { box ref base, .. }) = item {
             if !second_set.iter().any(|p| p.has_prefix(item)) {
                 // The enum corresponding to base is completely folded in second_set or unfolded
                 // with a different variant.
@@ -862,9 +866,9 @@ pub fn compute_fold_target(
         conflicting_base_check(right_item, left);
     }
 
-    let mut places = HashSet::new();
+    let mut places = FxHashSet::default();
     let mut place_check =
-        |item: &vir::Expr, item_set: &HashSet<vir::Expr>, other_set: &HashSet<vir::Expr>| {
+        |item: &vir::Expr, item_set: &FxHashSet<vir::Expr>, other_set: &FxHashSet<vir::Expr>| {
             let is_leaf = !item_set.iter().any(|p| p.has_proper_prefix(item));
             let below_all_others = !other_set.iter().any(|p| p.has_prefix(item));
             let no_conflict_base = !conflicting_base.iter().any(|base| item.has_prefix(base));
@@ -880,7 +884,7 @@ pub fn compute_fold_target(
     }
 
     let acc_places = places;
-    let pred_places: HashSet<_> = conflicting_base
+    let pred_places: FxHashSet<_> = conflicting_base
         .iter()
         .filter(|place| {
             !conflicting_base
@@ -904,10 +908,13 @@ pub fn compute_fold_target(
 fn solve_conficts(perms: Vec<Perm>) -> Vec<Perm> {
     // TODO: the time complexity is quadratic, but it can be improved (as many other functions
     //   used in fold-unfold) by building and using the prefix tree of a set of `Perm`.
-    perms.iter()
+    perms
+        .iter()
         .filter(|p| {
             let p_place = p.get_place();
-            !perms.iter().any(|q| q.is_pred() && p_place.has_proper_prefix(q.get_place()))
+            !perms
+                .iter()
+                .any(|q| q.is_pred() && p_place.has_proper_prefix(q.get_place()))
         })
         .cloned()
         .collect()
@@ -917,14 +924,14 @@ fn solve_conficts(perms: Vec<Perm>) -> Vec<Perm> {
 /// permission that was missing.
 enum ObtainResult {
     Success(Vec<Action>),
-    Failure(Perm),
+    Failure(Box<Perm>),
 }
 
 impl ObtainResult {
     pub fn get_actions(self) -> Result<Vec<Action>, FoldUnfoldError> {
         match self {
             ObtainResult::Success(actions) => Ok(actions),
-            ObtainResult::Failure(p) => Err(FailedToObtain(p)),
+            ObtainResult::Failure(p) => Err(FailedToObtain(*p)),
         }
     }
 }

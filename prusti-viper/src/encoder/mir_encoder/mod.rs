@@ -4,35 +4,37 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-mod downcast_detector;
-mod place_encoding;
-
-use crate::encoder::builtin_encoder::BuiltinFunctionKind;
 use crate::encoder::errors::{
     ErrorCtxt, PanicCause, SpannedEncodingError, EncodingError, WithSpan,
     SpannedEncodingResult, EncodingResult
 };
 use crate::encoder::Encoder;
+use crate::encoder::snapshot::interface::SnapshotEncoderInterface;
 use crate::utils;
-use prusti_common::vir;
+use prusti_common::vir_expr;
+use vir_crate::{polymorphic as vir};
 use prusti_common::config;
-use rustc_target::abi;
-use rustc_hir::def_id::DefId;
-use rustc_middle::{mir, ty};
-use rustc_index::vec::{Idx, IndexVec};
-use rustc_span::{Span, DUMMY_SP};
+use prusti_rustc_interface::target::abi;
+use prusti_rustc_interface::hir::def_id::DefId;
+use prusti_rustc_interface::middle::{mir, ty};
+use prusti_rustc_interface::index::vec::IndexVec;
+use prusti_rustc_interface::span::{Span, DUMMY_SP};
 use log::{trace, debug};
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-};
 use prusti_interface::environment::mir_utils::MirPlace;
+use crate::encoder::mir::{
+    sequences::MirSequencesEncoderInterface,
+    types::MirTypeEncoderInterface,
+};
+use super::high::types::HighTypeEncoderInterface;
+use prusti_rustc_interface::errors::MultiSpan;
 
-use downcast_detector::detect_downcasts;
+mod downcast_detector;
+mod place_encoding;
+
 pub use place_encoding::{PlaceEncoding, ExprOrArrayBase};
 
-pub static PRECONDITION_LABEL: &'static str = "pre";
-pub static WAND_LHS_LABEL: &'static str = "lhs";
+pub static PRECONDITION_LABEL: &str = "pre";
+pub static WAND_LHS_LABEL: &str = "lhs";
 
 pub trait PlaceEncoder<'v, 'tcx: 'v> {
 
@@ -46,13 +48,22 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         format!("{:?}", local)
     }
 
+    fn encode_local_high(&self, local: mir::Local) -> SpannedEncodingResult<vir_crate::high::VariableDecl> {
+        let var_name = self.encode_local_var_name(local);
+        let typ = self
+            .encoder()
+            .encode_type_high(self.get_local_ty(local))
+            .with_span(self.get_local_span(local))?;
+        Ok(vir_crate::high::VariableDecl::new(var_name, typ))
+    }
+
     fn encode_local(&self, local: mir::Local) -> SpannedEncodingResult<vir::LocalVar> {
         let var_name = self.encode_local_var_name(local);
-        let type_name = self
+        let typ = self
             .encoder()
-            .encode_type_predicate_use(self.get_local_ty(local))
+            .encode_type(self.get_local_ty(local))
             .with_span(self.get_local_span(local))?;
-        Ok(vir::LocalVar::new(var_name, vir::Type::TypedRef(type_name)))
+        Ok(vir::LocalVar::new(var_name, typ))
     }
 
     /// Returns
@@ -61,7 +72,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
     /// - `Option<usize>`: optionally, the variant of the enum.
     fn encode_place(
         &self,
-        place: &mir::Place<'tcx>,
+        place: mir::Place<'tcx>,
     ) -> EncodingResult<(PlaceEncoding<'tcx>, ty::Ty<'tcx>, Option<usize>)> {
         trace!("Encode place {:?}", place);
         self.encode_projection(place.local, place.projection)
@@ -94,20 +105,20 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
 
         let elem = projection.last().unwrap();
         Ok(match elem {
-            mir::ProjectionElem::Field(ref field, _) => {
+            mir::ProjectionElem::Field(ref field, proj_field_ty) => {
                 match base_ty.kind() {
                     ty::TyKind::Tuple(elems) => {
                         let field_name = format!("tuple_{}", field.index());
-                        let field_ty = elems[field.index()].expect_ty();
+                        let field_ty = elems[field.index()];
                         let encoded_field = self.encoder()
                             .encode_raw_ref_field(field_name, field_ty)?;
                         let encoded_projection = encoded_base.field(encoded_field);
                         (encoded_projection, field_ty, None)
                     }
 
-                    ty::TyKind::Adt(ref adt_def, ref subst) if !adt_def.is_box() => {
+                    ty::TyKind::Adt(adt_def, ref subst) if !adt_def.is_box() => {
                         debug!("subst {:?}", subst);
-                        let num_variants = adt_def.variants.len();
+                        let num_variants = adt_def.variants().len();
                         // FIXME: why this can be None?
                         let variant_index = if let Some(num) = opt_variant_index {
                             num
@@ -126,66 +137,47 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                             0
                         };
                         let tcx = self.encoder().env().tcx();
-                        let variant_def = &adt_def.variants[variant_index.into()];
+                        let variant_def = &adt_def.variants()[variant_index.into()];
                         let encoded_variant = if num_variants != 1 {
-                            encoded_base.variant(&variant_def.ident.as_str())
+                            encoded_base.variant(variant_def.ident(tcx).as_str())
                         } else {
                             encoded_base
                         };
                         let field = &variant_def.fields[field.index()];
-                        let field_ty = field.ty(tcx, subst);
+                        let field_ty = *proj_field_ty;
+                        if utils::is_reference(field_ty) {
+                            return Err(EncodingError::unsupported(
+                                "access to reference-typed fields is not supported",
+                            ));
+                        }
                         let encoded_field = self
                             .encoder()
                             .encode_struct_field(
-                                &field.ident.as_str(),
+                                field.ident(tcx).as_str(),
                                 field_ty
                             )?;
                         let encoded_projection = encoded_variant.field(encoded_field);
                         (encoded_projection, field_ty, None)
                     }
 
-                    ty::TyKind::Closure(def_id, ref closure_subst) => {
+                    ty::TyKind::Closure(def_id, closure_subst) => {
+                        let closure_subst = closure_subst.as_closure();
                         debug!("def_id={:?} closure_subst {:?}", def_id, closure_subst);
 
-                        let closure_subst = closure_subst.as_closure();
-                        debug!("Closure subst: {:?}", closure_subst);
-
-                        // let tcx = self.encoder().env().tcx();
-                        // let node_id = tcx.hir.as_local_node_id(def_id).unwrap();
-                        // let field_ty = closure_subst
-                        //     .upvar_tys(def_id, tcx)
-                        //     .nth(field.index())
-                        //     .unwrap();
-                        let field_ty = closure_subst.upvar_tys().nth(field.index())
-                            .ok_or_else(|| EncodingError::internal(format!(
-                                "failed to obtain the type of the captured path #{} of closure {:?}",
-                                field.index(),
-                                base_ty,
-                            )))?;
-
+                        let field_ty = *proj_field_ty;
                         let field_name = format!("closure_{}", field.index());
                         let encoded_field = self.encoder()
                             .encode_raw_ref_field(field_name, field_ty)?;
                         let encoded_projection = encoded_base.field(encoded_field);
-
-                        // let encoded_projection: vir::Expr = tcx.with_freevars(node_id, |freevars| {
-                        //     let freevar = &freevars[field.index()];
-                        //     let field_name = format!("closure_{}", field.index());
-                        //     let encoded_field = self.encoder()
-                        //          .encode_raw_ref_field(field_name, field_ty)?;
-                        //     let res = encoded_base.field(encoded_field);
-                        //     let var_name = tcx.hir.name(freevar.var_id()).to_string();
-                        //     trace!("Field {:?} of closure corresponds to variable '{}', encoded as {}", field, var_name, res);
-                        //     res
-                        // });
-
-                        let encoded_field_type = self.encoder().encode_type(field_ty)?;
-                        // debug!("Rust closure projection {:?}", place_projection);
                         debug!("encoded_projection: {:?}", encoded_projection);
 
+                        let encoded_field_type = self.encoder().encode_type(field_ty)?;
                         assert_eq!(encoded_projection.get_type(), &encoded_field_type);
-
                         (encoded_projection, field_ty, None)
+                    }
+
+                    ty::TyKind::Generator(_, _, _) => {
+                        return Err(EncodingError::unsupported("generator fields are not supported yet"));
                     }
 
                     x => {
@@ -231,16 +223,16 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                         let offset = *offset as usize;
                         match base_ty.kind() {
                             ty::TyKind::Array(..) => {
-                                let array_type = self.encoder().encode_array_types(base_ty)?;
-                                (array_type.array_len - offset).into()
+                                let array_type = self.encoder().encode_sequence_types(base_ty)?;
+                                (array_type.sequence_len.unwrap() - offset).into()
                             }
                             ty::TyKind::Slice(_) => {
-                                let slice_type = self.encoder().encode_slice_types(base_ty)?;
-                                let slice_len = slice_type.encode_slice_len_call(
+                                let slice_type = self.encoder().encode_sequence_types(base_ty)?;
+                                let slice_len = slice_type.len(
                                     self.encoder(),
                                     encoded_base.clone().try_into_expr()?,
                                 );
-                                vir! { [ slice_len ] - [ vir::Expr::from(offset) ] }
+                                vir_expr! { [ slice_len ] - [ vir::Expr::from(offset) ] }
                             }
                             _ => return Err(EncodingError::unsupported(
                                 format!("pattern matching on the end of '{:?} is not supported", base_ty),
@@ -255,10 +247,10 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                             PlaceEncoding::ArrayAccess {
                                 base: box encoded_base,
                                 index,
-                                encoded_elem_ty: self.encoder().encode_type(elem_ty)?,
+                                encoded_elem_ty: self.encoder().encode_type(*elem_ty)?,
                                 rust_array_ty: base_ty,
                             },
-                            elem_ty,
+                            *elem_ty,
                             None,
                         )
                     },
@@ -267,10 +259,10 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                             PlaceEncoding::SliceAccess {
                                 base: box encoded_base,
                                 index,
-                                encoded_elem_ty: self.encoder().encode_type(elem_ty)?,
+                                encoded_elem_ty: self.encoder().encode_type(*elem_ty)?,
                                 rust_slice_ty: base_ty,
                             },
-                            elem_ty,
+                            *elem_ty,
                             None,
                         )
                     },
@@ -300,18 +292,13 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
                     // Simplify `*&<expr>` ==> `<expr>`
                     encoded_base.get_parent().unwrap()
                 } else {
-                    match encoded_base {
-                        vir::Expr::AddrOf(box base_place, _, _) => base_place,
-                        _ => {
-                            let ref_field = self.encoder()
-                                .encode_dereference_field(ty)?;
-                            encoded_base.field(ref_field)
-                        }
-                    }
+                    let ref_field = self.encoder()
+                        .encode_dereference_field(*ty)?;
+                    encoded_base.field(ref_field)
                 };
-                (access, ty, None)
+                (access, *ty, None)
             }
-            ty::TyKind::Adt(ref adt_def, ref _subst) if adt_def.is_box() => {
+            ty::TyKind::Adt(adt_def, _subst) if adt_def.is_box() => {
                 let access = if encoded_base.is_addr_of() {
                     encoded_base.get_parent().unwrap()
                 } else {
@@ -335,7 +322,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         match base_ty.kind() {
             ty::TyKind::RawPtr(..) | ty::TyKind::Ref(..) => true,
 
-            ty::TyKind::Adt(ref adt_def, ..) if adt_def.is_box() => true,
+            ty::TyKind::Adt(adt_def, ..) if adt_def.is_box() => true,
 
             _ => false,
         }
@@ -355,15 +342,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> FakeMirEncoder<'p, 'v, 'tcx> {
     pub fn new(
         encoder: &'p Encoder<'v, 'tcx>,
         arg_tys: Vec<ty::Ty<'tcx>>,
-        return_ty: Option<ty::Ty<'tcx>>,
+        return_ty: ty::Ty<'tcx>,
     ) -> Self {
         trace!("FakeMirEncoder constructor");
         let mut tys: IndexVec<mir::Local, ty::Ty<'tcx>> = IndexVec::new();
-        if let Some(return_ty) = return_ty {
-            tys.push(return_ty);
-        } else {
-            tys.push(encoder.env().tcx().mk_unit());
-        }
+        tys.push(return_ty);
         for arg_ty in arg_tys {
             tys.push(arg_ty);
         }
@@ -426,11 +409,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
         }
     }
 
-    pub fn is_reference(&self, base_ty: ty::Ty<'tcx>) -> bool {
-        trace!("is_reference {}", base_ty);
-        matches!(base_ty.kind(), ty::TyKind::RawPtr(..) | ty::TyKind::Ref(..))
-    }
-
     /// Returns an `vir::Expr` that corresponds to the value of the operand
     pub fn encode_operand_expr(
         &self,
@@ -438,15 +416,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
     ) -> EncodingResult<vir::Expr> {
         trace!("Encode operand expr {:?}", operand);
         Ok(match operand {
-            &mir::Operand::Constant(box mir::Constant {
-                literal: mir::ConstantKind::Ty(ty::Const { ty, val }),
-                ..
-            }) => self.encoder.encode_const_expr(ty, val)?,
-            &mir::Operand::Constant(box mir::Constant {
-                literal: mir::ConstantKind::Val(val, ty),
-                ..
-            }) => self.encoder.encode_const_expr(ty, &ty::ConstKind::Value(val))?,
-            &mir::Operand::Copy(ref place) | &mir::Operand::Move(ref place) => {
+            mir::Operand::Constant(expr) => self.encoder.encode_const_expr(expr.ty(), expr.literal)?,
+            &mir::Operand::Copy(place) | &mir::Operand::Move(place) => {
                 // let val_place = self.eval_place(&place)?;
                 // inlined to do try_into_expr
                 let (encoded_place, place_ty, _) = self.encode_place(place)?;
@@ -474,7 +445,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
             //             .encode_builtin_function_use(BuiltinFunctionKind::Unreachable(
             //                 encoded_type.clone(),
             //             ));
-            //     let pos = self.encoder.error_manager().register(
+            //     let pos = self.encoder.error_manager().register_error(
             //         // TODO: use a proper span
             //         self.mir.span,
             //         ErrorCtxt::PureFunctionCall,
@@ -526,6 +497,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
         ty: ty::Ty<'tcx>,
     ) -> EncodingResult<vir::Expr> {
         let is_bool = ty.kind() == &ty::TyKind::Bool;
+        let is_signed = matches!(ty.kind(), ty::TyKind::Int(_));
         Ok(match op {
             mir::BinOp::Eq => vir::Expr::eq_cmp(left, right),
             mir::BinOp::Ne => vir::Expr::ne_cmp(left, right),
@@ -543,15 +515,29 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
             mir::BinOp::BitXor if is_bool => vir::Expr::xor(left, right),
             mir::BinOp::BitAnd |
             mir::BinOp::BitOr |
-            mir::BinOp::BitXor => {
+            mir::BinOp::BitXor if !config::encode_bitvectors() => {
                 return Err(EncodingError::unsupported(
-                    "bitwise operations on non-boolean types are not supported"
+                    "bitwise operations on non-boolean types are experimental and disabled by default; use `encode_bitvectors` to enable"
                 ))
             }
-            unsupported_op => {
+            unsupported_op if !config::encode_bitvectors() => {
+                return Err(EncodingError::unsupported(format!(
+                    "support for operation '{:?}' is experimental and disabled by default; use `encode_bitvectors` to enable",
+                    unsupported_op
+                )))
+            }
+            mir::BinOp::BitAnd => vir::Expr::bin_op(vir::BinaryOpKind::BitAnd, left, right),
+            mir::BinOp::BitOr => vir::Expr::bin_op(vir::BinaryOpKind::BitOr, left, right),
+            mir::BinOp::BitXor => vir::Expr::bin_op(vir::BinaryOpKind::BitXor, left, right),
+            mir::BinOp::Shl => vir::Expr::bin_op(vir::BinaryOpKind::Shl, left, right),
+            // https://doc.rust-lang.org/reference/expressions/operator-expr.html#arithmetic-and-logical-binary-operators
+            // Arithmetic right shift on signed integer types, logical right shift on unsigned integer types.
+            mir::BinOp::Shr if is_signed => vir::Expr::bin_op(vir::BinaryOpKind::AShr, left, right),
+            mir::BinOp::Shr => vir::Expr::bin_op(vir::BinaryOpKind::LShr, left, right),
+            mir::BinOp::Offset => {
                 return Err(EncodingError::unsupported(format!(
                     "operation '{:?}' is not supported",
-                    unsupported_op
+                    op
                 )))
             }
         })
@@ -575,7 +561,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
         if !op.is_checkable() || !config::check_overflows() {
             Ok(false.into())
         } else {
-            let result = self.encode_bin_op_expr(op, left, right, ty)?;
+            let result = self.encode_bin_op_expr(op, left, right.clone(), ty)?;
 
             Ok(match op {
                 mir::BinOp::Add | mir::BinOp::Mul | mir::BinOp::Sub => match ty.kind() {
@@ -629,7 +615,15 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
                         vir::Expr::lt_cmp(result.clone(), std::isize::MIN.into()),
                         vir::Expr::gt_cmp(result, std::isize::MAX.into()),
                     ),
-
+                    //Floats
+                    ty::TyKind::Float(ty::FloatTy::F32) => vir::Expr::or(
+                        vir::Expr::lt_cmp(result.clone(), std::f32::MIN.into()),
+                        vir::Expr::gt_cmp(result, std::f32::MAX.into()),
+                    ),
+                    ty::TyKind::Float(ty::FloatTy::F64) => vir::Expr::or(
+                        vir::Expr::lt_cmp(result.clone(), std::f64::MIN.into()),
+                        vir::Expr::gt_cmp(result, std::f64::MAX.into()),
+                    ),
                     _ => {
                         return Err(EncodingError::unsupported(format!(
                             "overflow checks are unsupported for operation '{:?}' on type '{:?}'",
@@ -640,9 +634,38 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
                 },
 
                 mir::BinOp::Shl | mir::BinOp::Shr => {
-                    return Err(EncodingError::unsupported(
-                        "overflow checks on a shift operation are unsupported",
-                    ));
+                    let size: u32 = match ty.kind() {
+                        ty::TyKind::Uint(ty::UintTy::U8) => 8,
+                        ty::TyKind::Uint(ty::UintTy::U16) => 16,
+                        ty::TyKind::Uint(ty::UintTy::U32) => 32,
+                        ty::TyKind::Uint(ty::UintTy::U64) => 64,
+                        ty::TyKind::Uint(ty::UintTy::U128) => 128,
+                        ty::TyKind::Uint(ty::UintTy::Usize) => {
+                            return Err(EncodingError::unsupported(
+                                "unknown size of usize for the overflow check",
+                            ));
+                        }
+                        ty::TyKind::Int(ty::IntTy::I8) => 8,
+                        ty::TyKind::Int(ty::IntTy::I16) => 16,
+                        ty::TyKind::Int(ty::IntTy::I32) => 32,
+                        ty::TyKind::Int(ty::IntTy::I64) => 64,
+                        ty::TyKind::Int(ty::IntTy::I128) => 128,
+                        ty::TyKind::Int(ty::IntTy::Isize) => {
+                            return Err(EncodingError::unsupported(
+                                "unknown size of isize for the overflow check",
+                            ));
+                        },
+                        _ => {
+                            return Err(EncodingError::unsupported(format!(
+                                "overflow checks are unsupported for operation '{:?}' on type '{:?}'",
+                                op, ty,
+                            )));
+                        }
+                    };
+                    vir::Expr::or(
+                        vir::Expr::lt_cmp(right.clone(), 0.into()),
+                        vir::Expr::ge_cmp(right, size.into()),
+                    )
                 }
 
                 _ => unreachable!("{:?}", op),
@@ -721,13 +744,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
                         String::from("number"),
                         self.encode_operand_expr_type(operand).with_span(span)?,
                     )];
-                    let pos = self
-                        .encoder
-                        .error_manager()
-                        .register(span, ErrorCtxt::TypeCast);
+                    let pos = self.register_error(span, ErrorCtxt::TypeCast);
                     let return_type = self.encoder.encode_snapshot_type(dst_ty).with_span(span)?;
                     return Ok(vir::Expr::func_app(
                         function_name,
+                        vec![], // FIXME: This is probably wrong.
                         encoded_args,
                         formal_args,
                         return_type,
@@ -760,7 +781,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
     ) -> EncodingResult<Option<vir::Expr>> {
         debug!("Encode operand place {:?}", operand);
         Ok(match operand {
-            &mir::Operand::Move(ref place) | &mir::Operand::Copy(ref place) => {
+            &mir::Operand::Move(place) | &mir::Operand::Copy(place) => {
                 let (src, _, _) = self.encode_place(place)?;
                 Some(src.try_into_expr()?)
             }
@@ -787,7 +808,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
     }
 
     pub fn get_downcasts_at_location(&self, location: mir::Location) -> Vec<(MirPlace<'tcx>, abi::VariantIdx)> {
-        detect_downcasts(self.mir, location)
+        downcast_detector::detect_downcasts(self.mir, location)
     }
 
     pub fn get_span_of_basic_block(&self, bbi: mir::BasicBlock) -> Span {
@@ -795,15 +816,17 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
         bb_data.terminator().source_info.span
     }
 
-    pub fn encode_expr_pos(&self, span: Span) -> vir::Position {
-        self.encoder
-            .error_manager()
-            .register(span, ErrorCtxt::GenericExpression)
+    pub fn register_span<T: Into<MultiSpan>>(&self, span: T) -> vir::Position {
+        self.encoder.error_manager().register_span(self.def_id, span)
+    }
+
+    pub fn register_error<T: Into<MultiSpan>>(&self, span: T, error_ctxt: ErrorCtxt) -> vir::Position {
+        self.encoder.error_manager().register_error(span, error_ctxt, self.def_id)
     }
 
     /// Return the cause of a call to `begin_panic`
-    pub fn encode_panic_cause(&self, source_info: mir::SourceInfo) -> PanicCause {
-        let macro_backtrace: Vec<_> = source_info.span.macro_backtrace().collect();
+    pub fn encode_panic_cause(&self, span: Span) -> PanicCause {
+        let macro_backtrace: Vec<_> = span.macro_backtrace().collect();
         debug!("macro_backtrace: {:?}", macro_backtrace);
 
         // To classify the cause of the panic it's enough to look at the top 3 macro calls
@@ -811,8 +834,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
         let tcx = self.encoder.env().tcx();
         let macro_names: Vec<String> = macro_backtrace.iter()
             .take(lookup_size)
-            .map(|x| x.macro_def_id.map(|y| tcx.def_path_str(y)))
-            .flatten()
+            .filter_map(|x| x.macro_def_id.map(|y| tcx.def_path_str(y)))
             .collect();
         debug!("macro_names: {:?}", macro_names);
 
@@ -820,8 +842,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> MirEncoder<'p, 'v, 'tcx> {
             .map(|x| x.as_str())
             .collect();
         match &macro_names_str[..] {
-            ["core::panic::panic_2015", "core::macros::panic", "std::unimplemented"] => PanicCause::Unimplemented,
-            ["core::panic::panic_2015", "core::macros::panic", "std::unreachable"] => PanicCause::Unreachable,
+            ["core::panic::panic_2015", "core::macros::panic", "std::unimplemented"]
+            | ["std::unimplemented", ..] => PanicCause::Unimplemented,
+            ["core::panic::panic_2015", "core::macros::panic", "std::unreachable"]
+            | ["core::panic::unreachable_2015", "std::unreachable", ..]
+            | ["std::unreachable", ..] => PanicCause::Unreachable,
             ["std::assert", "std::debug_assert", ..] => PanicCause::DebugAssert,
             ["std::assert", ..] => PanicCause::Assert,
             ["std::panic::panic_2015", "std::panic", "std::debug_assert"] => PanicCause::DebugAssert,

@@ -12,6 +12,7 @@ pub enum ModuleTree {
     Leaf,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for ModuleTree {
     fn default() -> Self {
         ModuleTree::Node(HashMap::new())
@@ -109,7 +110,7 @@ impl ModuleTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unordered_set_eq::*;
+    use crate::unordered_set_eq::*;
 
     macro_rules! string_vec {
         ($($x:expr),*) => (vec![$($x.to_string()),*]);

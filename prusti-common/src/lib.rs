@@ -6,29 +6,13 @@
 
 #![feature(box_patterns)]
 #![feature(box_syntax)]
-#![feature(nll)]
 
-#![allow(unused_imports)]
 #![deny(unused_must_use)]
-
-#[macro_use]
-extern crate log;
-extern crate config as config_crate;
-extern crate itertools;
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
-#[macro_use]
-extern crate serde;
-extern crate uuid;
-extern crate viper;
 
 pub mod config;
 pub mod report;
 mod stopwatch;
 pub mod utils;
-pub mod verification_context;
-pub mod verification_service;
 pub mod vir;
 
 pub use stopwatch::Stopwatch;

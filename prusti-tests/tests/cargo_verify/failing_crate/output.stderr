@@ -1,5 +1,3 @@
-    Checking prusti-contracts v0.1.0 ([..])
-    Checking failing_crate v0.1.0 ([..])
 error: [Prusti: verification error] precondition might not hold.
  --> src/main.rs:6:5
   |
@@ -12,8 +10,4 @@ note: the failing assertion is here
 3 | #[requires(x > 999)]
   |            ^^^^^^^
 
-error: aborting due to previous error
-
-error: could not compile `failing_crate`
-
-To learn more, run the command again with --verbose.
+error: could not compile `failing_crate` due to previous error

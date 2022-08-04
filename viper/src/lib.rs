@@ -6,34 +6,24 @@
 
 #![deny(unused_must_use)]
 
-#[macro_use]
-extern crate error_chain;
-extern crate jni;
-#[macro_use]
-extern crate log;
-extern crate uuid;
-extern crate viper_sys;
-#[macro_use]
-extern crate serde;
-
 mod ast_factory;
 mod ast_utils;
 pub mod errors;
 mod jni_utils;
 #[macro_use]
 pub mod utils;
+mod cache;
+mod java_exception;
+pub mod silicon_counterexample;
+pub mod smt_manager;
 mod verification_backend;
 mod verification_context;
 mod verification_result;
 mod verifier;
 mod viper;
-mod java_exception;
 
-pub use ast_factory::*;
-pub use ast_utils::*;
-pub use verification_backend::*;
-pub use verification_context::*;
-pub use verification_result::*;
-pub use verifier::*;
-pub use viper::*;
-pub use java_exception::*;
+pub use crate::{
+    ast_factory::*, ast_utils::*, cache::*, java_exception::*, silicon_counterexample::*,
+    verification_backend::*, verification_context::*, verification_result::*, verifier::*,
+    viper::*,
+};

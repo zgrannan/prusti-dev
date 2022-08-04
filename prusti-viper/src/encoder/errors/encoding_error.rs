@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use rustc_span::MultiSpan;
+use prusti_rustc_interface::errors::MultiSpan;
 use log::trace;
 use crate::encoder::errors::SpannedEncodingError;
 use crate::encoder::errors::EncodingErrorKind;
@@ -49,6 +49,13 @@ impl EncodingError {
         match self {
             EncodingError::Positionless(error) => SpannedEncodingError::new(error, span),
             EncodingError::Spanned(error) => error.with_span(span),
+        }
+    }
+
+    pub fn with_default_span<S: Into<MultiSpan>>(self, span: S) -> SpannedEncodingError {
+        match self {
+            EncodingError::Positionless(error) => SpannedEncodingError::new(error, span),
+            EncodingError::Spanned(error) => error,
         }
     }
 }

@@ -4,31 +4,24 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use class_name::*;
-use errors::Result as LocalResult;
-use generators::class::ClassGenerator;
-use generators::module::*;
-use jni::InitArgsBuilder;
-use jni::JNIVersion;
-use jni::JavaVM;
-use std::fs::create_dir_all;
-use std::fs::OpenOptions;
-use std::io::prelude::*;
-use std::path::Path;
-use wrapper_spec::*;
+use crate::{
+    class_name::*,
+    errors::Result as LocalResult,
+    generators::{class::ClassGenerator, module::*},
+    wrapper_spec::*,
+};
+use jni::{InitArgsBuilder, JNIVersion, JavaVM};
+use log::debug;
+use std::{
+    fs::{create_dir_all, OpenOptions},
+    io::prelude::*,
+    path::Path,
+};
 
+#[derive(Default)]
 pub struct WrapperGenerator {
     jars: Vec<String>,
     classes: Vec<ClassWrapperSpec>,
-}
-
-impl Default for WrapperGenerator {
-    fn default() -> Self {
-        WrapperGenerator {
-            jars: vec![],
-            classes: vec![],
-        }
-    }
 }
 
 impl WrapperGenerator {
@@ -63,7 +56,10 @@ impl WrapperGenerator {
 
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
-            .option(&format!("-Djava.class.path={}", self.jars.join(classpath_separator)))
+            .option(&format!(
+                "-Djava.class.path={}",
+                self.jars.join(classpath_separator)
+            ))
             .build()?;
 
         let jvm = JavaVM::new(jvm_args)?;

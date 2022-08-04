@@ -1,15 +1,20 @@
+use prusti_contracts::*;
+
 fn main() {}
 
-fn slice_len_gt_0(x: &[i32]) {
-    assert!(x.len() >= 0);
-}
-
-// this should generate a call to .len() for the bounds check and exercise the slice lookup pure
-// function as well
-fn slice_index(x: &[i32]) -> i32 {
-    if x.len() > 3 {
-        x[3]
-    } else {
-        -1
-    }
+#[requires(a.len() > 5)]
+fn slice(a: &[i32]) {
+    let s = &a[1..4];
+    assert!(s.len() == 3);
+    let s = &a[..2];
+    assert!(s.len() == 2);
+    let s = &a[1..];
+    assert!(s.len() == a.len()-1);
+    let s = &a[..];
+    assert!(s.len() == a.len());
+    // Unsupported
+    //let s = &a[1..=4];
+    //assert!(s.len() == 4);
+    let s = &a[..=4];
+    assert!(s.len() == 5);
 }

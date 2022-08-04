@@ -1,11 +1,13 @@
-extern crate proc_macro;
-
-use proc_macro2::Span;
+#![no_std]
 use proc_macro::TokenStream;
-use quote::quote_spanned;
 
 #[proc_macro_attribute]
 pub fn requires(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    tokens
+}
+
+#[proc_macro_attribute]
+pub fn invariant(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     tokens
 }
 
@@ -20,7 +22,7 @@ pub fn after_expiry(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn after_expiry_if(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+pub fn assert_on_expiry(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     tokens
 }
 
@@ -36,13 +38,17 @@ pub fn trusted(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
 #[proc_macro]
 pub fn body_invariant(_tokens: TokenStream) -> TokenStream {
-    let callsite_span = Span::call_site();
-    (quote_spanned!(callsite_span=> ())).into()
+    TokenStream::new()
 }
 
 #[proc_macro]
-pub fn closure(tokens: TokenStream) -> TokenStream {
-    prusti_specs::closure(tokens.into(), true).into()
+pub fn prusti_assert(_tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
+}
+
+#[proc_macro]
+pub fn prusti_assume(_tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
 }
 
 #[proc_macro_attribute]
@@ -51,11 +57,26 @@ pub fn refine_trait_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream
 }
 
 #[proc_macro_attribute]
-pub fn extern_spec(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    tokens
+pub fn extern_spec(_attr: TokenStream, _tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
+}
+
+#[proc_macro]
+pub fn predicate(_tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
 }
 
 #[proc_macro_attribute]
-pub fn predicate(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    tokens
+pub fn model(_attr: TokenStream, _tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
+}
+
+#[proc_macro_attribute]
+pub fn ghost_constraint(_attr: TokenStream, _tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
+}
+
+#[proc_macro]
+pub fn ghost(_tokens: TokenStream) -> TokenStream {
+    TokenStream::new()
 }

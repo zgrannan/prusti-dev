@@ -1,12 +1,18 @@
+use crate::ast::*;
 use syn::{
+    bracketed, parenthesized,
     parse::{Parse, ParseStream},
     parse_quote, Token,
 };
 
-use crate::ast::*;
-
 mod kw {
     syn::custom_keyword!(derive);
+    syn::custom_keyword!(new);
+    syn::custom_keyword!(new_with_pos);
+    syn::custom_keyword!(Hash);
+    syn::custom_keyword!(PartialEq);
+    syn::custom_keyword!(Ord);
+    syn::custom_keyword!(ignore);
 }
 
 impl Parse for Declarations {
@@ -69,6 +75,13 @@ impl Parse for Include {
     }
 }
 
+impl Parse for CopyModule {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let path = input.parse()?;
+        Ok(Self { path })
+    }
+}
+
 impl Parse for RawBlock {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let name = input.parse()?;
@@ -78,5 +91,86 @@ impl Parse for RawBlock {
             content.push(input.parse()?);
         }
         Ok(Self { name, content })
+    }
+}
+
+impl Parse for DeriveLower {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let is_self_mut = if input.peek(syn::Token![mut]) {
+            input.parse::<syn::Token![mut]>()?;
+            true
+        } else {
+            false
+        };
+        let user_trait_ident = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let deriver_trait_ident = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let source_type = input.parse()?;
+        input.parse::<Token![=>]>()?;
+        let target_type = input.parse()?;
+        Ok(Self {
+            is_self_mut,
+            user_trait_ident,
+            deriver_trait_ident,
+            source_type,
+            target_type,
+        })
+    }
+}
+
+impl Parse for CustomDeriveOptions {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        input.parse::<kw::ignore>()?;
+        input.parse::<Token![=]>()?;
+        let content;
+        bracketed!(content in input);
+        let fields =
+            syn::punctuated::Punctuated::<_, Token![,]>::parse_separated_nonempty(&content)?;
+        Ok(Self {
+            ignored_fields: fields.into_iter().collect(),
+        })
+    }
+}
+
+impl Parse for CustomDerive {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let lookahead = input.lookahead1();
+        let derive = if lookahead.peek(kw::new) {
+            input.parse::<kw::new>()?;
+            Self::New
+        } else if lookahead.peek(kw::new_with_pos) {
+            input.parse::<kw::new_with_pos>()?;
+            Self::NewWithPos
+        } else if lookahead.peek(kw::PartialEq) && input.peek2(syn::token::Paren) {
+            input.parse::<kw::PartialEq>()?;
+            let content;
+            parenthesized!(content in input);
+            Self::PartialEq(CustomDeriveOptions::parse(&content)?)
+        } else if lookahead.peek(kw::Ord) && input.peek2(syn::token::Paren) {
+            input.parse::<kw::Ord>()?;
+            let content;
+            parenthesized!(content in input);
+            Self::Ord(CustomDeriveOptions::parse(&content)?)
+        } else if lookahead.peek(kw::Hash) && input.peek2(syn::token::Paren) {
+            input.parse::<kw::Hash>()?;
+            let content;
+            parenthesized!(content in input);
+            Self::Hash(CustomDeriveOptions::parse(&content)?)
+        } else {
+            Self::Other(input.parse()?)
+        };
+        Ok(derive)
+    }
+}
+
+impl Parse for CustomDeriveList {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        parenthesized!(content in input);
+        let list = Self {
+            derives: syn::punctuated::Punctuated::parse_terminated(&content)?,
+        };
+        Ok(list)
     }
 }

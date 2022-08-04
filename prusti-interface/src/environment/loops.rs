@@ -5,22 +5,22 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::utils;
-use crate::environment::place_set::PlaceSet;
+use crate::environment::mir_sets::PlaceSet;
 use crate::environment::procedure::BasicBlockIndex;
-use rustc_middle::mir;
-use rustc_middle::mir::visit::Visitor;
-use rustc_data_structures::graph::dominators::Dominators;
-use std::collections::{HashMap, HashSet};
-use rustc_index::vec::{Idx, IndexVec};
+use prusti_rustc_interface::middle::mir;
+use prusti_rustc_interface::middle::mir::visit::Visitor;
+use prusti_rustc_interface::data_structures::graph::dominators::Dominators;
+use rustc_hash::{FxHashMap, FxHashSet};
+use prusti_rustc_interface::index::vec::{Idx, IndexVec};
 use log::{debug, trace};
 use crate::environment::mir_utils::RealEdges;
 
 /// Walk up the CFG graph an collect all basic blocks that belong to the loop body.
-fn collect_loop_body<'tcx>(
+fn collect_loop_body(
     head: BasicBlockIndex,
     back_edge_source: BasicBlockIndex,
     real_edges: &RealEdges,
-    body: &mut HashSet<BasicBlockIndex>,
+    body: &mut FxHashSet<BasicBlockIndex>,
 ) {
     let mut work_queue = vec![back_edge_source];
     body.insert(back_edge_source);
@@ -81,7 +81,7 @@ pub struct PlaceAccess<'tcx> {
 #[derive(Debug)]
 struct AccessCollector<'b, 'tcx> {
     /// Loop body.
-    pub body: &'b HashSet<BasicBlockIndex>,
+    pub body: &'b FxHashSet<BasicBlockIndex>,
     /// The places that are defined before the loop and accessed inside a loop.
     pub accessed_places: Vec<PlaceAccess<'tcx>>,
 }
@@ -102,7 +102,7 @@ impl<'b, 'tcx> Visitor<'tcx> for AccessCollector<'b, 'tcx> {
                 context,
                 location
             );
-            use rustc_middle::mir::visit::PlaceContext::*;
+            use prusti_rustc_interface::middle::mir::visit::PlaceContext::*;
             let access_kind = match context {
                 MutatingUse(mir::visit::MutatingUseContext::Store) => PlaceAccessKind::Store,
                 MutatingUse(mir::visit::MutatingUseContext::Call) => PlaceAccessKind::Store,
@@ -117,8 +117,8 @@ impl<'b, 'tcx> Visitor<'tcx> for AccessCollector<'b, 'tcx> {
                 x => unimplemented!("{:?}", x),
             };
             let access = PlaceAccess {
-                location: location,
-                place: place.clone(),
+                location,
+                place: *place,
                 kind: access_kind,
             };
             self.accessed_places.push(access);
@@ -130,7 +130,7 @@ impl<'b, 'tcx> Visitor<'tcx> for AccessCollector<'b, 'tcx> {
 fn order_basic_blocks<'tcx>(
     mir: &mir::Body<'tcx>,
     real_edges: &RealEdges,
-    back_edges: &HashSet<(BasicBlockIndex, BasicBlockIndex)>,
+    back_edges: &FxHashSet<(BasicBlockIndex, BasicBlockIndex)>,
     loop_depth: &dyn Fn(BasicBlockIndex) -> usize,
 ) -> Vec<BasicBlockIndex> {
     let basic_blocks = mir.basic_blocks();
@@ -139,10 +139,9 @@ fn order_basic_blocks<'tcx>(
         IndexVec::<BasicBlockIndex, bool>::from_elem_n(false, basic_blocks.len());
     let mut temporary_mark = permanent_mark.clone();
 
-    fn visit<'tcx>(
-        basic_blocks: &IndexVec<BasicBlockIndex, mir::BasicBlockData<'tcx>>,
+    fn visit(
         real_edges: &RealEdges,
-        back_edges: &HashSet<(BasicBlockIndex, BasicBlockIndex)>,
+        back_edges: &FxHashSet<(BasicBlockIndex, BasicBlockIndex)>,
         loop_depth: &dyn Fn(BasicBlockIndex) -> usize,
         current: BasicBlockIndex,
         sorted_blocks: &mut Vec<BasicBlockIndex>,
@@ -170,7 +169,6 @@ fn order_basic_blocks<'tcx>(
                     continue;
                 }
                 visit(
-                    basic_blocks,
                     real_edges,
                     back_edges,
                     loop_depth,
@@ -185,14 +183,9 @@ fn order_basic_blocks<'tcx>(
         sorted_blocks.push(current);
     }
 
-    loop {
-        let index = if let Some(index) = permanent_mark.iter().position(|x| !*x) {
-            BasicBlockIndex::new(index)
-        } else {
-            break;
-        };
+    while let Some(index) = permanent_mark.iter().position(|x| !*x) {
+        let index = BasicBlockIndex::new(index);
         visit(
-            basic_blocks,
             real_edges,
             back_edges,
             loop_depth,
@@ -210,21 +203,21 @@ fn order_basic_blocks<'tcx>(
 #[derive(Clone)]
 pub struct ProcedureLoops {
     /// A list of basic blocks that are loop heads.
-    pub loop_heads: HashSet<BasicBlockIndex>,
+    pub loop_heads: FxHashSet<BasicBlockIndex>,
     /// The depth of each loop head, starting from one for a simple single loop.
-    pub loop_head_depths: HashMap<BasicBlockIndex, usize>,
+    pub loop_head_depths: FxHashMap<BasicBlockIndex, usize>,
     /// A map from loop heads to the corresponding bodies.
-    pub loop_bodies: HashMap<BasicBlockIndex, HashSet<BasicBlockIndex>>,
-    pub ordered_loop_bodies: HashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
+    pub loop_bodies: FxHashMap<BasicBlockIndex, FxHashSet<BasicBlockIndex>>,
+    pub ordered_loop_bodies: FxHashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
     /// A map from loop bodies to the ordered vector of enclosing loop heads (from outer to inner).
-    enclosing_loop_heads: HashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
+    enclosing_loop_heads: FxHashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
     /// A map from loop heads to the ordered blocks from which a CFG edge exits from the loop.
-    loop_exit_blocks: HashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
+    loop_exit_blocks: FxHashMap<BasicBlockIndex, Vec<BasicBlockIndex>>,
     /// A map from loop heads to the nonconditional blocks (i.e. those that are always executed
     /// in any loop iteration).
-    nonconditional_loop_blocks: HashMap<BasicBlockIndex, HashSet<BasicBlockIndex>>,
+    nonconditional_loop_blocks: FxHashMap<BasicBlockIndex, FxHashSet<BasicBlockIndex>>,
     /// Back edges.
-    pub back_edges: HashSet<(BasicBlockIndex, BasicBlockIndex)>,
+    pub back_edges: FxHashSet<(BasicBlockIndex, BasicBlockIndex)>,
     /// Dominators graph.
     dominators: Dominators<BasicBlockIndex>,
     /// The list of basic blocks ordered in the topological order (ignoring back edges).
@@ -234,9 +227,9 @@ pub struct ProcedureLoops {
 
 impl ProcedureLoops {
     pub fn new<'a, 'tcx: 'a>(mir: &'a mir::Body<'tcx>, real_edges: &RealEdges) -> ProcedureLoops {
-        let dominators = mir.dominators();
+        let dominators = mir.basic_blocks.dominators();
 
-        let mut back_edges: HashSet<(_, _)> = HashSet::new();
+        let mut back_edges: FxHashSet<(_, _)> = FxHashSet::default();
         for bb in mir.basic_blocks().indices() {
             for successor in real_edges.successors(bb) {
                 if dominators.is_dominated_by(bb, *successor) {
@@ -246,30 +239,30 @@ impl ProcedureLoops {
             }
         }
 
-        let mut loop_bodies = HashMap::new();
+        let mut loop_bodies = FxHashMap::default();
         for &(source, target) in back_edges.iter() {
-            let body = loop_bodies.entry(target).or_insert(HashSet::new());
+            let body = loop_bodies.entry(target).or_insert_with(FxHashSet::default);
             collect_loop_body(target, source, real_edges, body);
         }
 
-        let mut enclosing_loop_heads_set: HashMap<BasicBlockIndex, HashSet<BasicBlockIndex>> =
-            HashMap::new();
+        let mut enclosing_loop_heads_set: FxHashMap<BasicBlockIndex, FxHashSet<BasicBlockIndex>> =
+            FxHashMap::default();
         for (&loop_head, loop_body) in loop_bodies.iter() {
             for &block in loop_body.iter() {
                 let heads_set = enclosing_loop_heads_set
                     .entry(block)
-                    .or_insert(HashSet::new());
+                    .or_insert_with(FxHashSet::default);
                 heads_set.insert(loop_head);
             }
         }
 
-        let loop_heads: HashSet<_> = loop_bodies.keys().map(|k| *k).collect();
-        let mut loop_head_depths = HashMap::new();
+        let loop_heads: FxHashSet<_> = loop_bodies.keys().copied().collect();
+        let mut loop_head_depths = FxHashMap::default();
         for &loop_head in loop_heads.iter() {
             loop_head_depths.insert(loop_head, enclosing_loop_heads_set[&loop_head].len());
         }
 
-        let mut enclosing_loop_heads = HashMap::new();
+        let mut enclosing_loop_heads = FxHashMap::default();
         for (&block, loop_heads) in enclosing_loop_heads_set.iter() {
             let mut heads: Vec<BasicBlockIndex> = loop_heads.iter().cloned().collect();
             heads.sort_by_key(|bbi| loop_head_depths[bbi]);
@@ -284,11 +277,11 @@ impl ProcedureLoops {
         };
 
         let ordered_blocks = order_basic_blocks(mir, real_edges, &back_edges, &get_loop_depth);
-        let block_order: HashMap<BasicBlockIndex, usize> = ordered_blocks
+        let block_order: FxHashMap<BasicBlockIndex, usize> = ordered_blocks
             .iter().cloned().enumerate().map(|(i, v)| (v, i)).collect();
         debug!("ordered_blocks: {:?}", ordered_blocks);
 
-        let mut ordered_loop_bodies = HashMap::new();
+        let mut ordered_loop_bodies = FxHashMap::default();
         for (&loop_head, loop_body) in loop_bodies.iter() {
             let mut ordered_body: Vec<_> = loop_body.iter().cloned().collect();
             ordered_body.sort_by_key(|bb| block_order[bb]);
@@ -301,14 +294,14 @@ impl ProcedureLoops {
         // They are those blocks in the loop that:
         // 1. have a SwitchInt terminator (TODO: can we remove this condition?)
         // 2. have an out-edge that exits from the loop
-        let mut loop_exit_blocks = HashMap::new();
+        let mut loop_exit_blocks = FxHashMap::default();
         for &loop_head in loop_heads.iter() {
             let loop_head_depth = loop_head_depths[&loop_head];
             let loop_body = &loop_bodies[&loop_head];
             let ordered_loop_body = &ordered_loop_bodies[&loop_head];
 
             let mut exit_blocks = vec![];
-            let mut border = HashSet::new();
+            let mut border = FxHashSet::default();
             border.insert(loop_head);
 
             for &curr_bb in ordered_loop_body {
@@ -316,10 +309,7 @@ impl ProcedureLoops {
 
                 // Decide if this block has an exit edge
                 let term = mir[curr_bb].terminator();
-                let is_switch_int = match term.kind {
-                    mir::TerminatorKind::SwitchInt { .. } => true,
-                    _ => false
-                };
+                let is_switch_int = matches!(term.kind, mir::TerminatorKind::SwitchInt { .. });
                 let has_exit_edge = real_edges.successors(curr_bb).iter().any(
                     |&bb| get_loop_depth(bb) < loop_head_depth
                 );
@@ -345,7 +335,7 @@ impl ProcedureLoops {
 
         // The nonconditional blocks of a loop are those blocks of the loop body that dominate all
         // the blocks from which a back-edge starts.
-        let mut nonconditional_loop_blocks = HashMap::new();
+        let mut nonconditional_loop_blocks = FxHashMap::default();
         for (&loop_head, loop_body) in loop_bodies.iter() {
             nonconditional_loop_blocks.insert(loop_head, loop_body.clone());
         }
@@ -457,7 +447,7 @@ impl ProcedureLoops {
     ) -> Vec<PlaceAccess<'tcx>> {
         let body = self.loop_bodies.get(&loop_head).unwrap();
         let mut visitor = AccessCollector {
-            body: body,
+            body,
             accessed_places: Vec::new(),
         };
         visitor.visit_body(mir);
@@ -470,7 +460,7 @@ impl ProcedureLoops {
         &self,
         loop_head: BasicBlockIndex,
         mir: &'a mir::Body<'tcx>,
-        definitely_initalised_paths: Option<&PlaceSet>,
+        definitely_initalised_paths: Option<&PlaceSet<'tcx>>,
     ) -> (
         Vec<mir::Place<'tcx>>,
         Vec<mir::Place<'tcx>>,
@@ -501,18 +491,16 @@ impl ProcedureLoops {
         debug!("accesses = {:?}", accesses);
         let mut accesses_pairs: Vec<_> = accesses
             .iter()
-            .map(|PlaceAccess { place, kind, .. }| (place, *kind))
+            .map(|PlaceAccess { place, kind, .. }| (*place, *kind))
             .collect();
         debug!("accesses_pairs = {:?}", accesses_pairs);
         if let Some(paths) = definitely_initalised_paths {
             debug!("definitely_initalised_paths = {:?}", paths);
-            accesses_pairs = accesses_pairs
-                .into_iter()
-                .filter(|(place, kind)| {
+            accesses_pairs.retain(|(place, kind)| {
                     paths.iter().any(|initialised_place|
                         // If the prefix is definitely initialised, then this place is a potential
                         // loop invariant.
-                        utils::is_prefix(place, initialised_place) ||
+                        utils::is_prefix(*place, *initialised_place) ||
                         // If the access is store, then we only need the path to exist, which is
                         // guaranteed if we have at least some of the leaves still initialised.
                         //
@@ -520,10 +508,9 @@ impl ProcedureLoops {
                         // issue: https://github.com/rust-lang/rust/issues/21232.
                         (
                             *kind == PlaceAccessKind::Store &&
-                            utils::is_prefix(initialised_place, place)
+                            utils::is_prefix(*initialised_place, *place)
                         ))
-                })
-                .collect();
+                });
         }
         debug!("accesses_pairs = {:?}", accesses_pairs);
         // Paths to whose leaves we need write permissions.
@@ -533,10 +520,10 @@ impl ProcedureLoops {
                 let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
                     kind.is_write_access()
                         && place != potential_prefix
-                        && utils::is_prefix(place, potential_prefix)
+                        && utils::is_prefix(*place, *potential_prefix)
                 });
                 if !has_prefix && !write_leaves.contains(place) {
-                    write_leaves.push((*place).clone());
+                    write_leaves.push(*place);
                 }
             }
         }
@@ -549,13 +536,13 @@ impl ProcedureLoops {
                 let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
                     (kind.is_write_access() || *kind == PlaceAccessKind::MutableBorrow)
                         && place != potential_prefix
-                        && utils::is_prefix(place, potential_prefix)
+                        && utils::is_prefix(*place, *potential_prefix)
                 });
                 if !has_prefix
                     && !write_leaves.contains(place)
                     && !mut_borrow_leaves.contains(place)
                 {
-                    mut_borrow_leaves.push((*place).clone());
+                    mut_borrow_leaves.push(*place);
                 }
             }
         }
@@ -566,14 +553,14 @@ impl ProcedureLoops {
         for (place, kind) in accesses_pairs.iter() {
             if !kind.is_write_access() {
                 let has_prefix = accesses_pairs.iter().any(|(potential_prefix, _kind)| {
-                    place != potential_prefix && utils::is_prefix(place, potential_prefix)
+                    place != potential_prefix && utils::is_prefix(*place, *potential_prefix)
                 });
                 if !has_prefix
                     && !read_leaves.contains(place)
                     && !write_leaves.contains(place)
                     && !mut_borrow_leaves.contains(place)
                 {
-                    read_leaves.push((*place).clone());
+                    read_leaves.push(*place);
                 }
             }
         }

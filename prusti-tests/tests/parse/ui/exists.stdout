@@ -1,0 +1,100 @@
+// compile-flags: -Pprint_desugared_specs=true -Pprint_typeckd_specs=true -Pno_verify=true -Phide_uuids=true
+// normalize-stdout-test: "[a-z0-9]{32}" -> "$(NUM_UUID)"
+// normalize-stdout-test: "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}" -> "$(UUID)"
+// normalize-stdout-test: "/[[a-z0-9]{4}/]::" -> "[$(CRATE_ID)]::"
+
+
+
+
+
+
+
+
+#![feature(type_ascription)]
+#![feature(stmt_expr_attributes)]
+#![feature(register_tool)]
+#![register_tool(prusti)]
+#[prelude_import]
+use std::prelude::rust_2018::*;
+#[macro_use]
+extern crate std;
+use prusti_contracts::*;
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test1_$(NUM_UUID)() -> bool {
+    !!((exists((),
+                            #[prusti::spec_only] |a: i32| -> bool
+                                { (((a + a == a + a)): bool) })): bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test1() {}
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test2_$(NUM_UUID)() -> bool {
+    !!((exists((),
+                            #[prusti::spec_only] |a: i32, b: i32| -> bool
+                                {
+                                    (((a + b == a + b && true) == (a + b == a + b)): bool)
+                                })): bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test2() {}
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test3_$(NUM_UUID)() -> bool {
+    !!((exists((),
+                            #[prusti::spec_only] |a: i32, b: i32| -> bool
+                                { (((!(a + b == a + b) || (a + b == a + b))): bool) })):
+                    bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test3() {}
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test4_$(NUM_UUID)() -> bool {
+    !!((exists(((#[prusti::spec_only] |a: i32| (1),
+                                    #[prusti::spec_only] |a: i32| (2 == 2 && true)),),
+                            #[prusti::spec_only] |a: i32| -> bool
+                                { ((a + a == a + a): bool) })): bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test4() {}
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test5_$(NUM_UUID)() -> bool {
+    !!((exists(((#[prusti::spec_only] |a: i32, b: i32| (1),
+                                    #[prusti::spec_only] |a: i32, b: i32| (2)),
+                                (#[prusti::spec_only] |a: i32, b: i32| (1),)),
+                            #[prusti::spec_only] |a: i32, b: i32| -> bool
+                                { ((a + b == a + b): bool) })): bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test5() {}
+#[allow(unused_must_use, unused_parens, unused_variables, dead_code)]
+#[prusti::spec_only]
+#[prusti::spec_id = "$(NUM_UUID)"]
+fn prusti_pre_item_test6_$(NUM_UUID)() -> bool {
+    !!((exists(((#[prusti::spec_only] |a: i32, b: i32| (1),
+                                    #[prusti::spec_only] |a: i32, b: i32| (2),
+                                    #[prusti::spec_only] |a: i32, b: i32| (3)),
+                                (#[prusti::spec_only] |a: i32, b: i32| (1),
+                                    #[prusti::spec_only] |a: i32, b: i32| (2)),
+                                (#[prusti::spec_only] |a: i32, b: i32| (1),)),
+                            #[prusti::spec_only] |a: i32, b: i32| -> bool
+                                { (((!(a + b == a + b) || (a + b == a + b))): bool) })):
+                    bool)
+}
+#[prusti::pre_spec_id_ref = "$(NUM_UUID)"]
+fn test6() {}
+fn main() {}
+ProcedureSpecification { span: Some($DIR/exists.rs:9:1: 9:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:5 ~ exists[$(CRATE_ID)]::prusti_pre_item_test1_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }
+ProcedureSpecification { span: Some($DIR/exists.rs:12:1: 12:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:8 ~ exists[$(CRATE_ID)]::prusti_pre_item_test2_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }
+ProcedureSpecification { span: Some($DIR/exists.rs:15:1: 15:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:11 ~ exists[$(CRATE_ID)]::prusti_pre_item_test3_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }
+ProcedureSpecification { span: Some($DIR/exists.rs:18:1: 18:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:14 ~ exists[$(CRATE_ID)]::prusti_pre_item_test4_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }
+ProcedureSpecification { span: Some($DIR/exists.rs:21:1: 21:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:19 ~ exists[$(CRATE_ID)]::prusti_pre_item_test5_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }
+ProcedureSpecification { span: Some($DIR/exists.rs:24:1: 24:11 (#0)), kind: Inherent(Impure), pres: Inherent([DefId(0:25 ~ exists[$(CRATE_ID)]::prusti_pre_item_test6_$(NUM_UUID))]), posts: Empty, pledges: Empty, trusted: Inherent(false) }

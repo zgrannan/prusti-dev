@@ -5,7 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 /// The structure describing a Java exception
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct JavaException {
     message: String,
     stack_trace: String,
@@ -15,7 +15,7 @@ impl JavaException {
     pub fn new(message: String, stack_trace: String) -> Self {
         JavaException {
             message,
-            stack_trace
+            stack_trace,
         }
     }
 

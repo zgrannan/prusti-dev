@@ -5,12 +5,11 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use glob::glob;
-use std::process::{Command, ExitStatus, Stdio, Child};
-use std::path::PathBuf;
-use std::io::{BufReader, BufRead};
-use std::env;
-use prusti_launch::find_java_home;
-use std::collections::HashMap;
+use std::{
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+};
 
 fn find_executable_path(base_name: &str) -> PathBuf {
     let target_directory = if cfg!(debug_assertions) {
@@ -23,20 +22,15 @@ fn find_executable_path(base_name: &str) -> PathBuf {
     } else {
         base_name.to_string()
     };
-    let local_prusti_rustc_path: PathBuf = [
-        "target",
-        target_directory,
-        &executable_name
-    ].iter().collect();
+    let local_prusti_rustc_path: PathBuf = ["target", target_directory, &executable_name]
+        .iter()
+        .collect();
     if local_prusti_rustc_path.exists() {
         return local_prusti_rustc_path;
     }
-    let workspace_prusti_rustc_path: PathBuf = [
-        "..",
-        "target",
-        target_directory,
-        &executable_name
-    ].iter().collect();
+    let workspace_prusti_rustc_path: PathBuf = ["..", "target", target_directory, &executable_name]
+        .iter()
+        .collect();
     if workspace_prusti_rustc_path.exists() {
         return workspace_prusti_rustc_path;
     }
@@ -47,38 +41,58 @@ fn find_executable_path(base_name: &str) -> PathBuf {
     );
 }
 
-fn run_on_test_files<F: Fn(&PathBuf) -> ExitStatus>(run: F) {
-    let pass_entries = glob("verify/pass/quick/**/*.jpg")
-        .expect("failed to read glob pattern");
+fn run_on_test_files<F: Fn(&PathBuf) -> Command>(run: F) {
+    let mut num_pass_tests = 0;
+    let pass_entries = glob("tests/pass/**/*.rs").expect("failed to read glob pattern");
     for entry in pass_entries {
-        match entry {
-            Err(e) => println!("{:?}", e),
-            Ok(path) => {
-                let exit_status = run(&path);
-                assert!(
-                    exit_status.success(),
-                    "Test case {:?} unexpectedly failed.",
-                    path
-                );
-            },
+        let path = entry.unwrap();
+        num_pass_tests += 1;
+        let mut cmd = run(&path);
+        println!("Running {:?}", cmd);
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap_or_else(|err| panic!("Failed to execute process: {:?}", err));
+        if !output.status.success() {
+            println!("Test case {:?} unexpectedly failed.", path);
+            println!("Exit status: {:?}", output.status);
+            println!("┌─── Begin of stdout ───┐");
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("└──── End of stdout ────┘");
+            println!("┌─── Begin of stderr ───┐");
+            println!("{}", String::from_utf8_lossy(&output.stderr));
+            println!("└──── End of stderr ────┘");
+            panic!("Test case unexpectedly failed. See the output for details.");
         }
     }
+    assert!(num_pass_tests >= 2);
 
-    let fail_entries = glob("verify/fail/quick/**/*.jpg")
-        .expect("failed to read glob pattern");
+    let mut num_fail_tests = 0;
+    let fail_entries = glob("tests/fail/**/*.rs").expect("failed to read glob pattern");
     for entry in fail_entries {
-        match entry {
-            Err(e) => println!("{:?}", e),
-            Ok(path) => {
-                let exit_status = run(&path);
-                assert!(
-                    !exit_status.success(),
-                    "Test case {:?} unexpectedly succeeded.",
-                    path
-                );
-            },
+        let path = entry.unwrap();
+        num_fail_tests += 1;
+        let mut cmd = run(&path);
+        println!("Running {:?}", cmd);
+        let output = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap_or_else(|err| panic!("Failed to execute process: {:?}", err));
+        if output.status.success() {
+            println!("Test case {:?} unexpectedly succeeded.", path);
+            println!("Exit status: {:?}", output.status);
+            println!("┌─── Begin of stdout ───┐");
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+            println!("└──── End of stdout ────┘");
+            println!("┌─── Begin of stderr ───┐");
+            println!("{}", String::from_utf8_lossy(&output.stderr));
+            println!("└──── End of stderr ────┘");
+            panic!("Test case unexpectedly failed. See the output for details.");
         }
     }
+    assert!(num_fail_tests >= 2);
 }
 
 /// Kill a spawned Child process even in case of panics.
@@ -96,37 +110,67 @@ impl Drop for ChildGuard {
 fn test_prusti_rustc() {
     let prusti_rustc = find_executable_path("prusti-rustc");
 
-    run_on_test_files(|program: &PathBuf| -> ExitStatus {
-        println!("Running {:?} on {:?}...", prusti_rustc.display(), program.display());
-        Command::new(&prusti_rustc)
-            .arg("--edition=2018")
+    run_on_test_files(|program: &PathBuf| {
+        let mut cmd = Command::new(&prusti_rustc);
+        cmd.arg("--edition=2018")
             .arg(program)
-            .env_clear()
-            .env("RUST_BACKTRACE", "1")
-            .status()
-            .expect("failed to execute prusti-rustc")
+            .env("PRUSTI_LOG", "info")
+            .env("RUST_BACKTRACE", "1");
+        cmd
     });
 }
+
+#[test]
+fn test_prusti_rustc_dump() {
+    let prusti_rustc = find_executable_path("prusti-rustc");
+
+    run_on_test_files(|program: &PathBuf| {
+        let mut cmd = Command::new(&prusti_rustc);
+        cmd.arg("--edition=2018")
+            .arg(program)
+            .env("PRUSTI_DUMP_DEBUG_INFO", "true")
+            .env("PRUSTI_DUMP_DEBUG_INFO_DURING_FOLD", "true")
+            .env("PRUSTI_DUMP_PATH_CTXT_IN_DEBUG_INFO", "true")
+            .env("PRUSTI_DUMP_REBORROWING_DAG_IN_DEBUG_INFO", "true")
+            .env("PRUSTI_DUMP_BORROWCK_INFO", "true")
+            .env("PRUSTI_DUMP_VIPER_PROGRAM", "true")
+            .env("PRUSTI_PRINT_DESUGARED_SPECS", "true")
+            .env("PRUSTI_PRINT_TYPECKD_SPECS", "true")
+            .env("PRUSTI_LOG", "info")
+            .env("RUST_BACKTRACE", "1");
+        cmd
+    });
+}
+
+/*
+// The `PRUSTI_BE_RUSTC` flag doesn't change the behaviour of Prusti macros
+// so this test fails.
+#[test]
+fn test_prusti_be_rustc() {
+    let prusti_rustc = find_executable_path("prusti-rustc");
+
+    run_on_test_files(|program: &PathBuf| {
+        let mut cmd = Command::new(&prusti_rustc);
+        cmd.arg("--edition=2018")
+            .arg(program)
+            .env("PRUSTI_BE_RUSTC", "true")
+            .env("PRUSTI_LOG", "info")
+            .env("RUST_BACKTRACE", "1");
+        cmd
+    });
+}
+*/
 
 #[test]
 fn test_prusti_rustc_with_server() {
     let prusti_rustc = find_executable_path("prusti-rustc");
     let prusti_server = find_executable_path("prusti-server");
-    let java_home = find_java_home().expect("Failed to find Java home directory.");
 
     // Preserve SYSTEMROOT on Windows.
     // See: https://travis-ci.community/t/socket-the-requested-service-provider-could-not-be-loaded-or-initialized/1127
-    let filtered_env : HashMap<String, String> = env::vars()
-        .filter(|&(ref k, _)| k == "SYSTEMROOT")
-        .collect();
-
     let mut server_child = Command::new(&prusti_server)
-        .arg("--port=0")
-        .env_clear()
-        .env("RUST_LOG", "warn")
+        .env("PRUSTI_LOG", "warn")
         .env("RUST_BACKTRACE", "1")
-        .env("JAVA_HOME", java_home)
-        .envs(&filtered_env)
         .stdout(Stdio::piped())
         .spawn()
         .expect("failed to start prusti-server");
@@ -144,7 +188,7 @@ fn test_prusti_rustc_with_server() {
                 Ok(line) => {
                     if let Some(port) = line.strip_prefix("port: ") {
                         opt_server_port = Some(port.to_string());
-                        break
+                        break;
                     }
                 }
             }
@@ -154,15 +198,16 @@ fn test_prusti_rustc_with_server() {
 
     let _server_child_guard = ChildGuard(server_child);
 
-    run_on_test_files(|program: &PathBuf| -> ExitStatus {
-        println!("Running {:?} on {:?}...", prusti_rustc.display(), program.display());
-        Command::new(&prusti_rustc)
-            .arg("--edition=2018")
+    run_on_test_files(|program: &PathBuf| {
+        let mut cmd = Command::new(&prusti_rustc);
+        cmd.arg("--edition=2018")
             .arg(program)
-            .env_clear()
+            .env("PRUSTI_LOG", "info")
             .env("RUST_BACKTRACE", "1")
-            .env("PRUSTI_SERVER_ADDRESS", format!("localhost:{}", server_port))
-            .status()
-            .expect("failed to execute prusti-rustc")
+            .env(
+                "PRUSTI_SERVER_ADDRESS",
+                format!("localhost:{}", server_port),
+            );
+        cmd
     });
 }

@@ -11,8 +11,8 @@ use std::{
 };
 
 pub trait LogLevel {
-    fn log_start(prefix: &String, name: &String);
-    fn log_finish(prefix: &String, name: &String, duration: Duration);
+    fn log_start(prefix: &str, name: &str);
+    fn log_finish(prefix: &str, name: &str, duration: Duration);
 }
 
 pub struct Stopwatch<Level: LogLevel> {
@@ -59,13 +59,15 @@ impl<Level: LogLevel> Stopwatch<Level> {
     /// Finishes up the current section, logging the time taken.
     ///
     /// - Note: Simply dropping the stopwatch has the same effect.
-    pub fn finish(mut self) {
-        self._finish();
+    pub fn finish(mut self) -> Duration {
+        self._finish()
     }
 
-    fn _finish(&mut self) {
-        Level::log_finish(&self.prefix, &self.section_name, self.start_time.elapsed());
+    fn _finish(&mut self) -> Duration {
+        let duration = self.start_time.elapsed();
+        Level::log_finish(&self.prefix, &self.section_name, duration);
         self.is_finished = true;
+        duration
     }
 }
 
@@ -78,6 +80,8 @@ impl<Level: LogLevel> Drop for Stopwatch<Level> {
 }
 
 pub mod log_level {
+    use log::{error, warn, info, debug, trace};
+
     use super::*;
 
     macro_rules! log_level {
@@ -85,11 +89,11 @@ pub mod log_level {
             pub struct $name;
 
             impl LogLevel for $name {
-                fn log_start(prefix: &String, name: &String) {
+                fn log_start(prefix: &str, name: &str) {
                     $level!("{}Starting: {}", prefix, name);
                 }
 
-                fn log_finish(prefix: &String, name: &String, duration: Duration) {
+                fn log_finish(prefix: &str, name: &str, duration: Duration) {
                     $level!(
                         "{}Completed: {} ({}.{:03} seconds)",
                         prefix,

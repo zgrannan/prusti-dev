@@ -4,33 +4,29 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use crate::{jni_utils::JniUtils, verification_context::*};
 use jni::*;
-use jni_utils::JniUtils;
-use std::env;
-use std::fs;
-use verification_context::*;
+use log::{debug, info};
+use std::{env, fs, path::Path};
 use viper_sys::wrappers::*;
-use std::path::Path;
 
 pub struct Viper {
     jvm: JavaVM,
 }
 
-impl Default for Viper {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Viper {
-    pub fn new() -> Self {
-        Self::new_with_args(vec![])
+    pub fn new_for_tests() -> Self {
+        let viper_home = env::var("VIPER_HOME")
+            .expect("the VIPER_HOME environment variable should not be empty when running tests");
+        Self::new(&viper_home)
     }
 
-    pub fn new_with_args(java_args: Vec<String>) -> Self {
-        let viper_home = env::var("VIPER_HOME")
-            .expect("the VIPER_HOME environment variable should not be empty");
-        let heap_size = env::var("JAVA_HEAP_SIZE").unwrap_or_else(|_| "4096".to_string());
+    pub fn new(viper_home: &str) -> Self {
+        Self::new_with_args(viper_home, vec![])
+    }
+
+    pub fn new_with_args(viper_home: &str, java_args: Vec<String>) -> Self {
+        let heap_size = env::var("JAVA_HEAP_SIZE").unwrap_or_else(|_| "512".to_string());
 
         debug!("Using Viper home: '{}'", &viper_home);
         assert!(
@@ -40,27 +36,30 @@ impl Viper {
         );
 
         let jar_paths: Vec<String> = fs::read_dir(&viper_home)
-            .expect(&format!("failed to open {:?}", viper_home))
+            .unwrap_or_else(|_| panic!("failed to open {:?}", viper_home))
             .map(|x| x.unwrap().path().to_str().unwrap().to_string())
             .collect();
 
-        debug!("Java classpath: {}", jar_paths.clone().join(":"));
+        debug!("Java classpath: {}", jar_paths.join(":"));
 
         let classpath_separator = if cfg!(windows) { ";" } else { ":" };
         let init_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
-            .option(&format!("-Djava.class.path={}", jar_paths.join(classpath_separator)))
+            .option(&format!(
+                "-Djava.class.path={}",
+                jar_paths.join(classpath_separator)
+            ))
             // maximum heap size
             .option(&format!("-Xmx{}m", heap_size))
             // stack size
-            .option("-Xss1024m");
-            //.option("-Xdebug")
-            //.option("-verbose:gc")
-            //.option("-Xcheck:jni")
-            //.option("-XX:+CheckJNICalls")
-            //.option("-Djava.security.debug=all")
-            //.option("-verbose:jni")
-            //.option("-XX:+TraceJNICalls")
+            .option("-Xss512m");
+        //.option("-Xdebug")
+        //.option("-verbose:gc")
+        //.option("-Xcheck:jni")
+        //.option("-XX:+CheckJNICalls")
+        //.option("-Djava.security.debug=all")
+        //.option("-verbose:jni")
+        //.option("-XX:+TraceJNICalls")
         let jvm_args = java_args
             .into_iter()
             .fold(init_args, |curr_args, opt| curr_args.option(&opt))
@@ -94,12 +93,10 @@ impl Viper {
             info!("Using JVM {}, Java {}", vm_name, java_version);
         }
 
-        let this = Viper { jvm };
-
-        this
+        Viper { jvm }
     }
 
-    pub fn new_verification_context(&self) -> VerificationContext {
+    pub fn attach_current_thread(&self) -> VerificationContext {
         let env_guard = self
             .jvm
             .attach_current_thread()

@@ -1,28 +1,15 @@
 name: Test on crates
 
 on:
+  workflow_dispatch:
   push:
-    branches: 'master'
-  pull_request:
-    branches: [ '**' ]
+    branches: [master, staging, trying]
+    paths-ignore: 'docs/**'
 
 jobs:
   # Test `cargo-prusti` on a collection of crates.
   test-crates:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v2
-      - name: Setup Python 3
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
-      - uses: actions/setup-java@v1
-        with:
-          java-version: '15'
-      - name: Set up the environment
-        run: python x.py setup
-      - name: Build with cargo --release
-        run: python x.py build --release --all --verbose
-      - name: Test Prusti on a collection of crates
-        run: ./target/release/test-crates
+      - name: Do nothing
+        run: true

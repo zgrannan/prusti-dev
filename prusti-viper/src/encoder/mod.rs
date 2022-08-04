@@ -6,9 +6,8 @@
 
 pub use self::encoder::Encoder;
 
-mod borrows;
 mod builtin_encoder;
-mod specs_closures_collector;
+#[allow(clippy::module_inception)]
 mod encoder;
 mod errors;
 mod foldunfold;
@@ -20,15 +19,17 @@ mod mir_interpreter;
 mod name_interner;
 mod places;
 mod procedure_encoder;
-mod pure_function_encoder;
-mod spec_encoder;
 mod spec_function_encoder;
 pub use spec_function_encoder::SpecFunctionKind;
 mod stub_function_encoder;
 mod stub_procedure_encoder;
-mod type_encoder;
 mod utils;
 mod snapshot;
 mod mirror_function_encoder;
+mod mir;
+mod high;
+mod middle;
 mod purifier;
-mod array_encoder;
+pub mod counterexample;
+pub mod counterexample_translation;
+mod definition_collector;

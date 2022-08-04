@@ -6,10 +6,8 @@
 
 //! Optimization that removes unused temporary variables.
 
-use super::super::super::ast;
-use super::super::super::cfg;
-use std::collections::HashSet;
-use std::mem;
+use crate::vir::polymorphic_vir::{ast, cfg};
+use std::{collections::HashSet, mem};
 
 /// Remove unused temporary variables and related inhale statements.
 pub fn remove_unused_vars(mut method: cfg::CfgMethod) -> cfg::CfgMethod {
@@ -20,9 +18,7 @@ pub fn remove_unused_vars(mut method: cfg::CfgMethod) -> cfg::CfgMethod {
         ast::StmtWalker::walk(&mut collector, stmt);
     });
     method.walk_successors(|successor| match successor {
-        cfg::Successor::Undefined |
-        cfg::Successor::Return |
-        cfg::Successor::Goto(_) => {}
+        cfg::Successor::Undefined | cfg::Successor::Return | cfg::Successor::Goto(_) => {}
         cfg::Successor::GotoSwitch(conditional_targets, _) => {
             for (expr, _) in conditional_targets {
                 ast::ExprWalker::walk(&mut collector, expr);
@@ -39,10 +35,8 @@ pub fn remove_unused_vars(mut method: cfg::CfgMethod) -> cfg::CfgMethod {
         }
     }
     method.local_vars = used_vars;
-    let mut remover = UnusedVarRemover {
-        unused_vars: unused_vars,
-    };
-    let mut sentinel_stmt = ast::Stmt::Comment(String::from("moved out stmt"));
+    let mut remover = UnusedVarRemover { unused_vars };
+    let mut sentinel_stmt = ast::Stmt::comment("moved out stmt");
     for block in &mut method.basic_blocks {
         for stmt in &mut block.stmts {
             mem::swap(&mut sentinel_stmt, stmt);
@@ -65,18 +59,10 @@ impl ast::ExprWalker for UsedVarCollector {
     }
     fn walk_predicate_access_predicate(
         &mut self,
-        _predicate_name: &str,
-        _arg: &ast::Expr,
-        _perm_amount: ast::PermAmount,
-        _pos: &ast::Position,
+        _predicate_access_predicate: &ast::PredicateAccessPredicate,
     ) {
     }
-    fn walk_field_access_predicate(
-        &mut self,
-        _expr: &ast::Expr,
-        _perm_amount: ast::PermAmount,
-        _pos: &ast::Position,
-    ) {
+    fn walk_field_access_predicate(&mut self, _field_access_predicate: &ast::FieldAccessPredicate) {
     }
 }
 
@@ -89,17 +75,18 @@ impl ast::StmtWalker for UsedVarCollector {
     }
     fn walk_package_magic_wand(
         &mut self,
-        wand: &ast::Expr,
-        body: &Vec<ast::Stmt>,
-        _label: &str,
-        vars: &[ast::LocalVar],
-        _p: &ast::Position,
+        ast::PackageMagicWand {
+            magic_wand,
+            package_stmts,
+            variables,
+            ..
+        }: &ast::PackageMagicWand,
     ) {
-        self.walk_expr(wand);
-        for statement in body {
+        self.walk_expr(magic_wand);
+        for statement in package_stmts {
             self.walk(statement);
         }
-        for var in vars {
+        for var in variables {
             self.used_vars.remove(&var.name);
         }
     }
@@ -112,32 +99,45 @@ struct UnusedVarRemover {
 impl ast::ExprFolder for UnusedVarRemover {
     fn fold_predicate_access_predicate(
         &mut self,
-        predicate_name: String,
-        arg: Box<ast::Expr>,
-        perm_amount: ast::PermAmount,
-        pos: ast::Position,
+        ast::PredicateAccessPredicate {
+            predicate_type,
+            argument,
+            permission,
+            position,
+        }: ast::PredicateAccessPredicate,
     ) -> ast::Expr {
-        match arg {
-            box ast::Expr::Local(ref var, _) => {
-                if self.unused_vars.contains(var) {
-                    return true.into();
-                }
+        if let box ast::Expr::Local(ast::Local {
+            variable: ref var, ..
+        }) = argument
+        {
+            if self.unused_vars.contains(var) {
+                return true.into();
             }
-            _ => {}
         }
-        ast::Expr::PredicateAccessPredicate(predicate_name, arg, perm_amount, pos)
+        ast::Expr::PredicateAccessPredicate(ast::PredicateAccessPredicate {
+            predicate_type,
+            argument,
+            permission,
+            position,
+        })
     }
     fn fold_field_access_predicate(
         &mut self,
-        expr: Box<ast::Expr>,
-        perm_amount: ast::PermAmount,
-        pos: ast::Position,
+        ast::FieldAccessPredicate {
+            base,
+            permission,
+            position,
+        }: ast::FieldAccessPredicate,
     ) -> ast::Expr {
-        let var = expr.get_base();
+        let var = base.get_base();
         if self.unused_vars.contains(&var) {
             return true.into();
         }
-        ast::Expr::FieldAccessPredicate(expr, perm_amount, pos)
+        ast::Expr::FieldAccessPredicate(ast::FieldAccessPredicate {
+            base,
+            permission,
+            position,
+        })
     }
 }
 

@@ -4,42 +4,33 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use prusti_common::vir;
-use prusti_common::vir::PermAmount;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt;
 use log::trace;
-use crate::encoder::foldunfold::FoldUnfoldError;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::fmt;
+use vir_crate::polymorphic::{Expr, PermAmount, Position, Type};
 
 /// An access or predicate permission to a place
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Perm {
-    Acc(vir::Expr, PermAmount),
-    Pred(vir::Expr, PermAmount),
+    Acc(Expr, PermAmount),
+    Pred(Expr, PermAmount),
 }
 
 impl Perm {
-    pub fn acc(place: vir::Expr, perm_amount: PermAmount) -> Self {
+    pub fn acc(place: Expr, perm_amount: PermAmount) -> Self {
         Perm::Acc(place, perm_amount)
     }
 
-    pub fn pred(place: vir::Expr, perm_amount: PermAmount) -> Self {
+    pub fn pred(place: Expr, perm_amount: PermAmount) -> Self {
         Perm::Pred(place, perm_amount)
     }
 
     pub fn is_acc(&self) -> bool {
-        match self {
-            Perm::Acc(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Perm::Acc(_, _))
     }
 
     pub fn is_pred(&self) -> bool {
-        match self {
-            Perm::Pred(_, _) => true,
-            _ => false,
-        }
+        matches!(self, Perm::Pred(_, _))
     }
 
     pub fn is_curr(&self) -> bool {
@@ -50,8 +41,8 @@ impl Perm {
         self.get_place().is_local()
     }
 
-    pub fn typed_ref_name(&self) -> Option<String> {
-        self.get_place().typed_ref_name()
+    pub fn get_type(&self) -> &Type {
+        self.get_place().get_type()
     }
 
     pub fn get_label(&self) -> Option<&String> {
@@ -65,7 +56,7 @@ impl Perm {
         }
     }
 
-    pub fn get_place(&self) -> &vir::Expr {
+    pub fn get_place(&self) -> &Expr {
         match self {
             &Perm::Acc(ref place, _) | &Perm::Pred(ref place, _) => place,
         }
@@ -73,7 +64,7 @@ impl Perm {
 
     pub fn map_place<F>(self, f: F) -> Self
     where
-        F: Fn(vir::Expr) -> vir::Expr,
+        F: Fn(Expr) -> Expr,
     {
         match self {
             Perm::Acc(place, fr) => Perm::Acc(f(place), fr),
@@ -81,7 +72,7 @@ impl Perm {
         }
     }
 
-    pub fn has_proper_prefix(&self, other: &vir::Expr) -> bool {
+    pub fn has_proper_prefix(&self, other: &Expr) -> bool {
         self.get_place().has_proper_prefix(other)
     }
 
@@ -96,6 +87,8 @@ impl Perm {
         }
     }
 
+    // https://github.com/rust-lang/rust-clippy/issues/8542
+    #[allow(clippy::needless_match)]
     pub fn update_perm_amount(self, new_perm: PermAmount) -> Self {
         assert!(self.get_perm_amount().is_valid_for_specs()); // Just a sanity check.
         assert!(new_perm.is_valid_for_specs());
@@ -105,7 +98,8 @@ impl Perm {
         }
     }
 
-    pub fn set_default_pos(self, pos: vir::Position) -> Self {
+    #[must_use]
+    pub fn set_default_pos(self, pos: Position) -> Self {
         match self {
             Perm::Acc(expr, perm) => Perm::Acc(expr.set_default_pos(pos), perm),
             Perm::Pred(expr, perm) => Perm::Pred(expr.set_default_pos(pos), perm),
@@ -116,8 +110,8 @@ impl Perm {
 impl fmt::Display for Perm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Perm::Acc(ref place, perm_amount) => write!(f, "Acc({}, {})", place, perm_amount),
-            &Perm::Pred(ref place, perm_amount) => write!(f, "Pred({}, {})", place, perm_amount),
+            Perm::Acc(ref place, perm_amount) => write!(f, "Acc({}, {})", place, perm_amount),
+            Perm::Pred(ref place, perm_amount) => write!(f, "Pred({}, {})", place, perm_amount),
         }
     }
 }
@@ -125,8 +119,8 @@ impl fmt::Display for Perm {
 impl fmt::Debug for Perm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &Perm::Acc(ref place, perm_amount) => write!(f, "Acc({:?}, {})", place, perm_amount),
-            &Perm::Pred(ref place, perm_amount) => write!(f, "Pred({:?}, {})", place, perm_amount),
+            Perm::Acc(ref place, perm_amount) => write!(f, "Acc({:?}, {})", place, perm_amount),
+            Perm::Pred(ref place, perm_amount) => write!(f, "Pred({:?}, {})", place, perm_amount),
         }
     }
 }
@@ -134,15 +128,15 @@ impl fmt::Debug for Perm {
 /// A set of permissions
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PermSet {
-    acc_perms: HashMap<vir::Expr, PermAmount>,
-    pred_perms: HashMap<vir::Expr, PermAmount>,
+    acc_perms: FxHashMap<Expr, PermAmount>,
+    pred_perms: FxHashMap<Expr, PermAmount>,
 }
 
 impl PermSet {
     pub fn empty() -> Self {
         PermSet {
-            acc_perms: HashMap::new(),
-            pred_perms: HashMap::new(),
+            acc_perms: FxHashMap::default(),
+            pred_perms: FxHashMap::default(),
         }
     }
 
@@ -184,7 +178,7 @@ impl fmt::Display for PermSet {
 
 pub trait PermIterator {
     fn collect_curr(&mut self) -> Vec<Perm>;
-    fn group_by_label(&mut self) -> HashMap<Option<String>, Vec<Perm>>;
+    fn group_by_label(&mut self) -> FxHashMap<Option<String>, Vec<Perm>>;
 }
 
 impl<T> PermIterator for T
@@ -195,12 +189,12 @@ where
         self.filter(|perm| perm.is_curr()).collect()
     }
 
-    fn group_by_label(&mut self) -> HashMap<Option<String>, Vec<Perm>> {
-        let mut res_perms = HashMap::new();
+    fn group_by_label(&mut self) -> FxHashMap<Option<String>, Vec<Perm>> {
+        let mut res_perms = FxHashMap::default();
         for perm in self {
             res_perms
                 .entry(perm.get_label().cloned())
-                .or_insert(vec![])
+                .or_insert_with(Vec::new)
                 .push(perm.clone());
         }
         res_perms
@@ -210,27 +204,26 @@ where
 /// Note: since this function performs set difference, it does **not**
 /// panic if `left` has less permission than `right`.
 fn place_perm_difference(
-    mut left: HashMap<vir::Expr, PermAmount>,
-    mut right: HashMap<vir::Expr, PermAmount>,
-) -> HashMap<vir::Expr, PermAmount> {
+    mut left: FxHashMap<Expr, PermAmount>,
+    mut right: FxHashMap<Expr, PermAmount>,
+) -> FxHashMap<Expr, PermAmount> {
     for (place, right_perm_amount) in right.drain() {
-        match left.get(&place) {
-            Some(left_perm_amount) => match (*left_perm_amount, right_perm_amount) {
+        if let Some(left_perm_amount) = left.get(&place) {
+            match (*left_perm_amount, right_perm_amount) {
                 (PermAmount::Read, PermAmount::Read)
                 | (PermAmount::Read, PermAmount::Write)
                 | (PermAmount::Write, PermAmount::Write) => {
                     left.remove(&place);
                 }
                 _ => unreachable!("left={} right={}", left_perm_amount, right_perm_amount),
-            },
-            None => {}
+            }
         }
     }
     left
 }
 
 /// Set difference that takes into account that removing `x.f` also removes any `x.f.g.h`
-pub fn perm_difference(left: HashSet<Perm>, right: HashSet<Perm>) -> HashSet<Perm> {
+pub fn perm_difference(left: FxHashSet<Perm>, right: FxHashSet<Perm>) -> FxHashSet<Perm> {
     trace!(
         "[enter] perm_difference(left={:?}, right={:?})",
         left,

@@ -2,12 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use ast_factory::structs::Declaration;
-use ast_factory::structs::Expr;
-use ast_factory::structs::Field;
-use ast_factory::structs::Position;
-use ast_factory::structs::Stmt;
-use ast_factory::AstFactory;
+use crate::ast_factory::{
+    structs::{Declaration, Expr, Field, Position, Stmt},
+    AstFactory,
+};
 use jni::objects::JObject;
 use viper_sys::wrappers::viper::silver::ast;
 
@@ -64,6 +62,24 @@ impl<'a> AstFactory<'a> {
             self.jni.new_string(method_name),
             self.jni.new_seq(&map_to_jobjects!(args)),
             self.jni.new_seq(&map_to_jobjects!(targets))
+        )
+    }
+
+    pub fn method_call_with_pos(
+        &self,
+        method_name: &str,
+        args: &[Expr],
+        targets: &[Expr],
+        pos: Position,
+    ) -> Stmt<'a> {
+        build_ast_node_with_pos!(
+            self,
+            Stmt,
+            ast::MethodCall,
+            self.jni.new_string(method_name),
+            self.jni.new_seq(&map_to_jobjects!(args)),
+            self.jni.new_seq(&map_to_jobjects!(targets)),
+            pos.to_jobject()
         )
     }
 
@@ -143,6 +159,16 @@ impl<'a> AstFactory<'a> {
 
     pub fn unfold(&self, acc: Expr) -> Stmt<'a> {
         build_ast_node!(self, Stmt, ast::Unfold, acc.to_jobject())
+    }
+
+    pub fn unfold_with_pos(&self, acc: Expr, pos: Position) -> Stmt<'a> {
+        let obj = self.jni.unwrap_result(ast::Unfold::with(self.env).new(
+            acc.to_jobject(),
+            pos.to_jobject(),
+            self.no_info(),
+            self.no_trafos(),
+        ));
+        Stmt::new(obj)
     }
 
     pub fn package(&self, wand: Expr, proof_script: Stmt, pos: Position) -> Stmt<'a> {
