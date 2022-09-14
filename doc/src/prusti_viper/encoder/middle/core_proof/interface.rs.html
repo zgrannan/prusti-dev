@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `prusti-viper/src/encoder/middle/core_proof/interface.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>interface.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../../../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../../../storage.js"></script><script defer src="../../../../../source-script.js"></script><script defer src="../../../../../source-files.js"></script><script defer src="../../../../../main.js"></script><noscript><link rel="stylesheet" href="../../../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../../../prusti_viper/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../../../prusti_viper/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../../../prusti_viper/index.html"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `prusti-viper/src/encoder/middle/core_proof/interface.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>interface.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../../../normalize.css"><link rel="stylesheet" href="../../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../../../ayu.css" disabled><link rel="stylesheet" href="../../../../../dark.css" disabled><link rel="stylesheet" href="../../../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../../../storage.js"></script><script defer src="../../../../../source-script.js"></script><script defer src="../../../../../source-files.js"></script><script defer src="../../../../../main.js"></script><noscript><link rel="stylesheet" href="../../../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../../../prusti_viper/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../../../prusti_viper/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../../../prusti_viper/index.html"><img class="rust-logo" src="../../../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -66,73 +66,187 @@
 <span id="66">66</span>
 <span id="67">67</span>
 <span id="68">68</span>
-</pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::encoder</span>::{
-    <a class="ident" href="../../../../../src/prusti_viper/encoder/errors/spanned_encoding_error.rs.html#23">errors::SpannedEncodingResult</a>, <a class="ident" href="../../../../../src/prusti_viper/encoder/high/procedures/interface.rs.html#94">high::procedures::HighProcedureEncoderInterface</a>,
-    <a class="ident" href="../../../../../src/prusti_viper/encoder/mir/specifications/interface.rs.html#76">mir::specifications::SpecificationsInterface</a>,
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::encoder::{
+    <a href="../../../../../src/prusti_viper/encoder/errors/spanned_encoding_error.rs.html#23">errors::SpannedEncodingResult</a>, <a href="../../../../../src/prusti_viper/encoder/high/procedures/interface.rs.html#96">high::procedures::HighProcedureEncoderInterface</a>,
+    <a href="../../../../../src/prusti_viper/encoder/mir/specifications/interface.rs.html#72">mir::specifications::SpecificationsInterface</a>,
 };
-<span class="kw">use</span> <a class="ident" href="../../../../../log/macro.debug.html">log::debug</a>;
-<span class="kw">use</span> <a class="ident" href="../../../../../prusti_common/config/index.html">prusti_common::config</a>;
-<span class="kw">use</span> <a class="ident" href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">prusti_rustc_interface::hir::def_id::DefId</a>;
-<span class="kw">use</span> <span class="ident">vir_crate</span>::{
-    <a class="ident" href="../../../../../vir/common/check_mode/enum.CheckMode.html">common::check_mode::CheckMode</a>,
-    <span class="ident">low</span>::{<a class="self" href="../../../../../vir/low/index.html">self</a> <span class="kw">as</span> <span class="ident">vir_low</span>},
+<span class="kw">use </span><a href="../../../../../log/macro.debug.html">log::debug</a>;
+<span class="kw">use </span><a href="../../../../../prusti_common/config/index.html">prusti_common::config</a>;
+<span class="kw">use </span>prusti_rustc_interface::{<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">hir::def_id::DefId</a>, <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/index.html">middle::ty</a>};
+<span class="kw">use </span>vir_crate::{
+    common::{<a href="../../../../../vir/common/check_mode/enum.CheckMode.html">check_mode::CheckMode</a>, <a href="../../../../../vir/common/identifier/trait.WithIdentifier.html">identifier::WithIdentifier</a>},
+    low::{<span class="self"><a href="../../../../../vir/low/index.html">self</a> </span><span class="kw">as </span>vir_low},
 };
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Default</span>)]</span>
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct</span> <span class="ident">MidCoreProofEncoderState</span> {
-    <span class="ident">encoded_programs</span>: <span class="ident">Vec</span><span class="op">&lt;</span><a class="ident" href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a><span class="op">&gt;</span>,
+<span class="attribute">#[derive(Default)]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>MidCoreProofEncoderState {
+    encoded_programs: Vec&lt;<a href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a>&gt;,
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait</span> <span class="ident">MidCoreProofEncoderInterface</span><span class="op">&lt;</span><span class="lifetime">&#39;tcx</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">encode_lifetimes_core_proof</span>(
-        <span class="kw-2">&amp;mut</span> <span class="self">self</span>,
-        <span class="ident">proc_def_id</span>: <a class="ident" href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">DefId</a>,
-        <span class="ident">check_mode</span>: <a class="ident" href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
-    ) -&gt; <span class="ident">SpannedEncodingResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span>;
-    <span class="kw">fn</span> <span class="ident">take_core_proof_programs</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">Vec</span><span class="op">&lt;</span><a class="ident" href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a><span class="op">&gt;</span>;
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>MidCoreProofEncoderInterface&lt;<span class="lifetime">&#39;tcx</span>&gt; {
+    <span class="kw">fn </span>encode_lifetimes_core_proof(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        proc_def_id: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">DefId</a>,
+        check_mode: <a href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
+    ) -&gt; SpannedEncodingResult&lt;()&gt;;
+    <span class="kw">fn </span>encode_core_proof_for_type(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        ty: ty::Ty&lt;<span class="lifetime">&#39;tcx</span>&gt;,
+        check_mode: <a href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
+    ) -&gt; SpannedEncodingResult&lt;()&gt;;
+    <span class="kw">fn </span>take_core_proof_programs(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;<a href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a>&gt;;
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;v</span>, <span class="lifetime">&#39;tcx</span>: <span class="lifetime">&#39;v</span><span class="op">&gt;</span> <span class="ident">MidCoreProofEncoderInterface</span><span class="op">&lt;</span><span class="lifetime">&#39;tcx</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident"><span class="kw">super</span>::<span class="kw">super</span>::<span class="kw">super</span>::Encoder</span><span class="op">&lt;</span><span class="lifetime">&#39;v</span>, <span class="lifetime">&#39;tcx</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">encode_lifetimes_core_proof</span>(
-        <span class="kw-2">&amp;mut</span> <span class="self">self</span>,
-        <span class="ident">proc_def_id</span>: <a class="ident" href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">DefId</a>,
-        <span class="ident">check_mode</span>: <a class="ident" href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
-    ) -&gt; <span class="ident">SpannedEncodingResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">if</span> <span class="self">self</span>.<span class="ident">is_trusted</span>(<span class="ident">proc_def_id</span>, <span class="prelude-val">None</span>) {
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;v</span>, <span class="lifetime">&#39;tcx</span>: <span class="lifetime">&#39;v</span>&gt; MidCoreProofEncoderInterface&lt;<span class="lifetime">&#39;tcx</span>&gt; <span class="kw">for </span><span class="kw">super</span>::<span class="kw">super</span>::<span class="kw">super</span>::Encoder&lt;<span class="lifetime">&#39;v</span>, <span class="lifetime">&#39;tcx</span>&gt; {
+    <span class="kw">fn </span>encode_lifetimes_core_proof(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        proc_def_id: <a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/def_id/struct.DefId.html">DefId</a>,
+        check_mode: <a href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
+    ) -&gt; SpannedEncodingResult&lt;()&gt; {
+        <span class="kw">if </span><span class="self">self</span>.is_trusted(proc_def_id, <span class="prelude-val">None</span>) {
             <a class="macro" href="../../../../../log/macro.debug.html">debug!</a>(
                 <span class="string">&quot;Trusted procedure will not be encoded or verified: {:?}&quot;</span>,
-                <span class="ident">proc_def_id</span>
+                proc_def_id
             );
-            <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
-        <span class="kw">let</span> <span class="ident">procedure</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">encode_procedure_core_proof</span>(<span class="ident">proc_def_id</span>, <span class="ident">check_mode</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/lowerer/mod.rs.html#38"><span class="kw">super</span>::lowerer::LoweringResult</a> {
-            <span class="ident">procedure</span>,
-            <span class="ident">domains</span>,
-            <span class="ident">functions</span>,
-            <span class="ident">predicates</span>,
-            <span class="ident">methods</span>,
-        } <span class="op">=</span> <span class="ident"><span class="kw">super</span>::lowerer::lower_procedure</span>(<span class="self">self</span>, <span class="ident">procedure</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">program</span> <span class="op">=</span> <a class="ident" href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a> {
-            <span class="ident">name</span>: <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#29">self</a>.<a class="ident" href="../../../../../src/prusti_viper/encoder/encoder.rs.html#208">env</a>().<span class="ident">get_absolute_item_name</span>(<a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#30">proc_def_id</a>),
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#31">check_mode</a>,
-            <span class="ident">procedures</span>: <a class="macro" href="https://doc.rust-lang.org/nightly/alloc/macro.vec.html">vec!</a>[<span class="ident">procedure</span>],
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#43">domains</a>,
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#45">predicates</a>,
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#44">functions</a>,
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#46">methods</a>,
+        <span class="kw">let </span>procedure = <span class="self">self</span>.encode_procedure_core_proof(proc_def_id, check_mode)<span class="question-mark">?</span>;
+        <span class="kw">let </span><a href="../../../../../src/prusti_viper/encoder/middle/core_proof/lowerer/mod.rs.html#41"><span class="kw">super</span>::lowerer::LoweringResult</a> {
+            procedures,
+            domains,
+            functions,
+            predicates,
+            methods,
+        } = <span class="kw">super</span>::lowerer::lower_procedure(<span class="self">self</span>, proc_def_id, procedure)<span class="question-mark">?</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>program = <a href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a> {
+            name: <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#34">self</a>.<a href="../../../../../src/prusti_viper/encoder/encoder.rs.html#223">env</a>().name.get_absolute_item_name(<a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#35">proc_def_id</a>),
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#36">check_mode</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#47">procedures</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#48">domains</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#50">predicates</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#49">functions</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#51">methods</a>,
         };
-        <span class="kw">if</span> <span class="ident">config::inline_caller_for</span>() {
-            <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/transformations/inline_functions.rs.html#8"><span class="kw">super</span>::transformations::inline_functions::inline_caller_for</a>(<span class="kw-2">&amp;mut</span> <a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#48">program</a>);
+        <span class="kw">if </span>config::inline_caller_for() {
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/transformations/inline_functions.rs.html#8"><span class="kw">super</span>::transformations::inline_functions::inline_caller_for</a>(<span class="kw-2">&amp;mut </span><a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#53">program</a>);
         }
-        <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#29">self</a>.<span class="ident">mid_core_proof_encoder_state</span>
-            .<span class="ident">encoded_programs</span>
-            .<span class="ident">push</span>(<a class="ident" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#48">program</a>);
+        <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#34">self</a>.mid_core_proof_encoder_state
+            .encoded_programs
+            .push(<a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#53">program</a>);
         <span class="prelude-val">Ok</span>(())
     }
-    <span class="kw">fn</span> <span class="ident">take_core_proof_programs</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">Vec</span><span class="op">&lt;</span><a class="ident" href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a><span class="op">&gt;</span> {
-        <span class="ident">std::mem::take</span>(<span class="kw-2">&amp;mut</span> <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#65">self</a>.<span class="ident">mid_core_proof_encoder_state</span>.<span class="ident">encoded_programs</span>)
+
+    <span class="kw">fn </span>encode_core_proof_for_type(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        ty: ty::Ty&lt;<span class="lifetime">&#39;tcx</span>&gt;,
+        check_mode: <a href="../../../../../vir/common/check_mode/enum.CheckMode.html">CheckMode</a>,
+    ) -&gt; SpannedEncodingResult&lt;()&gt; {
+        <span class="kw">let </span>(check_copy, def_id) = <span class="kw">if </span>ty.is_trivially_pure_clone_copy() {
+            (<span class="bool-val">true</span>, <span class="prelude-val">None</span>)
+        } <span class="kw">else if let </span>ty::TyKind::Adt(adt_def, ..) = <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#73">ty</a>.kind() {
+            <span class="kw">let </span>param_env = <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#72">self</a>.<a href="../../../../../src/prusti_viper/encoder/encoder.rs.html#223">env</a>().tcx().param_env(<a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#78">adt_def</a>.did());
+            <span class="comment">// FIXME: Figure out how to reuse Environment::type_is_copy
+            // function.
+            </span>(
+                <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#73">ty</a>.is_copy_modulo_regions(
+                    <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#72">self</a>.<a href="../../../../../src/prusti_viper/encoder/encoder.rs.html#223">env</a>().tcx().at(<a href="https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/span_encoding/constant.DUMMY_SP.html">prusti_rustc_interface::span::DUMMY_SP</a>),
+                    <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#79">param_env</a>,
+                ),
+                <span class="prelude-val">Some</span>(<a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#78">adt_def</a>.did()),
+            )
+        } <span class="kw">else </span>{
+            <span class="comment">// We conservatively mark types as copy here because if they are
+            // not, we will simply get a verification error.
+            </span>(<span class="bool-val">true</span>, <span class="prelude-val">None</span>)
+        };
+        <span class="kw">let </span>ty = <span class="self">self</span>.encode_type_core_proof(ty, check_mode)<span class="question-mark">?</span>;
+        <span class="kw">let </span>name = <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#94">ty</a>.<a href="../../../../../vir/common/identifier/trait.WithIdentifier.html">get_identifier</a>();
+        <span class="kw">let </span><a href="../../../../../src/prusti_viper/encoder/middle/core_proof/lowerer/mod.rs.html#41"><span class="kw">super</span>::lowerer::LoweringResult</a> {
+            procedures,
+            domains,
+            functions,
+            predicates,
+            methods,
+        } = <span class="kw">super</span>::lowerer::lower_type(<span class="self">self</span>, def_id, ty, check_copy)<span class="question-mark">?</span>;
+        <a class="macro" href="https://doc.rust-lang.org/nightly/core/macro.assert.html">assert!</a>(procedures.is_empty());
+        <span class="kw">let </span><span class="kw-2">mut </span>program = <a href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a> {
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#95">name</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#74">check_mode</a>,
+            procedures: <a class="macro" href="https://doc.rust-lang.org/nightly/alloc/macro.vec.html">vec!</a>[],
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#98">domains</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#100">predicates</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#99">functions</a>,
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#101">methods</a>,
+        };
+        <span class="kw">if </span>config::inline_caller_for() {
+            <a href="../../../../../src/prusti_viper/encoder/middle/core_proof/transformations/inline_functions.rs.html#8"><span class="kw">super</span>::transformations::inline_functions::inline_caller_for</a>(<span class="kw-2">&amp;mut </span><a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#104">program</a>);
+        }
+        <a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#72">self</a>.mid_core_proof_encoder_state
+            .encoded_programs
+            .push(<a href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#104">program</a>);
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>take_core_proof_programs(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Vec&lt;<a href="../../../../../vir/gen/low/program/struct.Program.html">vir_low::Program</a>&gt; {
+        std::mem::take(<span class="kw-2">&amp;mut </span><a class="self" href="../../../../../src/prusti_viper/encoder/middle/core_proof/interface.rs.html#122">self</a>.mid_core_proof_encoder_state.encoded_programs)
     }
 }
 </code></pre></div>
-</section></div></main><div id="rustdoc-vars" data-root-path="../../../../../" data-current-crate="prusti_viper" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0-nightly (f9cba6374 2022-07-31)" ></div></body></html>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../../../../" data-current-crate="prusti_viper" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (bc4b39c27 2022-08-29)" ></div></body></html>
