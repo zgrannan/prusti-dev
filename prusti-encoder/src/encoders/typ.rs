@@ -33,9 +33,9 @@ pub struct TypeEncoderOutputRef<'vir> {
     pub snapshot_name: &'vir str,
     pub predicate_name: &'vir str,
     pub snapshot: vir::Type<'vir>,
-    pub snapshot_constructor: FunctionIdentifier<'vir, vir::Unknown>,
-    pub function_unreachable: FunctionIdentifier<'vir, vir::Nullary>,
-    pub function_snap: FunctionIdentifier<'vir, vir::Unary>,
+    pub snapshot_constructor: FunctionIdentifier<'vir, vir::UnknownArgs>,
+    pub function_unreachable: FunctionIdentifier<'vir, vir::NullaryArgs>,
+    pub function_snap: FunctionIdentifier<'vir, vir::UnaryArgs>,
     //pub method_refold: &'vir str,
     pub specifics: TypeEncoderOutputRefSub<'vir>,
     pub method_assign: &'vir str,
@@ -61,7 +61,7 @@ macro_rules! builtin_snapshot_constructor {
     }
 }
 
-pub const BOOL_CONS: FunctionIdentifier<'static, vir::Unary> = FunctionIdentifier::new(builtin_snapshot_constructor!("Bool"));
+pub const BOOL_CONS: FunctionIdentifier<'static, vir::UnaryArgs> = FunctionIdentifier::new(builtin_snapshot_constructor!("Bool"));
 
 impl<'vir> TypeEncoderOutputRef<'vir> {
     pub fn expect_structlike(&self) -> &TypeEncoderOutputRefSubStruct<'vir> {

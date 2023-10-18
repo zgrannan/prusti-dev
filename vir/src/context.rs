@@ -5,7 +5,7 @@ use crate::data::*;
 use crate::gendata::*;
 use crate::genrefs::*;
 use crate::refs::*;
-use crate::functionidentifier::{Args, Unary, FunctionIdentifier};
+use crate::functionidentifier::{Args, FunctionIdentifier};
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {

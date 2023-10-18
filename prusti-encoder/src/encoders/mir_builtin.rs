@@ -184,7 +184,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                                         vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
                                         &[vcx.mk_local_ex("arg2")],
                                     ),
-                                })),)]
+                                })))]
                             )),
                         }),
                     }, ()))
