@@ -1,11 +1,26 @@
 use std::marker::PhantomData;
 
 use crate::{ExprGen, ExprGenData};
-use crate::builtin_snapshot_constructor;
 
 #[derive(Debug, Clone, Copy)]
-pub struct FunctionIdentifier<'tcx, ArgType>(pub &'tcx str, pub PhantomData<ArgType>);
-struct Nullary;
+pub struct FunctionIdentifier<'a, ArgType>(pub &'a str, PhantomData<ArgType>);
+
+impl <'a, T> FunctionIdentifier<'a, T> {
+    pub const fn new(name: &'a str) -> Self {
+        FunctionIdentifier(name, PhantomData)
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct Nullary;
+
+impl Args for Nullary {
+    type ArgType<'tcx, Curr: 'tcx, Next: 'tcx> = ();
+    fn to_vec<'tcx, Curr: 'tcx, Next: 'tcx>(
+            _arg: ()
+        ) -> Vec<ExprGen<'tcx, Curr, Next>> {
+        vec![]
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Unary;
@@ -36,6 +51,3 @@ pub trait Args {
         arg: Self::ArgType<'tcx, Curr, Next>,
     ) -> Vec<ExprGen<'tcx, Curr, Next>>;
 }
-
-
-pub const BOOL_CONS: FunctionIdentifier<'static, Unary> = FunctionIdentifier(builtin_snapshot_constructor!("Bool"), PhantomData);

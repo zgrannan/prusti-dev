@@ -33,7 +33,7 @@ pub struct TypeEncoderOutputRef<'vir> {
     pub snapshot_name: &'vir str,
     pub predicate_name: &'vir str,
     pub snapshot: vir::Type<'vir>,
-    pub function_unreachable: &'vir str,
+    pub function_unreachable: FunctionIdentifier<'vir, vir::Nullary>,
     pub function_snap: FunctionIdentifier<'vir, vir::Unary>,
     //pub method_refold: &'vir str,
     pub specifics: TypeEncoderOutputRefSub<'vir>,
@@ -60,7 +60,7 @@ macro_rules! builtin_snapshot_constructor {
     }
 }
 
-pub const BOOL_CONS: FunctionIdentifier<'static, vir::Unary> = FunctionIdentifier(builtin_snapshot_constructor!("Bool"), PhantomData);
+pub const BOOL_CONS: FunctionIdentifier<'static, vir::Unary> = FunctionIdentifier::new(builtin_snapshot_constructor!("Bool"));
 
 impl<'vir> TypeEncoderOutputRef<'vir> {
     pub fn expect_structlike(&self) -> &TypeEncoderOutputRefSubStruct<'vir> {
@@ -379,8 +379,8 @@ impl TaskEncoder for TypeEncoder {
                 snapshot_name: name_s,
                 predicate_name: name_p,
                 snapshot: vcx.alloc(vir::TypeData::Domain(name_s)),
-                function_unreachable: vir::vir_format!(vcx, "{name_s}_unreachable"),
-                function_snap: FunctionIdentifier(vir::vir_format!(vcx, "{name_p}_snap"), PhantomData),
+                function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
+                function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
                 //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
                 specifics: TypeEncoderOutputRefSub::StructLike(TypeEncoderOutputRefSubStruct {
                     field_read: field_read_names,
@@ -662,8 +662,8 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Bool",
                     predicate_name: "p_Bool",
                     snapshot: ty_s,
-                    function_unreachable: "s_Bool_unreachable",
-                    function_snap: FunctionIdentifier("p_Bool_snap", PhantomData),
+                    function_unreachable: FunctionIdentifier::new("s_Bool_unreachable"),
+                    function_snap: FunctionIdentifier::new("p_Bool_snap"),
                     //method_refold: "refold_p_Bool",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: "assign_p_Bool",
@@ -705,8 +705,8 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: name_s,
                     predicate_name: name_p,
                     snapshot: ty_s,
-                    function_unreachable: vir::vir_format!(vcx, "{name_s}_unreachable"),
-                    function_snap: FunctionIdentifier(vir::vir_format!(vcx, "{name_p}_snap"), PhantomData),
+                    function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
+                    function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
                     //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_{name_p}"),
@@ -738,8 +738,8 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Tuple0",
                     predicate_name: "p_Tuple0",
                     snapshot: ty_s,
-                    function_unreachable: "s_Tuple0_unreachable",
-                    function_snap: FunctionIdentifier("p_Tuple0_snap", PhantomData),
+                    function_unreachable: FunctionIdentifier::new("s_Tuple0_unreachable"),
+                    function_snap: FunctionIdentifier::new("p_Tuple0_snap"),
                     //method_refold: "refold_p_Tuple0",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Tuple0"),
@@ -822,8 +822,8 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: param_out.snapshot_param_name,
                     predicate_name: param_out.predicate_param_name,
                     snapshot: ty_s,
-                    function_unreachable: "s_Param_unreachable",
-                    function_snap: FunctionIdentifier("p_Param_snap", PhantomData),
+                    function_unreachable: FunctionIdentifier::new("s_Param_unreachable"),
+                    function_snap: FunctionIdentifier::new("p_Param_snap"),
                     //method_refold: "refold_p_Param",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Bool"),
@@ -865,8 +865,8 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Never",
                     predicate_name: "p_Never",
                     snapshot: ty_s,
-                    function_unreachable: "s_Never_unreachable",
-                    function_snap: FunctionIdentifier("p_Never_snap", PhantomData),
+                    function_unreachable: FunctionIdentifier::new("s_Never_unreachable"),
+                    function_snap: FunctionIdentifier::new("p_Never_snap"),
                     //method_refold: "refold_p_Never",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Never"),
