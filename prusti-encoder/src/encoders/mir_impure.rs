@@ -13,7 +13,6 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use crate::encoders::typ::BOOL_CONS;
 use vir::{Reify};
 
 pub struct MirImpureEncoder;
@@ -623,6 +622,10 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     dest.projection,
                 );
 
+                let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+                ).unwrap().snapshot_constructor;
+
                 // What value are we assigning? This will be an option, in most
                 // cases an expression with the snapshot to be assigned to the
                 // destination. In the case of `Aggregate`, however, there are
@@ -640,12 +643,12 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
 
                     mir::Rvalue::BinaryOp(mir::BinOp::Eq, box (l, r)) =>
                         Some(self.vcx.mk_typed_func_app(
-                            BOOL_CONS,
-                            self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                            bool_cons,
+                            vec![self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
                                 kind: vir::BinOpKind::CmpEq,
                                 lhs: self.encode_operand_snap(l),
                                 rhs: self.encode_operand_snap(r),
-                            }))),
+                            })))],
                         )),
                     mir::Rvalue::BinaryOp(mir::BinOp::Lt, box (l, r)) => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
@@ -658,8 +661,8 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                         let ty_r = vir::vir_format!(self.vcx, "{}_val", ty_r.snapshot_name); // TODO: get the `_val` function differently
 
                         Some(self.vcx.mk_typed_func_app(
-                            BOOL_CONS,
-                            self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                            bool_cons,
+                            vec![self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
                                 kind: vir::BinOpKind::CmpLt,
                                 lhs: self.vcx.mk_func_app(
                                     ty_l,
@@ -669,7 +672,7 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                                     ty_r,
                                     &[self.encode_operand_snap(r)],
                                 ),
-                            }))),
+                            })))],
                         ))
                     }
                     //mir::Rvalue::BinaryOp(BinOp, Box<(Operand<'tcx>, Operand<'tcx>)>) => {}

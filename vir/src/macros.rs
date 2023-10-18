@@ -268,36 +268,3 @@ macro_rules! vir_predicate {
         })
     }};
 }
-
-const SNAPSHOT_PREFIX: &'static str = "s_";
-const SNAPSHOT_CONSTRUCTOR_SUFFIX: &'static str = "_val";
-const SNAPSHOT_VAL_SUFFIX: &'static str = "_cons";
-
-#[macro_export]
-macro_rules! snapshot_constructor_suffix {
-    () => {
-        "_cons"
-    };
-}
-
-#[macro_export]
-macro_rules! snapshot_val_suffix {
-    () => {
-        "_val"
-    };
-}
-
-
-#[macro_export]
-macro_rules! vir_snapshot_constructor_name {
-    ($vcx:expr, $snapshot_name:expr) => { 
-        vir::vir_format!($vcx, "{}{}", $snapshot_name, vir::snapshot_constructor_suffix!())
-    };
-}
-
-#[macro_export]
-macro_rules! vir_snapshot_val_name {
-    ($vcx:expr, $snapshot_name:expr) => { 
-        vir::vir_format!($vcx, "{}{}", $snapshot_name, vir::snapshot_val_suffix!())
-    };
-}

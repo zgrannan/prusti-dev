@@ -8,7 +8,6 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use crate::encoders::typ::BOOL_CONS;
 use std::collections::HashMap;
 
 pub struct MirPureEncoder;
@@ -552,13 +551,17 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                             ))
                             .lift();
 
+                        let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+                        ).unwrap().snapshot_constructor;
+
                         let forall = self.vcx.mk_typed_func_app(
-                            BOOL_CONS,
-                            self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
+                            bool_cons,
+                            vec![self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
                                 qvars,
                                 triggers: &[], // TODO
                                 body,
-                            }))),
+                            })))],
                         );
 
                         let mut term_update = Update::new();
@@ -610,6 +613,9 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
         //    self.vcx.tcx.mk_ty_from_kind(TyKind::Bool),
         //).unwrap();
 
+        let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+        ).unwrap().snapshot_constructor;
         match rvalue {
             mir::Rvalue::Use(op) => self.encode_operand(curr_ver, op),
             // Repeat
@@ -621,12 +627,12 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
             mir::Rvalue::BinaryOp(op, box (l, r)) => {
                 match op {
                     mir::BinOp::Eq => self.vcx.mk_typed_func_app(
-                        BOOL_CONS,
-                        self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
+                        bool_cons,
+                        vec![self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
                             kind: vir::BinOpKind::CmpEq,
                             lhs: self.encode_operand(curr_ver, l),
                             rhs: self.encode_operand(curr_ver, r),
-                        }))),
+                        })))],
                     ),
                     mir::BinOp::Gt => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
@@ -639,8 +645,8 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                         let ty_r = vir::vir_format!(self.vcx, "{}_val", ty_r.snapshot_name); // TODO: get the `_val` function differently
 
                         self.vcx.mk_typed_func_app(
-                            BOOL_CONS,
-                            self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
+                            bool_cons,
+                            vec![self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
                                 kind: vir::BinOpKind::CmpGt,
                                 lhs: self.vcx.mk_func_app(
                                     ty_l,
@@ -650,7 +656,7 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                                     ty_r,
                                     &[self.encode_operand(curr_ver, r)],
                                 ),
-                            }))),
+                            })))],
                         )
                     }
                     k => todo!("binop {k:?}"),

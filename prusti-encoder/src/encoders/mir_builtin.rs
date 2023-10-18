@@ -6,8 +6,6 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use crate::encoders::typ::BOOL_CONS;
-use vir::{vir_snapshot_constructor_name};
 
 pub struct MirBuiltinEncoder;
 
@@ -96,9 +94,10 @@ impl TaskEncoder for MirBuiltinEncoder {
                         s_Bool$cons(!s_Bool$val(val))
                     } */
 
-                    let ty_s = deps.require_ref::<crate::encoders::TypeEncoder>(
+                    let ty_ref = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
-                    ).unwrap().snapshot;
+                    ).unwrap();
+                    let ty_s = ty_ref.snapshot;
                     Ok((MirBuiltinEncoderOutput {
                         function: vcx.alloc(vir::FunctionData {
                             name,
@@ -107,14 +106,14 @@ impl TaskEncoder for MirBuiltinEncoder {
                             pres: &[],
                             posts: &[],
                             expr: Some(vcx.mk_typed_func_app(
-                                BOOL_CONS,
-                                vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                ty_ref.snapshot_constructor,
+                                vec![vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                     kind: vir::UnOpKind::Not,
                                     expr: vcx.mk_func_app(
                                         "s_Bool_val",
                                         &[vcx.mk_local_ex("arg")],
                                     ),
-                                }))),
+                                })))],
                             )),
                         }),
                     }, ()))
@@ -139,9 +138,9 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_func_app(
-                                vir_snapshot_constructor_name!(vcx, ty_out.snapshot_name),
-                                &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                            expr: Some(vcx.mk_typed_func_app(
+                                ty_out.snapshot_constructor,
+                                vec![vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                     kind: vir::UnOpKind::Neg,
                                     expr: vcx.mk_func_app(
                                         vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
@@ -173,9 +172,9 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_func_app(
-                                vir::vir_snapshot_constructor_name!(vcx,ty_out.snapshot_name),
-                                &[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
+                            expr: Some(vcx.mk_typed_func_app(
+                                ty_out.snapshot_constructor,
+                                vec![vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
                                     kind: vir::BinOpKind::Add,
                                     lhs: vcx.mk_func_app(
                                         vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
@@ -185,7 +184,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                                         vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
                                         &[vcx.mk_local_ex("arg2")],
                                     ),
-                                })))],
+                                })),)]
                             )),
                         }),
                     }, ()))
@@ -206,6 +205,9 @@ impl TaskEncoder for MirBuiltinEncoder {
                             vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
                         ]))),
                     ).unwrap();
+                    let bool_cons = deps.require_ref::<crate::encoders::TypeEncoder>(
+                        vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+                    ).unwrap().snapshot_constructor;
                     Ok((MirBuiltinEncoderOutput {
                         function: vcx.alloc(vir::FunctionData {
                             name,
@@ -216,12 +218,12 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_func_app(
-                                vir::vir_snapshot_constructor_name!(vcx,ty_out.snapshot_name),
-                                &[
-                                    vcx.mk_func_app(
-                                        vir::vir_snapshot_constructor_name!(vcx,ty_in.snapshot_name),
-                                        &[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
+                            expr: Some(vcx.mk_typed_func_app(
+                                ty_out.snapshot_constructor,
+                                vec![
+                                    vcx.mk_typed_func_app(
+                                        ty_in.snapshot_constructor,
+                                        vec![vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
                                             kind: vir::BinOpKind::Add,
                                             lhs: vcx.mk_func_app(
                                                 vir::vir_format!(vcx, "{}_val", ty_in.snapshot_name),
@@ -235,8 +237,8 @@ impl TaskEncoder for MirBuiltinEncoder {
                                     ),
                                     // TODO: overflow condition!
                                     vcx.mk_typed_func_app(
-                                        BOOL_CONS,
-                                        &vir::ExprData::Const(&vir::ConstData::Bool(false))
+                                        bool_cons,
+                                        vec![&vir::ExprData::Const(&vir::ConstData::Bool(false))]
                                     ),
                                 ],
                             )),

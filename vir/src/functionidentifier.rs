@@ -26,6 +26,7 @@ impl Args for Nullary {
 pub struct Unary;
 struct Binary;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Unknown;
 
 impl Args for Unary {
