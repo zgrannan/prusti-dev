@@ -268,3 +268,39 @@ macro_rules! vir_predicate {
         })
     }};
 }
+
+#[macro_export]
+macro_rules! snapshot_constructor_suffix {
+    () => {
+        "_cons"
+    };
+}
+
+#[macro_export]
+macro_rules! snapshot_val_suffix {
+    () => {
+        "_val"
+    };
+}
+
+
+#[macro_export]
+macro_rules! builtin_snapshot_constructor {
+    ($s:expr) => {
+        concat!("S_", $s, crate::snapshot_constructor_suffix!())
+    }
+}
+
+#[macro_export]
+macro_rules! vir_snapshot_constructor_name {
+    ($vcx:expr, $snapshot_name:expr) => { 
+        vir::vir_format!($vcx, "{}{}", $snapshot_name, vir::snapshot_constructor_suffix!())
+    };
+}
+
+#[macro_export]
+macro_rules! vir_snapshot_val_name {
+    ($vcx:expr, $snapshot_name:expr) => { 
+        vir::vir_format!($vcx, "{}{}", $snapshot_name, vir::snapshot_val_suffix!())
+    };
+}
