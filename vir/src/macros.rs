@@ -269,6 +269,10 @@ macro_rules! vir_predicate {
     }};
 }
 
+const SNAPSHOT_PREFIX: &'static str = "s_";
+const SNAPSHOT_CONSTRUCTOR_SUFFIX: &'static str = "_val";
+const SNAPSHOT_VAL_SUFFIX: &'static str = "_cons";
+
 #[macro_export]
 macro_rules! snapshot_constructor_suffix {
     () => {
@@ -283,13 +287,6 @@ macro_rules! snapshot_val_suffix {
     };
 }
 
-
-#[macro_export]
-macro_rules! builtin_snapshot_constructor {
-    ($s:expr) => {
-        concat!("S_", $s, crate::snapshot_constructor_suffix!())
-    }
-}
 
 #[macro_export]
 macro_rules! vir_snapshot_constructor_name {

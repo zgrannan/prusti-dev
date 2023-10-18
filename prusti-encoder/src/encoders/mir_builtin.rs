@@ -6,7 +6,8 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{BOOL_CONS, vir_snapshot_constructor_name};
+use crate::encoders::typ::BOOL_CONS;
+use vir::{vir_snapshot_constructor_name};
 
 pub struct MirBuiltinEncoder;
 
@@ -106,7 +107,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                             pres: &[],
                             posts: &[],
                             expr: Some(vcx.mk_typed_func_app(
-                                vir::BOOL_CONS,
+                                BOOL_CONS,
                                 vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                     kind: vir::UnOpKind::Not,
                                     expr: vcx.mk_func_app(

@@ -8,7 +8,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::BOOL_CONS;
+use crate::encoders::typ::BOOL_CONS;
 use std::collections::HashMap;
 
 pub struct MirPureEncoder;

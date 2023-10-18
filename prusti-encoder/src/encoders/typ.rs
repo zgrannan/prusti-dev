@@ -4,7 +4,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{BOOL_CONS, FunctionIdentifier};
+use vir::{FunctionIdentifier};
 
 pub struct TypeEncoder;
 
@@ -41,6 +41,26 @@ pub struct TypeEncoderOutputRef<'vir> {
     pub method_reassign: &'vir str,
 }
 impl<'vir> task_encoder::OutputRefAny<'vir> for TypeEncoderOutputRef<'vir> {}
+
+macro_rules! snapshot_prefix {
+    () => { "s_" }
+}
+
+macro_rules! snapshot_constructor_suffix {
+    () => { "_cons" }
+}
+
+macro_rules! snapshot_val_suffix {
+    () => { "_val" }
+}
+
+macro_rules! builtin_snapshot_constructor {
+    ($s:expr) => {
+        concat!(snapshot_prefix!(), $s, snapshot_constructor_suffix!())
+    }
+}
+
+pub const BOOL_CONS: FunctionIdentifier<'static, vir::Unary> = FunctionIdentifier(builtin_snapshot_constructor!("Bool"), PhantomData);
 
 impl<'vir> TypeEncoderOutputRef<'vir> {
     pub fn expect_structlike(&self) -> &TypeEncoderOutputRefSubStruct<'vir> {

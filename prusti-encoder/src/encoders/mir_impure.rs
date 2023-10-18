@@ -13,7 +13,8 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{Reify, BOOL_CONS};
+use crate::encoders::typ::BOOL_CONS;
+use vir::{Reify};
 
 pub struct MirImpureEncoder;
 
