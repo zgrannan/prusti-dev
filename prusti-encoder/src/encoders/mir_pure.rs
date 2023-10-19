@@ -1,3 +1,4 @@
+use vir::Reify;
 use prusti_rustc_interface::{
     data_structures::graph::dominators::Dominators,
     middle::{mir, ty},
@@ -555,14 +556,11 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                             self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
                         ).unwrap().snapshot_constructor;
 
-                        let forall = self.vcx.mk_typed_func_app(
-                            bool_cons,
-                            vec![self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
-                                qvars,
-                                triggers: &[], // TODO
-                                body,
-                            })))],
-                        );
+                        let forall = bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
+                            qvars,
+                            triggers: &[], // TODO
+                            body,
+                        })))]));
 
                         let mut term_update = Update::new();
                         assert!(destination.projection.is_empty());
@@ -626,14 +624,11 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
             // Cast
             mir::Rvalue::BinaryOp(op, box (l, r)) => {
                 match op {
-                    mir::BinOp::Eq => self.vcx.mk_typed_func_app(
-                        bool_cons,
-                        vec![self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
-                            kind: vir::BinOpKind::CmpEq,
-                            lhs: self.encode_operand(curr_ver, l),
-                            rhs: self.encode_operand(curr_ver, r),
-                        })))],
-                    ),
+                    mir::BinOp::Eq => bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
+                        kind: vir::BinOpKind::CmpEq,
+                        lhs: self.encode_operand(curr_ver, l),
+                        rhs: self.encode_operand(curr_ver, r),
+                    })))])),
                     mir::BinOp::Gt => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             l.ty(self.body, self.vcx.tcx),
@@ -644,20 +639,17 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                         ).unwrap();
                         let ty_r = vir::vir_format!(self.vcx, "{}_val", ty_r.snapshot_name); // TODO: get the `_val` function differently
 
-                        self.vcx.mk_typed_func_app(
-                            bool_cons,
-                            vec![self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
-                                kind: vir::BinOpKind::CmpGt,
-                                lhs: self.vcx.mk_func_app(
-                                    ty_l,
-                                    &[self.encode_operand(curr_ver, l)],
-                                ),
-                                rhs: self.vcx.mk_func_app(
-                                    ty_r,
-                                    &[self.encode_operand(curr_ver, r)],
-                                ),
-                            })))],
-                        )
+                        bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
+                            kind: vir::BinOpKind::CmpGt,
+                            lhs: self.vcx.mk_func_app(
+                                ty_l,
+                                &[self.encode_operand(curr_ver, l)],
+                            ),
+                            rhs: self.vcx.mk_func_app(
+                                ty_r,
+                                &[self.encode_operand(curr_ver, r)],
+                            ),
+                        })))]))
                     }
                     k => todo!("binop {k:?}"),
                 }

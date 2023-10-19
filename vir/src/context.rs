@@ -5,7 +5,6 @@ use crate::data::*;
 use crate::gendata::*;
 use crate::genrefs::*;
 use crate::refs::*;
-use crate::functionidentifier::{Args, FunctionIdentifier};
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {
@@ -65,15 +64,6 @@ impl<'tcx> VirCtxt<'tcx> {
     pub fn mk_local_ex<Curr, Next>(&'tcx self, name: &'tcx str) -> ExprGen<'tcx, Curr, Next> {
         self.arena.alloc(ExprGenData::Local(self.mk_local(name)))
     }
-
-    pub fn mk_typed_func_app<T: Args, Curr, Next>(
-        &'tcx self,
-        target: FunctionIdentifier<'tcx, T>,
-        src_arg: T::ArgType<'tcx, Curr, Next>,
-    ) -> ExprGen<'tcx, Curr, Next> {
-        self.mk_func_app(target.0, &T::to_vec(src_arg))
-    }
-
 
     pub fn mk_func_app<Curr, Next>(
         &'tcx self,

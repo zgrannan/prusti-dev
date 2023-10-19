@@ -1,3 +1,4 @@
+use vir::Reify;
 use prusti_rustc_interface::middle::ty;
 use rustc_type_ir::sty::TyKind;
 use task_encoder::{
@@ -76,12 +77,9 @@ impl<'vir> TypeEncoderOutputRef<'vir> {
         //   or should this be a different task for TypeEncoder?
         let cons_name = match self.snapshot_name {
             "s_Bool" => {
-                return vir::with_vcx(|vcx| vcx.mk_typed_func_app(
-                    BOOL_CONS,
-                    vcx.alloc(vir::ExprData::Const(
-                        vcx.alloc(vir::ConstData::Bool(val != 0)),
-                    )),
-                ));
+                return vir::with_vcx(|vcx| BOOL_CONS.as_expr(vcx).reify(vcx, vcx.alloc(vir::ExprData::Const(
+                    vcx.alloc(vir::ConstData::Bool(val != 0)),
+                ))));
             }
             name if name.starts_with("s_Int_") || name.starts_with("s_Uint_") =>
                 vir::with_vcx(|vcx| vir::vir_format!(vcx, "{name}_cons")),
@@ -638,14 +636,10 @@ impl TaskEncoder for TypeEncoder {
                                 vcx.alloc_slice(&field_ty_out
                                     .iter()
                                     .enumerate()
-                                    .map(|(idx, field_ty_out)| vcx.mk_typed_func_app(
-                                        field_ty_out.function_snap,
-                                        
-                                            vcx.mk_func_app(
-                                                vir::vir_format!(vcx, "{name_p}_field_{idx}"),
-                                                &[vcx.mk_local_ex("self_p")],
-                                            ),
-                                    ))
+                                    .map(|(idx, field_ty_out)| field_ty_out.function_snap.as_expr(vcx).reify(vcx, vcx.mk_func_app(
+                                        vir::vir_format!(vcx, "{name_p}_field_{idx}"),
+                                        &[vcx.mk_local_ex("self_p")],
+                                    )))
                                     .collect::<Vec<_>>(),
                                 ),
                             ),

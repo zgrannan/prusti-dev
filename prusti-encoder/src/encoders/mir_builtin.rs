@@ -144,16 +144,13 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_typed_func_app(
-                                ty_out.snapshot_constructor,
-                                vec![vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
-                                    kind: vir::UnOpKind::Neg,
-                                    expr: vcx.mk_func_app(
-                                        vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
-                                        &[vcx.mk_local_ex("arg")],
-                                    ),
-                                })))],
-                            )),
+                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                kind: vir::UnOpKind::Neg,
+                                expr: vcx.mk_func_app(
+                                    vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
+                                    &[vcx.mk_local_ex("arg")],
+                                ),
+                            })))]))),
                         }),
                     }, ()))
                 }
@@ -178,20 +175,17 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_typed_func_app(
-                                ty_out.snapshot_constructor,
-                                vec![vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
-                                    kind: vir::BinOpKind::Add,
-                                    lhs: vcx.mk_func_app(
-                                        vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
-                                        &[vcx.mk_local_ex("arg1")],
-                                    ),
-                                    rhs: vcx.mk_func_app(
-                                        vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
-                                        &[vcx.mk_local_ex("arg2")],
-                                    ),
-                                })))]
-                            )),
+                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
+                                kind: vir::BinOpKind::Add,
+                                lhs: vcx.mk_func_app(
+                                    vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
+                                    &[vcx.mk_local_ex("arg1")],
+                                ),
+                                rhs: vcx.mk_func_app(
+                                    vir::vir_format!(vcx, "{}_val", ty_out.snapshot_name),
+                                    &[vcx.mk_local_ex("arg2")],
+                                ),
+                            })))]))),
                         }),
                     }, ()))
                 }
@@ -224,30 +218,21 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_out.snapshot,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_typed_func_app(
-                                ty_out.snapshot_constructor,
-                                vec![
-                                    vcx.mk_typed_func_app(
-                                        ty_in.snapshot_constructor,
-                                        vec![vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
-                                            kind: vir::BinOpKind::Add,
-                                            lhs: vcx.mk_func_app(
-                                                vir::vir_format!(vcx, "{}_val", ty_in.snapshot_name),
-                                                &[vcx.mk_local_ex("arg1")],
-                                            ),
-                                            rhs: vcx.mk_func_app(
-                                                vir::vir_format!(vcx, "{}_val", ty_in.snapshot_name),
-                                                &[vcx.mk_local_ex("arg2")],
-                                            ),
-                                        })))],
+                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[
+                                ty_in.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
+                                    kind: vir::BinOpKind::Add,
+                                    lhs: vcx.mk_func_app(
+                                        vir::vir_format!(vcx, "{}_val", ty_in.snapshot_name),
+                                        &[vcx.mk_local_ex("arg1")],
                                     ),
-                                    // TODO: overflow condition!
-                                    vcx.mk_typed_func_app(
-                                        bool_cons,
-                                        vec![&vir::ExprData::Const(&vir::ConstData::Bool(false))]
+                                    rhs: vcx.mk_func_app(
+                                        vir::vir_format!(vcx, "{}_val", ty_in.snapshot_name),
+                                        &[vcx.mk_local_ex("arg2")],
                                     ),
-                                ],
-                            )),
+                                })))])),
+                                // TODO: overflow condition!
+                                bool_cons.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[&vir::ExprData::Const(&vir::ConstData::Bool(false))])),
+                            ]))),
                         }),
                     }, ()))
                 }
