@@ -64,7 +64,6 @@ impl<'tcx> VirCtxt<'tcx> {
     pub fn mk_local_ex<Curr, Next>(&'tcx self, name: &'tcx str) -> ExprGen<'tcx, Curr, Next> {
         self.arena.alloc(ExprGenData::Local(self.mk_local(name)))
     }
-
     pub fn mk_func_app<Curr, Next>(
         &'tcx self,
         target: &'tcx str,
