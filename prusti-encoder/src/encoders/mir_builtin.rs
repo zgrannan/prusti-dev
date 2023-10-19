@@ -134,19 +134,32 @@ impl TaskEncoder for MirBuiltinEncoder {
                     let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
                     ).unwrap();
-                    Ok((MirBuiltinEncoderOutput {
-                        function: vcx.alloc(vir::FunctionData {
-                            name,
-                            args: vcx.alloc_slice(&[vcx.mk_local_decl("arg", ty_out.snapshot)]),
-                            ret: ty_out.snapshot,
-                            pres: &[],
-                            posts: &[],
-                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
-                                kind: vir::UnOpKind::Neg,
-                                expr: ty_out.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg")),
-                            })))]))),
-                        }),
-                    }, ()))
+                    Ok((
+                        MirBuiltinEncoderOutput {
+                            function: vcx.alloc(vir::FunctionData {
+                                name,
+                                args: vcx.alloc_slice(&[vcx.mk_local_decl("arg", ty_out.snapshot)]),
+                                ret: ty_out.snapshot,
+                                pres: &[],
+                                posts: &[],
+                                expr: Some(
+                                    ty_out.snapshot_constructor.as_expr(vcx).reify(
+                                        vcx,
+                                        vcx.alloc_slice(&[vcx.alloc(vir::ExprData::UnOp(
+                                            vcx.alloc(vir::UnOpData {
+                                                kind: vir::UnOpKind::Neg,
+                                                expr: ty_out
+                                                    .snapshot_value
+                                                    .as_expr(vcx)
+                                                    .reify(vcx, vcx.mk_local_ex("arg")),
+                                            }),
+                                        ))]),
+                                    ),
+                                ),
+                            }),
+                        },
+                        (),
+                    ))
                 }
 
                 // TODO: should these be two different functions? precondition?
@@ -159,23 +172,39 @@ impl TaskEncoder for MirBuiltinEncoder {
                     let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
                     ).unwrap();
-                    Ok((MirBuiltinEncoderOutput {
-                        function: vcx.alloc(vir::FunctionData {
-                            name,
-                            args: vcx.alloc_slice(&[
-                                vcx.mk_local_decl("arg1", ty_out.snapshot),
-                                vcx.mk_local_decl("arg2", ty_out.snapshot),
-                            ]),
-                            ret: ty_out.snapshot,
-                            pres: &[],
-                            posts: &[],
-                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
-                                kind: vir::BinOpKind::Add,
-                                lhs: ty_out.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg1")),
-                                rhs: ty_out.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg2")),
-                            })))]))),
-                        }),
-                    }, ()))
+                    Ok((
+                        MirBuiltinEncoderOutput {
+                            function: vcx.alloc(vir::FunctionData {
+                                name,
+                                args: vcx.alloc_slice(&[
+                                    vcx.mk_local_decl("arg1", ty_out.snapshot),
+                                    vcx.mk_local_decl("arg2", ty_out.snapshot),
+                                ]),
+                                ret: ty_out.snapshot,
+                                pres: &[],
+                                posts: &[],
+                                expr: Some(
+                                    ty_out.snapshot_constructor.as_expr(vcx).reify(
+                                        vcx,
+                                        vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(
+                                            vcx.alloc(vir::BinOpData {
+                                                kind: vir::BinOpKind::Add,
+                                                lhs: ty_out
+                                                    .snapshot_value
+                                                    .as_expr(vcx)
+                                                    .reify(vcx, vcx.mk_local_ex("arg1")),
+                                                rhs: ty_out
+                                                    .snapshot_value
+                                                    .as_expr(vcx)
+                                                    .reify(vcx, vcx.mk_local_ex("arg2")),
+                                            }),
+                                        ))]),
+                                    ),
+                                ),
+                            }),
+                        },
+                        (),
+                    ))
                 }
 
                 MirBuiltinEncoderTask::CheckedBinOp(mir::BinOp::Add | mir::BinOp::AddUnchecked, ty) => {
@@ -196,27 +225,51 @@ impl TaskEncoder for MirBuiltinEncoder {
                     let bool_cons = deps.require_ref::<crate::encoders::TypeEncoder>(
                         vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
                     ).unwrap().snapshot_constructor;
-                    Ok((MirBuiltinEncoderOutput {
-                        function: vcx.alloc(vir::FunctionData {
-                            name,
-                            args: vcx.alloc_slice(&[
-                                vcx.mk_local_decl("arg1", ty_in.snapshot),
-                                vcx.mk_local_decl("arg2", ty_in.snapshot),
-                            ]),
-                            ret: ty_out.snapshot,
-                            pres: &[],
-                            posts: &[],
-                            expr: Some(ty_out.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[
-                                ty_in.snapshot_constructor.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
-                                    kind: vir::BinOpKind::Add,
-                                    lhs: ty_in.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg1")),
-                                    rhs: ty_in.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg2")),
-                                })))])),
-                                // TODO: overflow condition!
-                                bool_cons.as_expr(vcx).reify(vcx, vcx.alloc_slice(&[&vir::ExprData::Const(&vir::ConstData::Bool(false))])),
-                            ]))),
-                        }),
-                    }, ()))
+                    Ok((
+                        MirBuiltinEncoderOutput {
+                            function: vcx.alloc(vir::FunctionData {
+                                name,
+                                args: vcx.alloc_slice(&[
+                                    vcx.mk_local_decl("arg1", ty_in.snapshot),
+                                    vcx.mk_local_decl("arg2", ty_in.snapshot),
+                                ]),
+                                ret: ty_out.snapshot,
+                                pres: &[],
+                                posts: &[],
+                                expr: Some(
+                                    ty_out.snapshot_constructor.as_expr(vcx).reify(
+                                        vcx,
+                                        vcx.alloc_slice(&[
+                                            ty_in.snapshot_constructor.as_expr(vcx).reify(
+                                                vcx,
+                                                vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(
+                                                    vcx.alloc(vir::BinOpData {
+                                                        kind: vir::BinOpKind::Add,
+                                                        lhs: ty_in
+                                                            .snapshot_value
+                                                            .as_expr(vcx)
+                                                            .reify(vcx, vcx.mk_local_ex("arg1")),
+                                                        rhs: ty_in
+                                                            .snapshot_value
+                                                            .as_expr(vcx)
+                                                            .reify(vcx, vcx.mk_local_ex("arg2")),
+                                                    }),
+                                                ))]),
+                                            ),
+                                            // TODO: overflow condition!
+                                            bool_cons.as_expr(vcx).reify(
+                                                vcx,
+                                                vcx.alloc_slice(&[&vir::ExprData::Const(&vir::ConstData::Bool(
+                                                    false,
+                                                ))]),
+                                            ),
+                                        ]),
+                                    ),
+                                ),
+                            }),
+                        },
+                        (),
+                    ))
                 }
 
                 _ => todo!(),

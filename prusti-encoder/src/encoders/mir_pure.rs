@@ -557,10 +557,12 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                             self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
                         ).unwrap().snapshot_constructor;
 
-                        let forall = bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
-                            qvars,
-                            triggers: &[], // TODO
-                            body,
+                        let forall = bool_cons.as_expr(self.vcx).reify(
+                            self.vcx, 
+                            self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
+                                qvars,
+                                triggers: &[], // TODO
+                                body,
                         })))]));
 
                         let mut term_update = Update::new();
