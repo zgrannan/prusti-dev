@@ -314,10 +314,11 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
 
         let res = init.merge(update);
         let ret_version = res.versions.get(&mir::RETURN_PLACE).copied().unwrap_or(0);
-        // TODO: use type encoder
-        self.reify_binds(res, self.vcx.mk_func_app(
-            "s_Bool_val",
-            &[self.mk_local_ex(mir::RETURN_PLACE, ret_version)],
+        let bool_val = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+        ).unwrap().snapshot_value;
+        self.reify_binds(res, bool_val.as_expr(self.vcx).reify(self.vcx,
+            self.mk_local_ex(mir::RETURN_PLACE, ret_version)
         ))
     }
 
@@ -633,22 +634,14 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             l.ty(self.body, self.vcx.tcx),
                         ).unwrap();
-                        let ty_l = vir::vir_format!(self.vcx, "{}_val", ty_l.snapshot_name); // TODO: get the `_val` function differently
                         let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             r.ty(self.body, self.vcx.tcx),
                         ).unwrap();
-                        let ty_r = vir::vir_format!(self.vcx, "{}_val", ty_r.snapshot_name); // TODO: get the `_val` function differently
 
                         bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
                             kind: vir::BinOpKind::CmpGt,
-                            lhs: self.vcx.mk_func_app(
-                                ty_l,
-                                &[self.encode_operand(curr_ver, l)],
-                            ),
-                            rhs: self.vcx.mk_func_app(
-                                ty_r,
-                                &[self.encode_operand(curr_ver, r)],
-                            ),
+                            lhs: ty_l.snapshot_value.as_expr(self.vcx).reify(self.vcx, self.encode_operand(curr_ver, l)),
+                            rhs: ty_r.snapshot_value.as_expr(self.vcx).reify(self.vcx, self.encode_operand(curr_ver, r)),
                         })))]))
                     }
                     k => todo!("binop {k:?}"),

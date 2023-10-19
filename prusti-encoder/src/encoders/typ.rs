@@ -35,6 +35,7 @@ pub struct TypeEncoderOutputRef<'vir> {
     pub predicate_name: &'vir str,
     pub snapshot: vir::Type<'vir>,
     pub snapshot_constructor: FunctionIdentifier<'vir, vir::UnknownArgs>,
+    pub snapshot_value: FunctionIdentifier<'vir, vir::UnaryArgs>,
     pub function_unreachable: FunctionIdentifier<'vir, vir::NullaryArgs>,
     pub function_snap: FunctionIdentifier<'vir, vir::UnaryArgs>,
     //pub method_refold: &'vir str,
@@ -381,6 +382,9 @@ impl TaskEncoder for TypeEncoder {
                 snapshot_constructor: FunctionIdentifier::new(
                     vir::vir_format!(vcx, "{name_s}{}", snapshot_constructor_suffix!())
                 ),
+                snapshot_value: FunctionIdentifier::new(
+                    vir::vir_format!(vcx, "{name_s}{}", snapshot_val_suffix!())
+                ),
                 function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
                 function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
                 //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
@@ -663,6 +667,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_constructor: FunctionIdentifier::new(
                         vir::vir_format!(vcx, "s_Bool{}", snapshot_constructor_suffix!())
                     ),
+                    snapshot_value: FunctionIdentifier::new(
+                        vir::vir_format!(vcx, "s_Bool{}", snapshot_val_suffix!())
+                    ),
                     function_unreachable: FunctionIdentifier::new("s_Bool_unreachable"),
                     function_snap: FunctionIdentifier::new("p_Bool_snap"),
                     //method_refold: "refold_p_Bool",
@@ -709,6 +716,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_constructor: FunctionIdentifier::new(
                         vir::vir_format!(vcx, "{name_s}{}", snapshot_constructor_suffix!())
                     ),
+                    snapshot_value: FunctionIdentifier::new(
+                        vir::vir_format!(vcx, "{name_s}{}", snapshot_val_suffix!())
+                    ),
                     function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
                     function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
                     //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
@@ -744,6 +754,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
                         vir::vir_format!(vcx, "s_Tuple0{}", snapshot_constructor_suffix!())
+                    ),
+                    snapshot_value: FunctionIdentifier::new(
+                        vir::vir_format!(vcx, "s_Tuple0{}", snapshot_val_suffix!())
                     ),
                     function_unreachable: FunctionIdentifier::new("s_Tuple0_unreachable"),
                     function_snap: FunctionIdentifier::new("p_Tuple0_snap"),
@@ -832,6 +845,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_constructor: FunctionIdentifier::new(
                         vir::vir_format!(vcx, "{}{}", param_out.snapshot_param_name, snapshot_constructor_suffix!())
                     ),
+                    snapshot_value: FunctionIdentifier::new(
+                        vir::vir_format!(vcx, "{}{}", param_out.snapshot_param_name, snapshot_val_suffix!())
+                    ),
                     function_unreachable: FunctionIdentifier::new("s_Param_unreachable"),
                     function_snap: FunctionIdentifier::new("p_Param_snap"),
                     //method_refold: "refold_p_Param",
@@ -877,6 +893,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
                         vir::vir_format!(vcx, "s_Never{}", snapshot_constructor_suffix!())
+                    ),
+                    snapshot_value: FunctionIdentifier::new(
+                        vir::vir_format!(vcx, "s_Never{}", snapshot_val_suffix!())
                     ),
                     function_unreachable: FunctionIdentifier::new("s_Never_unreachable"),
                     function_snap: FunctionIdentifier::new("p_Never_snap"),
