@@ -105,12 +105,11 @@ impl TaskEncoder for MirImpureEncoder {
                 }
             ).unwrap();
             let pre_args = vcx.alloc_slice(&(1..=body.arg_count)
-                .map(|local| vcx.mk_typed_func_app(
-                    local_types[local.into()].function_snap,
-                    vcx.mk_local_ex(
-                        vir::vir_format!(vcx, "_{local}p"),
-                    ),
-                ))
+                .map(|local|
+                    local_types[local.into()].function_snap.as_expr(vcx).reify(vcx, 
+                        vcx.mk_local_ex( vir::vir_format!(vcx, "_{local}p"),)
+                    )
+                )
                 .collect::<Vec<vir::Expr<'_>>>());
             let spec_pres = specs.pres.iter().map(|spec_def_id| {
                 let expr = deps.require_local::<crate::encoders::MirPureEncoder>(

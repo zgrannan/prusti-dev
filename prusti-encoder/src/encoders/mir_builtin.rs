@@ -1,3 +1,4 @@
+use vir::{Reify, FunctionIdentifier};
 use prusti_rustc_interface::{
     middle::ty,
     middle::mir,
@@ -34,6 +35,8 @@ pub struct MirBuiltinEncoderOutput<'vir> {
 }
 
 use std::cell::RefCell;
+
+use crate::encoders::TypeEncoderOutputRef;
 thread_local! {
     static CACHE: task_encoder::CacheStaticRef<MirBuiltinEncoder> = RefCell::new(Default::default());
 }
@@ -94,7 +97,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                         s_Bool$cons(!s_Bool$val(val))
                     } */
 
-                    let ty_ref = deps.require_ref::<crate::encoders::TypeEncoder>(
+                    let ty_ref: TypeEncoderOutputRef<'vir> = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
                     ).unwrap();
                     let ty_s = ty_ref.snapshot;
@@ -105,16 +108,19 @@ impl TaskEncoder for MirBuiltinEncoder {
                             ret: ty_s,
                             pres: &[],
                             posts: &[],
-                            expr: Some(vcx.mk_typed_func_app(
-                                ty_ref.snapshot_constructor,
-                                vec![vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
-                                    kind: vir::UnOpKind::Not,
-                                    expr: vcx.mk_func_app(
-                                        "s_Bool_val",
-                                        &[vcx.mk_local_ex("arg")],
-                                    ),
-                                })))],
-                            )),
+                            expr: Some(
+                                ty_ref.snapshot_constructor.as_expr(vcx).reify(
+                                    vcx,
+                                    vcx.alloc_slice(
+                                        &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                                                            kind: vir::UnOpKind::Not,
+                                                                            expr: vcx.mk_func_app(
+                                                                                "s_Bool_val",
+                                                                                &[vcx.mk_local_ex("arg")],
+                                                                            ),
+                                                                        })))])
+                                )
+                            ),
                         }),
                     }, ()))
                 }
