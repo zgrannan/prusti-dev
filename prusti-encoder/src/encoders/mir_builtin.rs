@@ -114,7 +114,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                                     vcx.alloc_slice(
                                     &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                             kind: vir::UnOpKind::Not,
-                                            expr:  ty_ref.snapshot_value.as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg"))
+                                            expr:  ty_ref.snapshot_primitive_value.unwrap().as_expr(vcx).reify(vcx, vcx.mk_local_ex("arg"))
                                     })))])
                                 )
                             ),
@@ -149,7 +149,8 @@ impl TaskEncoder for MirBuiltinEncoder {
                                             vcx.alloc(vir::UnOpData {
                                                 kind: vir::UnOpKind::Neg,
                                                 expr: ty_out
-                                                    .snapshot_value
+                                                    .snapshot_primitive_value
+                                                    .unwrap()
                                                     .as_expr(vcx)
                                                     .reify(vcx, vcx.mk_local_ex("arg")),
                                             }),
@@ -190,11 +191,13 @@ impl TaskEncoder for MirBuiltinEncoder {
                                             vcx.alloc(vir::BinOpData {
                                                 kind: vir::BinOpKind::Add,
                                                 lhs: ty_out
-                                                    .snapshot_value
+                                                    .snapshot_primitive_value
+                                                    .unwrap()
                                                     .as_expr(vcx)
                                                     .reify(vcx, vcx.mk_local_ex("arg1")),
                                                 rhs: ty_out
-                                                    .snapshot_value
+                                                    .snapshot_primitive_value
+                                                    .unwrap()
                                                     .as_expr(vcx)
                                                     .reify(vcx, vcx.mk_local_ex("arg2")),
                                             }),
@@ -246,11 +249,13 @@ impl TaskEncoder for MirBuiltinEncoder {
                                                     vcx.alloc(vir::BinOpData {
                                                         kind: vir::BinOpKind::Add,
                                                         lhs: ty_in
-                                                            .snapshot_value
+                                                            .snapshot_primitive_value
+                                                            .unwrap()
                                                             .as_expr(vcx)
                                                             .reify(vcx, vcx.mk_local_ex("arg1")),
                                                         rhs: ty_in
-                                                            .snapshot_value
+                                                            .snapshot_primitive_value
+                                                            .unwrap()
                                                             .as_expr(vcx)
                                                             .reify(vcx, vcx.mk_local_ex("arg2")),
                                                     }),

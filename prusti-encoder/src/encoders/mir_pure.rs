@@ -97,12 +97,10 @@ impl TaskEncoder for MirPureEncoder {
         let def_id = task_key.1; //.parent_def_id;
         let local_def_id = def_id.expect_local();
 
-        println!("encoding {def_id:?}");
+        tracing::debug!("encoding {def_id:?}");
         let expr = vir::with_vcx(move |vcx| {
             //let body = vcx.tcx.mir_promoted(local_def_id).0.borrow();
-            let body = unsafe {
-                prusti_interface::environment::mir_storage::retrieve_mir_body(vcx.tcx, local_def_id)
-            }.body;
+            let body = vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
 
             let expr_inner = Encoder::new(vcx, task_key.0, &body, deps).encode_body();
 
@@ -124,7 +122,7 @@ impl TaskEncoder for MirPureEncoder {
                 }),
             ))
         });
-        println!("finished {def_id:?}");
+        tracing::debug!("finished {def_id:?}");
 
         Ok((MirPureEncoderOutput { expr }, ()))
     }
@@ -314,12 +312,8 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
 
         let res = init.merge(update);
         let ret_version = res.versions.get(&mir::RETURN_PLACE).copied().unwrap_or(0);
-        let bool_val = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
-        ).unwrap().snapshot_value;
-        self.reify_binds(res, bool_val.as_expr(self.vcx).reify(self.vcx,
-            self.mk_local_ex(mir::RETURN_PLACE, ret_version)
-        ))
+      
+        self.reify_binds(res, self.mk_local_ex(mir::RETURN_PLACE, ret_version))
     }
 
     fn find_join_point(
@@ -609,14 +603,6 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
         curr_ver: &HashMap<mir::Local, usize>,
         rvalue: &mir::Rvalue<'vir>,
     ) -> ExprRet<'vir> {
-        // TODO: keep this as a "well" known result or cached task ...?
-        //let bool_ty_out = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-        //    self.vcx.tcx.mk_ty_from_kind(TyKind::Bool),
-        //).unwrap();
-
-        let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
-        ).unwrap().snapshot_constructor;
         match rvalue {
             mir::Rvalue::Use(op) => self.encode_operand(curr_ver, op),
             // Repeat
@@ -626,37 +612,41 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
             // Len
             // Cast
             mir::Rvalue::BinaryOp(op, box (l, r)) => {
-                match op {
-                    mir::BinOp::Eq => bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
-                        kind: vir::BinOpKind::CmpEq,
-                        lhs: self.encode_operand(curr_ver, l),
-                        rhs: self.encode_operand(curr_ver, r),
-                    })))])),
-                    mir::BinOp::Gt => {
-                        let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-                            l.ty(self.body, self.vcx.tcx),
-                        ).unwrap();
-                        let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-                            r.ty(self.body, self.vcx.tcx),
-                        ).unwrap();
+                let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    l.ty(self.body, self.vcx.tcx),
+                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    r.ty(self.body, self.vcx.tcx),
+                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    rvalue.ty(self.body, self.vcx.tcx),
+                ).unwrap().snapshot_constructor.as_expr(self.vcx);
 
-                        bool_cons.as_expr(self.vcx).reify(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
-                            kind: vir::BinOpKind::CmpGt,
-                            lhs: ty_l.snapshot_value.as_expr(self.vcx).reify(self.vcx, self.encode_operand(curr_ver, l)),
-                            rhs: ty_r.snapshot_value.as_expr(self.vcx).reify(self.vcx, self.encode_operand(curr_ver, r)),
-                        })))]))
-                    }
-                    k => todo!("binop {k:?}"),
-                }
+                ty_rvalue.reify(self.vcx, self.vcx.alloc_slice(
+                    &[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
+                        kind: op.into(),
+                        lhs: ty_l.reify(self.vcx, self.encode_operand(curr_ver, l)),
+                        rhs: ty_r.reify(self.vcx, self.encode_operand(curr_ver, r)),
+                    })))],
+                ))
             }
             // CheckedBinaryOp
             // NullaryOp
-            mir::Rvalue::UnaryOp(mir::UnOp::Not, op) =>
-                // TODO: probably wrong, need to negate a bool snap
-                self.vcx.alloc(ExprRetData::UnOp(self.vcx.alloc(vir::UnOpGenData {
-                    kind: vir::UnOpKind::Not,
-                    expr: self.encode_operand(curr_ver, op),
-                }))),
+            mir::Rvalue::UnaryOp(op, expr) => {
+                let ty_expr = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    expr.ty(self.body, self.vcx.tcx),
+                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+                    rvalue.ty(self.body, self.vcx.tcx),
+                ).unwrap().snapshot_constructor.as_expr(self.vcx);
+
+                ty_rvalue.reify(self.vcx, self.vcx.alloc_slice(
+                    &[self.vcx.alloc(ExprRetData::UnOp(self.vcx.alloc(vir::UnOpGenData {
+                        kind: op.into(),
+                        expr: ty_expr.reify(self.vcx, self.encode_operand(curr_ver, expr)),
+                    })))]
+                ))
+            }
             // Discriminant
             mir::Rvalue::Aggregate(box kind, fields) => match kind {
                 mir::AggregateKind::Tuple if fields.len() == 0 =>
