@@ -44,26 +44,6 @@ pub struct TypeEncoderOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny<'vir> for TypeEncoderOutputRef<'vir> {}
 
-macro_rules! snapshot_prefix {
-    () => { "s_" }
-}
-
-macro_rules! snapshot_constructor_suffix {
-    () => { "_cons" }
-}
-
-macro_rules! snapshot_val_suffix {
-    () => { "_val" }
-}
-
-macro_rules! builtin_snapshot_constructor {
-    ($s:expr) => {
-        concat!(snapshot_prefix!(), $s, snapshot_constructor_suffix!())
-    }
-}
-
-// pub const BOOL_CONS: FunctionIdentifier<'static, vir::UnaryArgs> = FunctionIdentifier::new(builtin_snapshot_constructor!("Bool"));
-
 impl<'vir> TypeEncoderOutputRef<'vir> {
     pub fn expect_structlike(&self) -> &TypeEncoderOutputRefSubStruct<'vir> {
         match self.specifics {
@@ -616,10 +596,10 @@ impl TaskEncoder for TypeEncoder {
                     predicate_name: "p_Bool",
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Bool{}", snapshot_constructor_suffix!())
+                        vir::vir_format!(vcx, "s_Bool_cons")
                     ),
                     snapshot_primitive_value: Some(FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Bool{}", snapshot_val_suffix!())
+                        vir::vir_format!(vcx, "s_Bool_val")
                     )),
                     function_unreachable: FunctionIdentifier::new("s_Bool_unreachable"),
                     function_snap: FunctionIdentifier::new("p_Bool_snap"),
@@ -663,10 +643,10 @@ impl TaskEncoder for TypeEncoder {
                     predicate_name: name_p,
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{name_s}{}", snapshot_constructor_suffix!())
+                        vir::vir_format!(vcx, "{name_s}_cons")
                     ),
                     snapshot_primitive_value: Some(FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{name_s}{}", snapshot_val_suffix!())
+                        vir::vir_format!(vcx, "{name_s}_val")
                     )),
                     function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
                     function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
@@ -700,7 +680,7 @@ impl TaskEncoder for TypeEncoder {
                     predicate_name: "p_Tuple0",
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Tuple0{}", snapshot_constructor_suffix!())
+                        vir::vir_format!(vcx, "s_Tuple0_cons")
                     ),
                     snapshot_primitive_value: None,
                     function_unreachable: FunctionIdentifier::new("s_Tuple0_unreachable"),
@@ -784,7 +764,7 @@ impl TaskEncoder for TypeEncoder {
                     predicate_name: param_out.predicate_param_name,
                     snapshot: ty_s,
                     snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{}{}", param_out.snapshot_param_name, snapshot_constructor_suffix!())
+                        vir::vir_format!(vcx, "{}_cons", param_out.snapshot_param_name)
                     ),
                     snapshot_primitive_value: None,
                     function_unreachable: FunctionIdentifier::new("s_Param_unreachable"),
@@ -828,8 +808,9 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Never",
                     predicate_name: "p_Never",
                     snapshot: ty_s,
+                    // TODO: this constructor doesn't actually exist!
                     snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Never{}", snapshot_constructor_suffix!())
+                        vir::vir_format!(vcx, "s_Never_cons")
                     ),
                     snapshot_primitive_value: None,
                     function_unreachable: FunctionIdentifier::new("s_Never_unreachable"),
