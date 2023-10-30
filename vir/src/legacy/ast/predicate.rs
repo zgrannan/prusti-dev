@@ -213,7 +213,7 @@ impl StructPredicate {
     pub fn construct_access(&self, this: Expr, perm_amount: PermAmount) -> Expr {
         Expr::PredicateAccessPredicate(
             self.name.clone(),
-            box this,
+            Box::new(this),
             perm_amount,
             Position::default(),
         )

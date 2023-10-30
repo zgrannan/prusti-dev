@@ -121,8 +121,8 @@ impl vir::ExprFolder for Optimizer {
             for (expr, variable) in replacer.map.into_iter().sorted_unstable() {
                 forall = vir::Expr::LetExpr(vir::LetExpr {
                     variable,
-                    def: box expr,
-                    body: box forall,
+                    def: Box::new(expr),
+                    body: Box::new(forall),
                     position,
                 });
             }
@@ -358,14 +358,14 @@ impl vir::ExprFolder for UnfoldingExtractor {
         let unfoldings = mem::take(&mut self.unfoldings);
 
         for ((typ, args), (perm_amount, variant, _)) in unfoldings {
-            forall = vir::Expr::unfolding_with_pos(
-                typ,
-                args,
-                forall,
-                perm_amount,
+            forall = vir::Expr::Unfolding(vir::Unfolding {
+                predicate: typ,
+                arguments: args,
+                base: Box::new(forall),
+                permission: perm_amount,
                 variant,
                 position
-            );
+            });
         }
         debug!("replaced quantifier: {}", forall);
 

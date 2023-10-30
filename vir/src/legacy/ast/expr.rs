@@ -465,12 +465,12 @@ impl Expr {
 
     pub fn predicate_access_predicate<S: ToString>(name: S, place: Expr, perm: PermAmount) -> Self {
         let pos = place.pos();
-        Expr::PredicateAccessPredicate(name.to_string(), box place, perm, pos)
+        Expr::PredicateAccessPredicate(name.to_string(), Box::new(place), perm, pos)
     }
 
     pub fn field_access_predicate(place: Expr, perm: PermAmount) -> Self {
         let pos = place.pos();
-        Expr::FieldAccessPredicate(box place, perm, pos)
+        Expr::FieldAccessPredicate(Box::new(place), perm, pos)
     }
 
     pub fn pred_permission(place: Expr, perm: PermAmount) -> Option<Self> {
@@ -480,27 +480,27 @@ impl Expr {
     }
 
     pub fn acc_permission(place: Expr, perm: PermAmount) -> Self {
-        Expr::FieldAccessPredicate(box place, perm, Position::default())
+        Expr::FieldAccessPredicate(Box::new(place), perm, Position::default())
     }
 
     pub fn labelled_old(label: &str, expr: Expr) -> Self {
-        Expr::LabelledOld(label.to_string(), box expr, Position::default())
+        Expr::LabelledOld(label.to_string(), Box::new(expr), Position::default())
     }
 
     #[allow(clippy::should_implement_trait)]
     pub fn not(expr: Expr) -> Self {
-        Expr::UnaryOp(UnaryOpKind::Not, box expr, Position::default())
+        Expr::UnaryOp(UnaryOpKind::Not, Box::new(expr), Position::default())
     }
 
     pub fn minus(expr: Expr) -> Self {
-        Expr::UnaryOp(UnaryOpKind::Minus, box expr, Position::default())
+        Expr::UnaryOp(UnaryOpKind::Minus, Box::new(expr), Position::default())
     }
 
     pub fn gt_cmp(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::GtCmp,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -508,8 +508,8 @@ impl Expr {
     pub fn ge_cmp(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::GeCmp,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -517,8 +517,8 @@ impl Expr {
     pub fn lt_cmp(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::LtCmp,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -526,8 +526,8 @@ impl Expr {
     pub fn le_cmp(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::LeCmp,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -535,8 +535,8 @@ impl Expr {
     pub fn eq_cmp(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::EqCmp,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -547,26 +547,51 @@ impl Expr {
 
     #[allow(clippy::should_implement_trait)]
     pub fn add(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Add, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Add,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     #[allow(clippy::should_implement_trait)]
     pub fn sub(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Sub, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Sub,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     #[allow(clippy::should_implement_trait)]
     pub fn mul(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Mul, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Mul,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     #[allow(clippy::should_implement_trait)]
     pub fn div(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Div, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Div,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     pub fn modulo(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Mod, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Mod,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     #[allow(clippy::should_implement_trait)]
@@ -590,11 +615,21 @@ impl Expr {
     }
 
     pub fn and(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::And, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::And,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     pub fn or(left: Expr, right: Expr) -> Self {
-        Expr::BinOp(BinaryOpKind::Or, box left, box right, Position::default())
+        Expr::BinOp(
+            BinaryOpKind::Or,
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     pub fn xor(left: Expr, right: Expr) -> Self {
@@ -604,8 +639,8 @@ impl Expr {
     pub fn implies(left: Expr, right: Expr) -> Self {
         Expr::BinOp(
             BinaryOpKind::Implies,
-            box left,
-            box right,
+            Box::new(left),
+            Box::new(right),
             Position::default(),
         )
     }
@@ -615,7 +650,7 @@ impl Expr {
             !vars.is_empty(),
             "A quantifier must have at least one variable."
         );
-        Expr::ForAll(vars, triggers, box body, Position::default())
+        Expr::ForAll(vars, triggers, Box::new(body), Position::default())
     }
 
     pub fn exists(vars: Vec<LocalVar>, triggers: Vec<Trigger>, body: Expr) -> Self {
@@ -623,11 +658,16 @@ impl Expr {
             !vars.is_empty(),
             "A quantifier must have at least one variable."
         );
-        Expr::Exists(vars, triggers, box body, Position::default())
+        Expr::Exists(vars, triggers, Box::new(body), Position::default())
     }
 
     pub fn ite(guard: Expr, left: Expr, right: Expr) -> Self {
-        Expr::Cond(box guard, box left, box right, Position::default())
+        Expr::Cond(
+            Box::new(guard),
+            Box::new(left),
+            Box::new(right),
+            Position::default(),
+        )
     }
 
     pub fn unfolding(
@@ -640,7 +680,7 @@ impl Expr {
         Expr::Unfolding(
             pred_name,
             args,
-            box expr,
+            Box::new(expr),
             perm,
             variant,
             Position::default(),
@@ -651,7 +691,14 @@ impl Expr {
     pub fn wrap_in_unfolding(arg: Expr, body: Expr) -> Expr {
         let type_name = arg.get_type().name();
         let pos = body.pos();
-        Expr::Unfolding(type_name, vec![arg], box body, PermAmount::Read, None, pos)
+        Expr::Unfolding(
+            type_name,
+            vec![arg],
+            Box::new(body),
+            PermAmount::Read,
+            None,
+            pos,
+        )
     }
 
     pub fn func_app(
@@ -669,15 +716,15 @@ impl Expr {
     }
 
     pub fn magic_wand(lhs: Expr, rhs: Expr, borrow: Option<Borrow>) -> Self {
-        Expr::MagicWand(box lhs, box rhs, borrow, Position::default())
+        Expr::MagicWand(Box::new(lhs), Box::new(rhs), borrow, Position::default())
     }
 
     pub fn downcast(base: Expr, enum_place: Expr, variant_field: Field) -> Self {
-        Expr::Downcast(box base, box enum_place, variant_field)
+        Expr::Downcast(Box::new(base), Box::new(enum_place), variant_field)
     }
 
     pub fn snap_app(expr: Expr) -> Self {
-        Expr::SnapApp(box expr, Position::default())
+        Expr::SnapApp(Box::new(expr), Position::default())
     }
 
     pub fn find(&self, sub_target: &Expr) -> bool {
@@ -755,8 +802,8 @@ impl Expr {
         components
             .into_iter()
             .fold(self, |acc, component| match component {
-                PlaceComponent::Variant(variant, pos) => Expr::Variant(box acc, variant, pos),
-                PlaceComponent::Field(field, pos) => Expr::Field(box acc, field, pos),
+                PlaceComponent::Variant(variant, pos) => Expr::Variant(Box::new(acc), variant, pos),
+                PlaceComponent::Field(field, pos) => Expr::Field(Box::new(acc), field, pos),
             })
     }
 
@@ -772,18 +819,22 @@ impl Expr {
         let field_name = format!("enum_{index}");
         let typ = self.get_type();
         let variant = Field::new(field_name, typ.clone().variant(index));
-        Expr::Variant(box self, variant, Position::default())
+        Expr::Variant(Box::new(self), variant, Position::default())
     }
 
     #[must_use]
     pub fn field(self, field: Field) -> Self {
-        Expr::Field(box self, field, Position::default())
+        Expr::Field(Box::new(self), field, Position::default())
     }
 
     #[must_use]
     pub fn addr_of(self) -> Self {
         let type_name = self.get_type().name();
-        Expr::AddrOf(box self, Type::TypedRef(type_name), Position::default())
+        Expr::AddrOf(
+            Box::new(self),
+            Type::TypedRef(type_name),
+            Position::default(),
+        )
     }
 
     pub fn is_only_permissions(&self) -> bool {
@@ -923,7 +974,7 @@ impl Expr {
                 */
                 self
             }
-            _ => Expr::LabelledOld(label.to_string(), box self, Position::default()),
+            _ => Expr::LabelledOld(label.to_string(), Box::new(self), Position::default()),
         }
     }
 
@@ -1776,13 +1827,13 @@ impl Expr {
         impl ExprWalker for Collector {
             fn walk_variant(&mut self, e: &Expr, v: &Field, p: &Position) {
                 self.walk(e);
-                let expr = Expr::Variant(box e.clone(), v.clone(), *p);
+                let expr = Expr::Variant(Box::new(e.clone()), v.clone(), *p);
                 let perm = Expr::acc_permission(expr, self.perm_amount);
                 self.perms.push(perm);
             }
             fn walk_field(&mut self, e: &Expr, f: &Field, p: &Position) {
                 self.walk(e);
-                let expr = Expr::Field(box e.clone(), f.clone(), *p);
+                let expr = Expr::Field(Box::new(e.clone()), f.clone(), *p);
                 let perm = Expr::acc_permission(expr, self.perm_amount);
                 self.perms.push(perm);
             }

@@ -334,7 +334,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> LifetimesEncoder<'tcx> for ProcedureEncoder<'p, 'v, '
         )?;
         self.reborrow_lifetimes_to_remove_for_block
             .entry(target)
-            .or_insert_with(BTreeSet::new);
+            .or_default();
         let mut values = self
             .reborrow_lifetimes_to_remove_for_block
             .get(&self.current_basic_block.unwrap())
@@ -374,7 +374,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> LifetimesEncoder<'tcx> for ProcedureEncoder<'p, 'v, '
         )?;
         self.reborrow_lifetimes_to_remove_for_block
             .entry(target)
-            .or_insert_with(BTreeSet::new);
+            .or_default();
         let mut values = self
             .reborrow_lifetimes_to_remove_for_block
             .get(&self.current_basic_block.unwrap())
@@ -1063,13 +1063,13 @@ impl<'p, 'v: 'p, 'tcx: 'v> LifetimesEncoder<'tcx> for ProcedureEncoder<'p, 'v, '
         for component in identical_lifetimes {
             let existing_component_lifetims: BTreeSet<String> = component
                 .iter()
-                .cloned()
                 .filter(|lft| existing_lifetimes.contains(&lft[..]))
+                .cloned()
                 .collect();
             let non_existing_component_lifetimes: BTreeSet<String> = component
                 .iter()
-                .cloned()
                 .filter(|lft| !existing_lifetimes.contains(&lft[..]))
+                .cloned()
                 .collect();
             for lifetime in non_existing_component_lifetimes {
                 let identical_existing_lifetime = existing_component_lifetims.iter().next();

@@ -281,15 +281,6 @@ impl Expr {
                         position,
                         ..inner
                     }),)*
-                    Expr::ForAll(inner) => {
-                        if !inner.position.is_default() {
-                            panic!("Cannot set position of ForAll expression twice");
-                        }
-                        Expr::ForAll(ForAll {
-                            position,
-                            ..inner
-                        })
-                    },
                     Expr::Field(inner) => Expr::Field(FieldExpr {
                         position,
                         ..inner
@@ -327,7 +318,8 @@ impl Expr {
             Cast,
             Acc,
             Frac,
-            Perm
+            Perm,
+            ForAll
         )
     }
 
@@ -1362,7 +1354,7 @@ impl Expr {
                                 Expr::ForAll(ForAll {
                                     variables: variables.clone(),
                                     triggers: triggers.clone(),
-                                    body: box Expr::implies(Expr::and(g, *left.clone()), *e),
+                                    body: Box::new(Expr::implies(Expr::and(g, *left.clone()), *e)),
                                     position 
                                 })
                             };
@@ -1381,7 +1373,7 @@ impl Expr {
                                 Expr::ForAll(ForAll {
                                     variables: variables.clone(),
                                     triggers: triggers.clone(),
-                                    body: box Expr::implies(*left.clone(), e),
+                                    body: Box::new(Expr::implies(*left.clone(), e)),
                                     position 
                                 })
                             };
@@ -1490,7 +1482,7 @@ impl Expr {
                             return Expr::BinOp(
                                 BinOp {
                                     op_kind: BinaryOpKind::Implies,
-                                    left: box self.fold(condition),
+                                    left: Box::new(self.fold(condition)),
                                     right: self.fold_boxed(nested.right),
                                     position
                                 }

@@ -117,7 +117,7 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
                 _ => vir::Expr::LabelledOld(
                     vir::LabelledOld {
                         label: expr.label.clone(),
-                        base: box RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base),
+                        base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
                         position: expr.position
                     })
             }
@@ -203,7 +203,7 @@ pub(super) fn encode_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
                 _ => vir::Expr::LabelledOld(
                     vir::LabelledOld {
                         label: expr.label.clone(),
-                        base: box RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base),
+                        base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
                         position: expr.position
                     })
             }
@@ -254,7 +254,7 @@ pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
 
         ty::TyKind::Closure(_def_id, substs) => {
             let cl_substs = substs.as_closure();
-            for (field_num, field_ty) in cl_substs.upvar_tys().enumerate() {
+            for (field_num, field_ty) in cl_substs.upvar_tys().iter().enumerate() {
                 let field_name = format!("closure_{field_num}");
                 conjuncts.push(encoder.encode_invariant_func_app(
                     None,
