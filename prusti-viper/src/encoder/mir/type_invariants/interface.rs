@@ -25,6 +25,8 @@ pub(crate) trait TypeInvariantEncoderInterface<'tcx> {
         &self,
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
+        param_env: &ty::ParamEnv<'tcx>,
+        override_substs: Option<&ty::List<ty::GenericArg<'_>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr>;
 }
@@ -35,6 +37,8 @@ impl<'v, 'tcx: 'v> TypeInvariantEncoderInterface<'tcx> for super::super::super::
         &self,
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
+        param_env: &ty::ParamEnv<'tcx>,
+        override_substs: Option<&ty::List<ty::GenericArg<'_>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr> {
         // match snapshot ref/box peeling
@@ -45,7 +49,7 @@ impl<'v, 'tcx: 'v> TypeInvariantEncoderInterface<'tcx> for super::super::super::
         if !needs_invariant_func(ty) {
             return Ok(true.into());
         }
-        encode_twostate_invariant_expr(pre_label, self, ty, encoded_arg)
+        encode_twostate_invariant_expr(pre_label, self, ty, param_env, override_substs, encoded_arg)
     }
 
     fn encode_invariant_func_app(

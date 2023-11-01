@@ -4565,10 +4565,19 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                             // TODO: Use a better span
                             .with_span(self.mir.span)?;
                         invs_spec.push(inv);
+                        let param_env = self.encoder.env().tcx().param_env(contract.def_id);
+                        eprintln!("ParamEnv: {:?}", param_env);
+                        let trait_did = param_env.caller_bounds().get(0).unwrap().as_trait_clause().unwrap().def_id();
+                        eprintln!("Trait did: {:?}", trait_did);
+                        // let trait_method = self.encoder.env().query.find_trait_method_substs(
+                        //     contract.def_id,
+                        //     substs
+                        // );
+                        // eprintln!("TMSUBSTS: {:?}", trait_method);
                         twostate_invs_spec.push(
                             self.encoder
                                 .encode_twostate_invariant(
-                                    Some(pre_label), place_ty, old_place_expr
+                                    Some(pre_label), place_ty, &param_env, Some(substs), old_place_expr
                                 ).with_span(self.mir.span)?
                         );
                     }
@@ -5472,6 +5481,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         // encode type invariants
         let mut invs_spec = Vec::new();
         let mut twostate_invs_spec = Vec::new();
+        let param_env = todo!();
         for permission in &permissions {
             let mut encode_inv_for_pred = |ty, argument: &Box<vir::Expr>| {
                 let inv_func_app = self.encoder.encode_invariant_func_app(
@@ -5483,8 +5493,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 let inv_func_app = self.encoder.encode_twostate_invariant(
                     None,
                     ty,
+                    &param_env,
                     (**argument).clone(),
                 ).unwrap();
+                eprintln!("The invariant was {}", inv_func_app);
                 twostate_invs_spec.push(inv_func_app);
                 Ok::<(), EncodingError>(())
             };
@@ -5775,6 +5787,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 } => {
                     let tcx = self.encoder.env().tcx();
                     let arg_tys = args.iter().map(|arg| arg.ty(self.mir, tcx)).collect();
+                    eprintln!("Arg types: {:?}", arg_tys);
                     let return_ty = destination.ty(self.mir, tcx).ty;
                     FakeMirEncoder::new(self.encoder, arg_tys, return_ty)
                 }

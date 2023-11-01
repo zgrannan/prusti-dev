@@ -729,12 +729,15 @@ pub fn invariant(attr: TokenStream, tokens: TokenStream, two_state: bool) -> Tok
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
 
-    let item: syn::DeriveInput = handle_result!(syn::parse2(tokens));
+    let mut item: syn::Item = handle_result!(syn::parse2(tokens));
     let item_span = item.span();
 
-    // clippy false positive (https://github.com/rust-lang/rust-clippy/issues/10577)
-    #[allow(clippy::redundant_clone)]
-    let item_ident = item.ident.clone();
+    let item_ident = match item {
+        syn::Item::Struct(ref item_struct) => item_struct.ident.clone(),
+        syn::Item::Enum(ref item_enum) => item_enum.ident.clone(),
+        syn::Item::Trait(ref item_trait) => item_trait.ident.clone(),
+        other => panic!("Unsupported {other:?}")
+    };
 
     let item_name = syn::Ident::new(
         &format!("prusti_invariant_item_{item_ident}_{spec_id}"),
@@ -760,14 +763,17 @@ pub fn invariant(attr: TokenStream, tokens: TokenStream, two_state: bool) -> Tok
         #[prusti::spec_only]
         #annotation
         #[prusti::spec_id = #spec_id_str]
-        fn #item_name(self) -> bool {
+        fn #item_name(&self) -> bool {
             !!(#attr)
         }
     };
 
-    // clippy false positive (https://github.com/rust-lang/rust-clippy/issues/10577)
-    #[allow(clippy::redundant_clone)]
-    let generics = item.generics.clone();
+    let generics = match item {
+        syn::Item::Struct(ref item_struct) => item_struct.generics.clone(),
+        syn::Item::Enum(ref item_enum) => item_enum.generics.clone(),
+        syn::Item::Trait(ref item_trait) => item_trait.generics.clone(),
+        other => panic!("Unsupported {other:?}")
+    };
 
     let generics_idents = generics
         .params
@@ -777,17 +783,32 @@ pub fn invariant(attr: TokenStream, tokens: TokenStream, two_state: bool) -> Tok
             _ => None,
         })
         .collect::<syn::punctuated::Punctuated<_, syn::Token![,]>>();
-    // TODO: similarly to extern_specs, don't generate an actual impl
-    let item_impl: syn::ItemImpl = parse_quote_spanned! {item_span=>
-        impl #generics #item_ident < #generics_idents > {
-            #spec_item
+
+    let result = match item {
+        syn::Item::Trait(ref mut t) => {
+            let method: syn::TraitItemMethod = parse_quote_spanned! {item_span =>
+                #[prusti::specs_version = #SPECS_VERSION]
+                #spec_item
+            };
+            t.items.push(syn::TraitItem::Method(method));
+            quote_spanned!{ item_span => #t }
+        },
+        item => {
+            // TODO: similarly to extern_specs, don't generate an actual impl
+            let item_impl: syn::ItemImpl = parse_quote_spanned! {item_span=>
+                impl #generics #item_ident < #generics_idents > {
+                    #spec_item
+                }
+            };
+            quote_spanned! { item_span =>
+                #[prusti::specs_version = #SPECS_VERSION]
+                #item
+                #item_impl
+            }
         }
     };
-    quote_spanned! { item_span =>
-        #[prusti::specs_version = #SPECS_VERSION]
-        #item
-        #item_impl
-    }
+    eprintln!("Result: {result}");
+    result
 }
 
 pub fn extern_spec(attr: TokenStream, tokens: TokenStream) -> TokenStream {

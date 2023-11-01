@@ -682,16 +682,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 
 fn get_type_id_from_impl_node(node: prusti_rustc_interface::hir::Node) -> Option<DefId> {
     if let prusti_rustc_interface::hir::Node::Item(item) = node {
-        if let prusti_rustc_interface::hir::ItemKind::Impl(item_impl) = &item.kind {
-            if let prusti_rustc_interface::hir::TyKind::Path(
-                prusti_rustc_interface::hir::QPath::Resolved(_, path),
-            ) = item_impl.self_ty.kind
-            {
-                if let prusti_rustc_interface::hir::def::Res::Def(_, def_id) = path.res {
-                    return Some(def_id);
-                }
-            }
-        }
+        return Some(item.owner_id.to_def_id());
     }
     None
 }

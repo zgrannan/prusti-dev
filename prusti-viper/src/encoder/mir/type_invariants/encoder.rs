@@ -14,6 +14,38 @@ use prusti_interface::specs::typed;
 use prusti_rustc_interface::{middle::ty, target::abi::Integer};
 use vir_crate::polymorphic::{self as vir, ExprFolder, ExprIterator};
 
+const fn tykind_discriminant(value: &ty::TyKind) -> usize {
+    match value {
+        ty::TyKind::Bool => 0,
+        ty::TyKind::Char => 1,
+        ty::TyKind::Int(_) => 2,
+        ty::TyKind::Uint(_) => 3,
+        ty::TyKind::Float(_) => 4,
+        ty::TyKind::Adt(_, _) => 5,
+        ty::TyKind::Foreign(_) => 6,
+        ty::TyKind::Str => 7,
+        ty::TyKind::Array(_, _) => 8,
+        ty::TyKind::Slice(_) => 9,
+        ty::TyKind::RawPtr(_) => 10,
+        ty::TyKind::Ref(_, _, _) => 11,
+        ty::TyKind::FnDef(_, _) => 12,
+        ty::TyKind::FnPtr(_) => 13,
+        ty::TyKind::Dynamic(..) => 14,
+        ty::TyKind::Closure(_, _) => 15,
+        ty::TyKind::Generator(_, _, _) => 16,
+        ty::TyKind::GeneratorWitness(_) => 17,
+        ty::TyKind::Never => 18,
+        ty::TyKind::Tuple(_) => 19,
+        ty::TyKind::Alias(_, _) => 20,
+        ty::TyKind::Param(_) => 21,
+        ty::TyKind::Bound(_, _) => 22,
+        ty::TyKind::Placeholder(_) => 23,
+        ty::TyKind::Infer(_) => 24,
+        ty::TyKind::Error(_) => 25,
+        ty::TyKind::GeneratorWitnessMIR(_, _) => 26
+    }
+}
+
 pub(super) fn needs_invariant_func(ty: ty::Ty<'_>) -> bool {
     match ty.kind() {
         ty::TyKind::Ref(_, ty, _) => needs_invariant_func(*ty),
@@ -22,7 +54,12 @@ pub(super) fn needs_invariant_func(ty: ty::Ty<'_>) -> bool {
         //| ty::TyKind::Uint(..)
         ty::TyKind::Tuple(..) | ty::TyKind::Closure(..) => true,
         ty::TyKind::Adt(adt_def, _) if adt_def.is_struct() || adt_def.is_enum() => true,
-        _ => false,
+        ty::TyKind::Param(..) => true,
+
+        other => {
+            eprintln!("Don't need invariant function for type {:?}", tykind_discriminant(ty.kind()));
+            false
+        }
     }
 }
 
@@ -71,43 +108,49 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
     pre_label: Option<&str>,
     encoder: &'p Encoder<'v, 'tcx>,
     ty: ty::Ty<'tcx>,
+    param_env: &ty::ParamEnv<'tcx>,
+    override_substs: Option<&List<GenericArg<'_>>>,
     encoded_arg: vir::Expr,
 ) -> EncodingResult<vir::Expr> {
     let mut conjuncts = vec![];
-    match ty.kind() {
-        ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => {
-            if let Some(specs) = encoder.get_type_specs(adt_def.did()) {
-                match &specs.twostate_invariant {
-                    typed::SpecificationItem::Empty => {}
-                    typed::SpecificationItem::Inherent(invs) => {
-                        let arg = match pre_label {
-                            Some(label) => vir::Expr::labelled_old(label, encoded_arg.clone()),
-                            None        => encoded_arg.clone()
-                        };
-                        conjuncts.extend(
-                            invs.iter()
-                                .map(|inherent_def_id| {
-                                    encoder.encode_assertion(
-                                        inherent_def_id,
-                                        pre_label,
-                                        &[arg.clone()],
-                                        None,
-                                        true,
-                                        *inherent_def_id,
-                                        substs,
-                                    )
-                                })
-                                .collect::<Result<Vec<_>, _>>()?,
-                        )
-                    }
-                    _ => todo!(),
-                }
-            }
-        }
-
+    let empty_list = ty::List::empty();
+    let (specs_option, substs) = match ty.kind() {
+        ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => 
+            (encoder.get_type_specs(adt_def.did()), substs),
+        ty::TyKind::Param(p) => {
+            let trait_did = param_env.caller_bounds().get(0).unwrap().as_trait_clause().unwrap().def_id();
+            (encoder.get_type_specs(trait_did), override_substs.unwrap())
+        },
         // other types should not make it here because of `needs_invariant_func`
         _ => unreachable!("{ty:?}"),
     };
+    if let Some(specs) = specs_option {
+        match &specs.twostate_invariant {
+            typed::SpecificationItem::Empty => {}
+            typed::SpecificationItem::Inherent(invs) => {
+                let arg = match pre_label {
+                    Some(label) => vir::Expr::labelled_old(label, encoded_arg.clone()),
+                    None        => encoded_arg.clone()
+                };
+                conjuncts.extend(
+                    invs.iter()
+                        .map(|inherent_def_id| {
+                            encoder.encode_assertion(
+                                inherent_def_id,
+                                pre_label,
+                                &[arg.clone()],
+                                None,
+                                true,
+                                *inherent_def_id,
+                                substs,
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+            }
+            _ => todo!(),
+        }
+    }
     let expr = conjuncts.into_iter().conjoin();
     struct RemoveOldFolder(Option<String>);
     impl ExprFolder for RemoveOldFolder {
@@ -190,7 +233,9 @@ pub(super) fn encode_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
                 }
             }
         }
-
+        ty::TyKind::Param(..) => {
+            // Ignore 1s invariants for traits for now
+        },
         // other types should not make it here because of `needs_invariant_func`
         _ => unreachable!("{ty:?}"),
     };

@@ -127,7 +127,7 @@ fn constraint_fulfilled<'spec, 'env: 'spec, 'tcx: 'env>(
     }
 }
 
-mod trait_bounds {
+pub mod trait_bounds {
     use super::*;
     use prusti_interface::{utils::has_trait_bounds_type_cond_spec, PrustiError};
     use rustc_hash::FxHashMap;
@@ -204,7 +204,7 @@ mod trait_bounds {
         }
     }
 
-    fn extract_param_env<'a, 'tcx>(
+    pub fn extract_param_env<'a, 'tcx>(
         env: &'a Environment<'tcx>,
         spec: &ProcedureSpecification,
     ) -> ty::ParamEnv<'tcx> {
