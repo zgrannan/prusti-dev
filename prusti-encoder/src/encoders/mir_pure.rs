@@ -549,7 +549,7 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
 
                         let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
-                        ).unwrap().snapshot_constructor;
+                        ).unwrap().from_primitive.unwrap();
 
                         let forall = bool_cons.as_expr(self.vcx).reify(
                             self.vcx, 
@@ -614,13 +614,13 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
             mir::Rvalue::BinaryOp(op, box (l, r)) => {
                 let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     l.ty(self.body, self.vcx.tcx),
-                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
                 let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     r.ty(self.body, self.vcx.tcx),
-                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
                 let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     rvalue.ty(self.body, self.vcx.tcx),
-                ).unwrap().snapshot_constructor.as_expr(self.vcx);
+                ).unwrap().from_primitive.unwrap().as_expr(self.vcx);
 
                 ty_rvalue.reify(self.vcx, self.vcx.alloc_slice(
                     &[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
@@ -635,10 +635,10 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
             mir::Rvalue::UnaryOp(op, expr) => {
                 let ty_expr = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     expr.ty(self.body, self.vcx.tcx),
-                ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
                 let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     rvalue.ty(self.body, self.vcx.tcx),
-                ).unwrap().snapshot_constructor.as_expr(self.vcx);
+                ).unwrap().from_primitive.unwrap().as_expr(self.vcx);
 
                 ty_rvalue.reify(self.vcx, self.vcx.alloc_slice(
                     &[self.vcx.alloc(ExprRetData::UnOp(self.vcx.alloc(vir::UnOpGenData {

@@ -5,7 +5,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{FunctionIdentifier};
+use vir::FunctionIdentifier;
 
 pub struct TypeEncoder;
 
@@ -34,10 +34,10 @@ pub struct TypeEncoderOutputRef<'vir> {
     pub snapshot_name: &'vir str,
     pub predicate_name: &'vir str,
     pub snapshot: vir::Type<'vir>,
-    pub snapshot_constructor: FunctionIdentifier<'vir, vir::UnknownArgs>,
-    pub snapshot_primitive_value: Option<FunctionIdentifier<'vir, vir::UnaryArgs>>,
+    pub from_primitive: Option<FunctionIdentifier<'vir, vir::UnknownArgs<'vir>>>,
+    pub to_primitive: Option<FunctionIdentifier<'vir, vir::UnaryArgs<'vir>>>,
     pub function_unreachable: FunctionIdentifier<'vir, vir::NullaryArgs>,
-    pub function_snap: FunctionIdentifier<'vir, vir::UnaryArgs>,
+    pub function_snap: FunctionIdentifier<'vir, vir::UnaryArgs<'vir>>,
     //pub method_refold: &'vir str,
     pub specifics: TypeEncoderOutputRefSub<'vir>,
     pub method_assign: &'vir str,
@@ -55,16 +55,25 @@ impl<'vir> TypeEncoderOutputRef<'vir> {
     pub fn expr_from_u128(&self, val: u128) -> vir::Expr<'vir> {
         // TODO: not great: store the TyKind as well?
         //   or should this be a different task for TypeEncoder?
-        let data = match self.snapshot_name {
-            "s_Bool" => vir::ConstData::Bool(val != 0),
-            name if name.starts_with("s_Int_") || name.starts_with("s_Uint_") => vir::ConstData::Int(val),
+        match self.snapshot_name {
+            "s_Bool" => vir::with_vcx(|vcx| {
+                self.from_primitive.unwrap().as_expr(vcx).reify(
+                    vcx,
+                    vcx.alloc_slice(&[vcx.alloc(vir::ExprData::Const(
+                        vcx.alloc(vir::ConstData::Bool(val != 0)),
+                    ))]),
+                )
+            }),
+            name if name.starts_with("s_Int_") || name.starts_with("s_Uint_") => vir::with_vcx(|vcx| {
+                self.from_primitive.unwrap().as_expr(vcx).reify(
+                    vcx,
+                    vcx.alloc_slice(&[
+                        vcx.alloc(vir::ExprData::Const(vcx.alloc(vir::ConstData::Int(val))))
+                    ]),
+                )
+            }),
             k => todo!("unsupported type in expr_from_u128 {k:?}"),
-        };
-        vir::with_vcx(|vcx|
-            self.snapshot_constructor
-                .as_expr(vcx)
-                .reify(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::Const(vcx.alloc(data)))]))
-        )
+        }
     }
 }
 
@@ -257,6 +266,50 @@ impl TaskEncoder for TypeEncoder {
                 blocks: None,
             })
         }
+
+        fn mk_from_primitive<'vir>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            name_s: &'vir str,
+            args: &'vir [vir::Type<'vir>],
+        ) -> FunctionIdentifier<'vir, vir::UnknownArgs<'vir>> {
+            FunctionIdentifier::new(
+                vir::vir_format!(vcx, "{name_s}_cons"),
+                vir::UnknownArgs(args)
+            )
+        }
+
+        fn mk_function_snap_identifier<'vir>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            name_p: &'vir str,
+            ty: vir::Type<'vir>
+        ) -> FunctionIdentifier<'vir, vir::UnaryArgs<'vir>> {
+            FunctionIdentifier::new(
+                vir::vir_format!(vcx, "{name_p}_snap"),
+                vir::UnaryArgs(ty),
+            )
+        }
+
+        fn mk_to_primitive<'vir>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            name_s: &'vir str,
+            ty_s: vir::Type<'vir>
+        ) -> FunctionIdentifier<'vir, vir::UnaryArgs<'vir>> {
+            FunctionIdentifier::new(
+                vir::vir_format!(vcx, "{name_s}_val"),
+                vir::UnaryArgs(ty_s),
+            )
+        }
+
+        fn mk_function_unreachable_identifier<'vir>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            name_s: &'vir str,
+        ) -> FunctionIdentifier<'vir, vir::NullaryArgs> {
+            FunctionIdentifier::new(
+                vir::vir_format!(vcx, "{name_s}_unreachable"),
+                vir::NullaryArgs
+            )                   
+        }
+
         fn mk_snap<'vir>(
             vcx: &'vir vir::VirCtxt<'vir>,
             predicate_name: &'vir str,
@@ -311,16 +364,24 @@ impl TaskEncoder for TypeEncoder {
             let field_read_names = vcx.alloc_slice(&field_read_names);
             let field_write_names = vcx.alloc_slice(&field_write_names);
             let field_projection_p_names = vcx.alloc_slice(&field_projection_p_names);
-            let cons_name = vir::vir_format!(vcx, "{name_s}_cons");
+
+            let snapshot_constructor_args = 
+                vcx.alloc_slice(&field_ty_out.iter()
+                        .map(|field_ty_out| field_ty_out.snapshot)
+                        .collect::<Vec<_>>());
+
+            let ty_s = vcx.alloc(vir::TypeData::Domain(name_s));
 
             deps.emit_output_ref::<TypeEncoder>(*task_key, TypeEncoderOutputRef {
                 snapshot_name: name_s,
                 predicate_name: name_p,
                 snapshot: vcx.alloc(vir::TypeData::Domain(name_s)),
-                snapshot_constructor: FunctionIdentifier::new(cons_name),
-                snapshot_primitive_value: None,
-                function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
-                function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
+                from_primitive: Some(
+                    mk_from_primitive(vcx, name_s, snapshot_constructor_args)
+                ),
+                to_primitive: Some(mk_to_primitive(vcx, name_s, ty_s)),
+                function_unreachable: mk_function_unreachable_identifier(vcx, name_s),
+                function_snap: mk_function_snap_identifier(vcx, name_p, ty_s),
                 //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
                 specifics: TypeEncoderOutputRefSub::StructLike(TypeEncoderOutputRefSubStruct {
                     field_read: field_read_names,
@@ -329,17 +390,15 @@ impl TaskEncoder for TypeEncoder {
                 }),
                 method_assign: vir::vir_format!(vcx, "assign_{name_p}"),
             });
-            let ty_s = vcx.alloc(vir::TypeData::Domain(name_s));
 
             let mut funcs: Vec<vir::DomainFunction<'vir>> = vec![];
             let mut axioms: Vec<vir::DomainAxiom<'vir>> = vec![];
 
+            let cons_name = vir::vir_format!(vcx, "{name_s}_cons");
             funcs.push(vcx.alloc(vir::DomainFunctionData {
                 unique: false,
                 name: cons_name,
-                args: vcx.alloc_slice(&field_ty_out.iter()
-                    .map(|field_ty_out| field_ty_out.snapshot)
-                    .collect::<Vec<_>>()),
+                args: snapshot_constructor_args,
                 ret: ty_s,
             }));
 
@@ -595,14 +654,16 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Bool",
                     predicate_name: "p_Bool",
                     snapshot: ty_s,
-                    snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Bool_cons")
+                    from_primitive: Some(
+                        mk_from_primitive(
+                            vcx, 
+                            "s_Bool", 
+                            vcx.alloc_slice(&[&vir::TypeData::Bool])
+                        )
                     ),
-                    snapshot_primitive_value: Some(FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Bool_val")
-                    )),
-                    function_unreachable: FunctionIdentifier::new("s_Bool_unreachable"),
-                    function_snap: FunctionIdentifier::new("p_Bool_snap"),
+                    to_primitive: Some(mk_to_primitive(vcx, "s_Bool", ty_s)),
+                    function_unreachable: mk_function_unreachable_identifier(vcx, "s_Bool"),
+                    function_snap: mk_function_snap_identifier(vcx, "p_Bool", ty_s),
                     //method_refold: "refold_p_Bool",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: "assign_p_Bool",
@@ -642,14 +703,16 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: name_s,
                     predicate_name: name_p,
                     snapshot: ty_s,
-                    snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{name_s}_cons")
-                    ),
-                    snapshot_primitive_value: Some(FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{name_s}_val")
+                    from_primitive: Some(FunctionIdentifier::new(
+                        name_cons,
+                        vir::UnknownArgs(vcx.alloc_slice(&[ty_s]))
                     )),
-                    function_unreachable: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_s}_unreachable")),
-                    function_snap: FunctionIdentifier::new(vir::vir_format!(vcx, "{name_p}_snap")),
+                    to_primitive: Some(FunctionIdentifier::new(
+                        name_val,
+                        vir::UnaryArgs(&vir::TypeData::Int)
+                    )),
+                    function_unreachable: mk_function_unreachable_identifier(vcx, name_s),
+                    function_snap: mk_function_snap_identifier(vcx, name_p, ty_s),
                     //method_refold: vir::vir_format!(vcx, "refold_{name_p}"),
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_{name_p}"),
@@ -679,12 +742,12 @@ impl TaskEncoder for TypeEncoder {
                     snapshot_name: "s_Tuple0",
                     predicate_name: "p_Tuple0",
                     snapshot: ty_s,
-                    snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Tuple0_cons")
+                    from_primitive: Some(
+                        mk_from_primitive(vcx, "s_Tuple0", &[])
                     ),
-                    snapshot_primitive_value: None,
-                    function_unreachable: FunctionIdentifier::new("s_Tuple0_unreachable"),
-                    function_snap: FunctionIdentifier::new("p_Tuple0_snap"),
+                    to_primitive: None,
+                    function_unreachable: mk_function_unreachable_identifier(vcx, "s_Tuple0"),
+                    function_snap: mk_function_snap_identifier(vcx, "p_Tuple0", ty_s),
                     //method_refold: "refold_p_Tuple0",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Tuple0"),
@@ -762,13 +825,11 @@ impl TaskEncoder for TypeEncoder {
                 deps.emit_output_ref::<Self>(*task_key, TypeEncoderOutputRef {
                     snapshot_name: param_out.snapshot_param_name,
                     predicate_name: param_out.predicate_param_name,
+                    to_primitive: None,
+                    from_primitive: None,
                     snapshot: ty_s,
-                    snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "{}_cons", param_out.snapshot_param_name)
-                    ),
-                    snapshot_primitive_value: None,
-                    function_unreachable: FunctionIdentifier::new("s_Param_unreachable"),
-                    function_snap: FunctionIdentifier::new("p_Param_snap"),
+                    function_unreachable: mk_function_unreachable_identifier(vcx, "s_Param"),
+                    function_snap: mk_function_snap_identifier(vcx, "p_Param", ty_s),
                     //method_refold: "refold_p_Param",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Bool"),
@@ -807,14 +868,11 @@ impl TaskEncoder for TypeEncoder {
                 deps.emit_output_ref::<Self>(*task_key, TypeEncoderOutputRef {
                     snapshot_name: "s_Never",
                     predicate_name: "p_Never",
+                    to_primitive: None,
+                    from_primitive: None,
                     snapshot: ty_s,
-                    // TODO: this constructor doesn't actually exist!
-                    snapshot_constructor: FunctionIdentifier::new(
-                        vir::vir_format!(vcx, "s_Never_cons")
-                    ),
-                    snapshot_primitive_value: None,
-                    function_unreachable: FunctionIdentifier::new("s_Never_unreachable"),
-                    function_snap: FunctionIdentifier::new("p_Never_snap"),
+                    function_unreachable: mk_function_unreachable_identifier(vcx, "s_Never"),
+                    function_snap: mk_function_snap_identifier(vcx, "p_Never", ty_s),
                     //method_refold: "refold_p_Never",
                     specifics: TypeEncoderOutputRefSub::Primitive,
                     method_assign: vir::vir_format!(vcx, "assign_p_Never"),

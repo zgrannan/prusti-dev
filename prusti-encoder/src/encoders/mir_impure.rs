@@ -593,7 +593,7 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
 
                 let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     self.vcx.tcx.types.bool,
-                ).unwrap().snapshot_constructor;
+                ).unwrap().from_primitive.unwrap();
 
                 // What value are we assigning? This will be an option, in most
                 // cases an expression with the snapshot to be assigned to the
@@ -622,10 +622,10 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     mir::Rvalue::BinaryOp(mir::BinOp::Lt, box (l, r)) => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             l.ty(self.local_decls, self.vcx.tcx),
-                        ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                        ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
                         let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             r.ty(self.local_decls, self.vcx.tcx),
-                        ).unwrap().snapshot_primitive_value.unwrap().as_expr(self.vcx);
+                        ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
 
                         Some(bool_cons.as_expr(self.vcx).reify(self.vcx, 
                             self.vcx.alloc_slice(&[self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
@@ -689,7 +689,7 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     ) => {
                         let dest_ty_struct = dest_ty_out.expect_structlike();
 
-                        let cons_name = dest_ty_out.snapshot_constructor.as_expr(self.vcx);
+                        let cons_name = dest_ty_out.from_primitive.unwrap().as_expr(self.vcx);
                         let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
                         let cons = cons_name.reify(self.vcx, self.vcx.alloc_slice(&cons_args));
 

@@ -89,7 +89,7 @@ impl TaskEncoder for MirSpecEncoder {
 
             let to_bool = deps.require_ref::<crate::encoders::TypeEncoder>(
                 vcx.tcx.types.bool,
-            ).unwrap().snapshot_primitive_value.unwrap().as_expr(vcx);
+            ).unwrap().to_primitive.unwrap().as_expr(vcx);
 
             let pres = specs.pres.iter().map(|spec_def_id| {
                 let expr = deps.require_local::<crate::encoders::MirPureEncoder>(
