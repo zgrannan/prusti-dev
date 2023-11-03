@@ -374,7 +374,7 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                     place_ty.ty,
                 ).unwrap();
                 let place_exp = self.encode_place(Place::from(source));
-                let snap_val = ty_out.function_snap.as_expr(self.vcx).reify(self.vcx, place_exp);
+                let snap_val = ty_out.function_snap.apply(self.vcx, place_exp);
 
                 let tmp_exp = self.new_tmp(ty_out.snapshot).1;
                 self.stmt(vir::StmtData::PureAssign(self.vcx.alloc(vir::PureAssignData {
@@ -393,7 +393,7 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                 let ty_out = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     place_ty.ty,
                 ).unwrap();
-                ty_out.function_snap.as_expr(self.vcx).reify(self.vcx, self.encode_place(Place::from(source)))
+                ty_out.function_snap.apply(self.vcx, self.encode_place(Place::from(source)))
             }
             mir::Operand::Constant(box constant) => self.encode_constant(constant),
         }
@@ -411,7 +411,7 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                 let ty_out = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     place_ty.ty,
                 ).unwrap();
-                let source = ty_out.function_snap.as_expr(self.vcx).reify(self.vcx, self.encode_place(Place::from(source)));
+                let source = ty_out.function_snap.apply(self.vcx, self.encode_place(Place::from(source)));
                 (source, ty_out)
             }
             mir::Operand::Constant(box constant) => {
@@ -611,28 +611,25 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     //mir::Rvalue::Cast(CastKind, Operand<'tcx>, Ty<'tcx>) => {}
 
                     mir::Rvalue::BinaryOp(mir::BinOp::Eq, box (l, r)) =>
-                        Some(bool_cons.as_expr(self.vcx).reify(
-                            self.vcx, 
-                            self.vcx.alloc_slice(
-                                &[self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
-                                    kind: vir::BinOpKind::CmpEq,
-                                    lhs: self.encode_operand_snap(l),
-                                    rhs: self.encode_operand_snap(r),
-                        })))]))),
+                        Some(bool_cons.apply(self.vcx, self.vcx.alloc_slice(
+                            &[self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                                kind: vir::BinOpKind::CmpEq,
+                                lhs: self.encode_operand_snap(l),
+                                rhs: self.encode_operand_snap(r),
+                                                })))]))),
                     mir::Rvalue::BinaryOp(mir::BinOp::Lt, box (l, r)) => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             l.ty(self.local_decls, self.vcx.tcx),
-                        ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
+                        ).unwrap().to_primitive.unwrap();
                         let ty_r = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                             r.ty(self.local_decls, self.vcx.tcx),
-                        ).unwrap().to_primitive.unwrap().as_expr(self.vcx);
+                        ).unwrap().to_primitive.unwrap();
 
-                        Some(bool_cons.as_expr(self.vcx).reify(self.vcx, 
-                            self.vcx.alloc_slice(&[self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
-                                kind: vir::BinOpKind::CmpLt,
-                                lhs: ty_l.reify(self.vcx, self.encode_operand_snap(l)),
-                                rhs: ty_r.reify(self.vcx, self.encode_operand_snap(r)),
-                        })))])))
+                        Some(bool_cons.apply(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                            kind: vir::BinOpKind::CmpLt,
+                            lhs: ty_l.apply(self.vcx, self.encode_operand_snap(l)),
+                            rhs: ty_r.apply(self.vcx, self.encode_operand_snap(r)),
+                                                })))])))
                     }
                     //mir::Rvalue::BinaryOp(BinOp, Box<(Operand<'tcx>, Operand<'tcx>)>) => {}
 
@@ -689,9 +686,9 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     ) => {
                         let dest_ty_struct = dest_ty_out.expect_structlike();
 
-                        let cons_name = dest_ty_out.from_primitive.unwrap().as_expr(self.vcx);
+                        let cons_name = dest_ty_out.from_primitive.unwrap();
                         let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
-                        let cons = cons_name.reify(self.vcx, self.vcx.alloc_slice(&cons_args));
+                        let cons = cons_name.apply(self.vcx, self.vcx.alloc_slice(&cons_args));
 
                         self.stmt(vir::StmtData::MethodCall(self.vcx.alloc(vir::MethodCallData {
                             targets: &[],

@@ -57,20 +57,14 @@ impl<'vir> TypeEncoderOutputRef<'vir> {
         //   or should this be a different task for TypeEncoder?
         match self.snapshot_name {
             "s_Bool" => vir::with_vcx(|vcx| {
-                self.from_primitive.unwrap().as_expr(vcx).reify(
-                    vcx,
-                    vcx.alloc_slice(&[vcx.alloc(vir::ExprData::Const(
-                        vcx.alloc(vir::ConstData::Bool(val != 0)),
-                    ))]),
-                )
+                self.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::Const(
+                    vcx.alloc(vir::ConstData::Bool(val != 0)),
+                ))]))
             }),
             name if name.starts_with("s_Int_") || name.starts_with("s_Uint_") => vir::with_vcx(|vcx| {
-                self.from_primitive.unwrap().as_expr(vcx).reify(
-                    vcx,
-                    vcx.alloc_slice(&[
-                        vcx.alloc(vir::ExprData::Const(vcx.alloc(vir::ConstData::Int(val))))
-                    ]),
-                )
+                self.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[
+                    vcx.alloc(vir::ExprData::Const(vcx.alloc(vir::ConstData::Int(val))))
+                ]))
             }),
             k => todo!("unsupported type in expr_from_u128 {k:?}"),
         }
@@ -631,7 +625,7 @@ impl TaskEncoder for TypeEncoder {
                                 vcx.alloc_slice(&field_ty_out
                                     .iter()
                                     .enumerate()
-                                    .map(|(idx, field_ty_out)| field_ty_out.function_snap.as_expr(vcx).reify(vcx, vcx.mk_func_app(
+                                    .map(|(idx, field_ty_out)| field_ty_out.function_snap.apply(vcx, vcx.mk_func_app(
                                         vir::vir_format!(vcx, "{name_p}_field_{idx}"),
                                         &[vcx.mk_local_ex("self_p")],
                                     )))
