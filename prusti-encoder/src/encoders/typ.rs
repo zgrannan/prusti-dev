@@ -1,4 +1,3 @@
-use vir::Reify;
 use prusti_rustc_interface::middle::ty;
 use rustc_type_ir::sty::TyKind;
 use task_encoder::{
@@ -84,7 +83,7 @@ pub struct TypeEncoderOutput<'vir> {
     pub method_assign: vir::Method<'vir>,
 }
 
-use std::{cell::RefCell, marker::PhantomData};
+use std::cell::RefCell;
 thread_local! {
     static CACHE: task_encoder::CacheStaticRef<TypeEncoder> = RefCell::new(Default::default());
 }

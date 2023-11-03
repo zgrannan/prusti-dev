@@ -5,7 +5,6 @@ use prusti_rustc_interface::{
 };
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::Reify;
 use std::cell::RefCell;
 
 pub struct MirLocalDefEncoder;

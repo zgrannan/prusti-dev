@@ -1,4 +1,4 @@
-use vir::{Reify, FunctionIdentifier};
+use vir::FunctionIdentifier;
 use prusti_rustc_interface::{
     middle::ty,
     middle::mir,

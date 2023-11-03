@@ -1,4 +1,3 @@
-use vir::Reify;
 use prusti_rustc_interface::{
     data_structures::graph::dominators::Dominators,
     middle::{mir, ty},

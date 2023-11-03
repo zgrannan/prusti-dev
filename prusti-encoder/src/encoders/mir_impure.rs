@@ -12,7 +12,6 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::Reify;
 
 pub struct MirImpureEncoder;
 
