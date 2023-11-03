@@ -5490,14 +5490,15 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     (**argument).clone(),
                 )?;
                 invs_spec.push(inv_func_app);
-                let inv_func_app = self.encoder.encode_twostate_invariant(
-                    None,
-                    ty,
-                    &param_env,
-                    (**argument).clone(),
-                ).unwrap();
-                eprintln!("The invariant was {}", inv_func_app);
-                twostate_invs_spec.push(inv_func_app);
+                // TODO
+                // let inv_func_app = self.encoder.encode_twostate_invariant(
+                //     None,
+                //     ty,
+                //     &param_env,
+                //     (**argument).clone(),
+                // ).unwrap();
+                // eprintln!("The invariant was {}", inv_func_app);
+                // twostate_invs_spec.push(inv_func_app);
                 Ok::<(), EncodingError>(())
             };
             if !self.encoder.is_pure(self.proc_def_id, Some(self.substs)) {

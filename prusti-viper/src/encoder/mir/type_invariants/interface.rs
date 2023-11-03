@@ -26,7 +26,7 @@ pub(crate) trait TypeInvariantEncoderInterface<'tcx> {
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
         param_env: &ty::ParamEnv<'tcx>,
-        override_substs: Option<&ty::List<ty::GenericArg<'_>>>,
+        override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr>;
 }
@@ -38,7 +38,7 @@ impl<'v, 'tcx: 'v> TypeInvariantEncoderInterface<'tcx> for super::super::super::
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
         param_env: &ty::ParamEnv<'tcx>,
-        override_substs: Option<&ty::List<ty::GenericArg<'_>>>,
+        override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr> {
         // match snapshot ref/box peeling

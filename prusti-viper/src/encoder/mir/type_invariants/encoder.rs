@@ -109,17 +109,16 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
     encoder: &'p Encoder<'v, 'tcx>,
     ty: ty::Ty<'tcx>,
     param_env: &ty::ParamEnv<'tcx>,
-    override_substs: Option<&List<GenericArg<'_>>>,
+    override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
     encoded_arg: vir::Expr,
 ) -> EncodingResult<vir::Expr> {
     let mut conjuncts = vec![];
-    let empty_list = ty::List::empty();
     let (specs_option, substs) = match ty.kind() {
         ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => 
             (encoder.get_type_specs(adt_def.did()), substs),
         ty::TyKind::Param(p) => {
             let trait_did = param_env.caller_bounds().get(0).unwrap().as_trait_clause().unwrap().def_id();
-            (encoder.get_type_specs(trait_did), override_substs.unwrap())
+            (encoder.get_type_specs(trait_did), override_substs.as_ref().unwrap())
         },
         // other types should not make it here because of `needs_invariant_func`
         _ => unreachable!("{ty:?}"),
