@@ -568,7 +568,7 @@ impl TaskEncoder for TypeEncoder {
             let predicate = {
                 let expr = (0..field_ty_out.len())
                     .map(|idx| vcx.alloc(vir::ExprData::PredicateApp(
-                        predicate_ref.apply(vcx, [field_access[idx].projection_p.apply(vcx, [vcx.mk_local_ex("self_p")])])
+                        field_ty_out[idx].predicate_ref.apply(vcx, [field_access[idx].projection_p.apply(vcx, [vcx.mk_local_ex("self_p")])])
                     )))
                     .reduce(|base, field_expr| vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
                         kind: vir::BinOpKind::And,
