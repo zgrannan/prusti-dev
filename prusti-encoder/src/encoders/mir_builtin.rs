@@ -1,4 +1,3 @@
-use vir::FunctionIdentifier;
 use prusti_rustc_interface::{
     middle::ty,
     middle::mir,
@@ -7,6 +6,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
+use vir::{UnknownArity, FunctionIdent};
 
 pub struct MirBuiltinEncoder;
 
@@ -25,7 +25,7 @@ pub enum MirBuiltinEncoderTask<'tcx> {
 
 #[derive(Clone, Debug)]
 pub struct MirBuiltinEncoderOutputRef<'vir> {
-    pub name: &'vir str,
+    pub function: FunctionIdent<'vir, UnknownArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny<'vir> for MirBuiltinEncoderOutputRef<'vir> {}
 
@@ -36,7 +36,6 @@ pub struct MirBuiltinEncoderOutput<'vir> {
 
 use std::cell::RefCell;
 
-use crate::encoders::TypeEncoderOutputRef;
 thread_local! {
     static CACHE: task_encoder::CacheStaticRef<MirBuiltinEncoder> = RefCell::new(Default::default());
 }
@@ -89,18 +88,21 @@ impl TaskEncoder for MirBuiltinEncoder {
                 MirBuiltinEncoderTask::UnOp(mir::UnOp::Not, ty) => {
                     assert_eq!(*ty.kind(), ty::TyKind::Bool);
 
+                    let ty_ref = deps.require_ref::<crate::encoders::TypeEncoder>(
+                        *ty,
+                    ).unwrap();
+
                     let name = "mir_unop_not";
+                    let ty_s = ty_ref.snapshot;
+                    let arity = UnknownArity::new(vcx.alloc_slice(&[ty_s]));
+                    let function = FunctionIdent::new(name, arity);
                     deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
-                        name,
+                        function,
                     });
                     /* function mir_unop_not(arg: s_Bool): s_Bool {
                         s_Bool$cons(!s_Bool$val(val))
                     } */
 
-                    let ty_ref: TypeEncoderOutputRef<'vir> = deps.require_ref::<crate::encoders::TypeEncoder>(
-                        *ty,
-                    ).unwrap();
-                    let ty_s = ty_ref.snapshot;
                     Ok((MirBuiltinEncoderOutput {
                         function: vcx.alloc(vir::FunctionData {
                             name,
@@ -109,28 +111,32 @@ impl TaskEncoder for MirBuiltinEncoder {
                             pres: &[],
                             posts: &[],
                             expr: Some(
-                                ty_ref.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(
-                                &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                ty_ref.from_fields.unwrap().apply(vcx,
+                                    &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                         kind: vir::UnOpKind::Not,
-                                        expr:  ty_ref.to_primitive.unwrap().apply(vcx, vcx.mk_local_ex("arg"))
-                                })))]))
+                                        expr:  ty_ref.to_primitive.unwrap().apply(vcx, [vcx.mk_local_ex("arg")])
+                                    })))]
+                                )
                             ),
                         }),
                     }, ()))
                 }
 
                 MirBuiltinEncoderTask::UnOp(mir::UnOp::Neg, ty) => {
+                    let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
+                        *ty,
+                    ).unwrap();
+
                     let name = vir::vir_format!(vcx, "mir_unop_neg_{}", int_name(*ty));
+                    let arity = UnknownArity::new(vcx.alloc_slice(&[ty_out.snapshot]));
+                    let function = FunctionIdent::new(name, arity);
                     deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
-                        name,
+                        function,
                     });
                     /* function mir_unop_neg(arg: s_I32): s_I32 {
                         cons(-val(arg))
                     } */
 
-                    let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
-                        *ty,
-                    ).unwrap();
                     Ok((
                         MirBuiltinEncoderOutput {
                             function: vcx.alloc(vir::FunctionData {
@@ -140,14 +146,14 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::UnOp(
+                                    ty_out.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::UnOp(
                                         vcx.alloc(vir::UnOpData {
                                             kind: vir::UnOpKind::Neg,
                                             expr: ty_out
                                                 .to_primitive
-                                                .unwrap().apply(vcx, vcx.mk_local_ex("arg")),
+                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg")]),
                                         }),
-                                    ))])),
+                                    ))]),
                                 ),
                             }),
                         },
@@ -157,14 +163,17 @@ impl TaskEncoder for MirBuiltinEncoder {
 
                 // TODO: should these be two different functions? precondition?
                 MirBuiltinEncoderTask::BinOp(mir::BinOp::Add | mir::BinOp::AddUnchecked, ty) => {
-                    let name = vir::vir_format!(vcx, "mir_binop_add_{}", int_name(*ty));
-                    deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
-                        name,
-                    });
-
                     let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
                     ).unwrap();
+
+                    let name = vir::vir_format!(vcx, "mir_binop_add_{}", int_name(*ty));
+                    let arity = UnknownArity::new(vcx.alloc_slice(&[ty_out.snapshot, ty_out.snapshot]));
+                    let function = FunctionIdent::new(name, arity);
+                    deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
+                        function,
+                    });
+
                     Ok((
                         MirBuiltinEncoderOutput {
                             function: vcx.alloc(vir::FunctionData {
@@ -177,17 +186,17 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(
+                                    ty_out.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::BinOp(
                                         vcx.alloc(vir::BinOpData {
                                             kind: vir::BinOpKind::Add,
                                             lhs: ty_out
                                                 .to_primitive
-                                                .unwrap().apply(vcx, vcx.mk_local_ex("arg1")),
+                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg1")]),
                                             rhs: ty_out
                                                 .to_primitive
-                                                .unwrap().apply(vcx, vcx.mk_local_ex("arg2")),
+                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg2")]),
                                         }),
-                                    ))])),
+                                    ))]),
                                 ),
                             }),
                         },
@@ -196,23 +205,26 @@ impl TaskEncoder for MirBuiltinEncoder {
                 }
 
                 MirBuiltinEncoderTask::CheckedBinOp(mir::BinOp::Add | mir::BinOp::AddUnchecked, ty) => {
-                    let name = vir::vir_format!(vcx, "mir_checkedbinop_add_{}", int_name(*ty));
-                    deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
-                        name,
-                    });
-
                     let ty_in = deps.require_ref::<crate::encoders::TypeEncoder>(
                         *ty,
                     ).unwrap();
+
+                    let name = vir::vir_format!(vcx, "mir_checkedbinop_add_{}", int_name(*ty));
+                    let arity = UnknownArity::new(vcx.alloc_slice(&[ty_in.snapshot, ty_in.snapshot]));
+                    let function = FunctionIdent::new(name, arity);
+                    deps.emit_output_ref::<Self>(task_key.clone(), MirBuiltinEncoderOutputRef {
+                        function,
+                    });
+
                     let ty_out = deps.require_ref::<crate::encoders::TypeEncoder>(
                         vcx.tcx.mk_ty_from_kind(ty::TyKind::Tuple(vcx.tcx.mk_type_list(&[
                             *ty,
-                            vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
+                            vcx.tcx.types.bool,
                         ]))),
                     ).unwrap();
                     let bool_cons = deps.require_ref::<crate::encoders::TypeEncoder>(
-                        vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
-                    ).unwrap().from_primitive;
+                        vcx.tcx.types.bool,
+                    ).unwrap().from_fields;
                     Ok((
                         MirBuiltinEncoderOutput {
                             function: vcx.alloc(vir::FunctionData {
@@ -225,23 +237,23 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[
-                                        ty_in.from_primitive.unwrap().apply(vcx, vcx.alloc_slice(&[vcx.alloc(vir::ExprData::BinOp(
+                                    ty_out.from_fields.unwrap().apply(vcx, &[
+                                        ty_in.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::BinOp(
                                             vcx.alloc(vir::BinOpData {
                                                 kind: vir::BinOpKind::Add,
                                                 lhs: ty_in
                                                     .to_primitive
-                                                    .unwrap().apply(vcx, vcx.mk_local_ex("arg1")),
+                                                    .unwrap().apply(vcx, [vcx.mk_local_ex("arg1")]),
                                                 rhs: ty_in
                                                     .to_primitive
-                                                    .unwrap().apply(vcx, vcx.mk_local_ex("arg2")),
+                                                    .unwrap().apply(vcx, [vcx.mk_local_ex("arg2")]),
                                             }),
-                                        ))])),
+                                        ))]),
                                         // TODO: overflow condition!
-                                        bool_cons.unwrap().apply(vcx, vcx.alloc_slice(&[&vir::ExprData::Const(&vir::ConstData::Bool(
+                                        bool_cons.unwrap().apply(vcx, &[&vir::ExprData::Const(&vir::ConstData::Bool(
                                             false,
-                                        ))])),
-                                    ])),
+                                        ))]),
+                                    ]),
                                 ),
                             }),
                         },

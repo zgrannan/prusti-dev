@@ -547,14 +547,14 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                             .lift();
 
                         let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
-                            self.vcx.tcx.mk_ty_from_kind(ty::TyKind::Bool),
-                        ).unwrap().from_primitive.unwrap();
+                            self.vcx.tcx.types.bool,
+                        ).unwrap().from_fields.unwrap();
 
-                        let forall = bool_cons.apply(self.vcx, self.vcx.alloc_slice(&[self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
+                        let forall = bool_cons.apply(self.vcx, &[self.vcx.alloc(ExprRetData::Forall(self.vcx.alloc(vir::ForallGenData {
                             qvars,
                             triggers: &[], // TODO
                             body,
-                                                })))]));
+                        })))]);
 
                         let mut term_update = Update::new();
                         assert!(destination.projection.is_empty());
@@ -617,15 +617,15 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                 ).unwrap().to_primitive.unwrap();
                 let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     rvalue.ty(self.body, self.vcx.tcx),
-                ).unwrap().from_primitive.unwrap();
+                ).unwrap().from_fields.unwrap();
 
-                ty_rvalue.apply(self.vcx, self.vcx.alloc_slice(
+                ty_rvalue.apply(self.vcx,
                     &[self.vcx.alloc(ExprRetData::BinOp(self.vcx.alloc(vir::BinOpGenData {
                         kind: op.into(),
-                        lhs: ty_l.apply(self.vcx, self.encode_operand(curr_ver, l)),
-                        rhs: ty_r.apply(self.vcx, self.encode_operand(curr_ver, r)),
+                        lhs: ty_l.apply(self.vcx, [self.encode_operand(curr_ver, l)]),
+                        rhs: ty_r.apply(self.vcx, [self.encode_operand(curr_ver, r)]),
                     })))],
-                ))
+                )
             }
             // CheckedBinaryOp
             // NullaryOp
@@ -635,14 +635,14 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
                 ).unwrap().to_primitive.unwrap();
                 let ty_rvalue = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     rvalue.ty(self.body, self.vcx.tcx),
-                ).unwrap().from_primitive.unwrap();
+                ).unwrap().from_fields.unwrap();
 
-                ty_rvalue.apply(self.vcx, self.vcx.alloc_slice(
+                ty_rvalue.apply(self.vcx,
                     &[self.vcx.alloc(ExprRetData::UnOp(self.vcx.alloc(vir::UnOpGenData {
                         kind: op.into(),
-                        expr: ty_expr.apply(self.vcx, self.encode_operand(curr_ver, expr)),
+                        expr: ty_expr.apply(self.vcx, [self.encode_operand(curr_ver, expr)]),
                     })))]
-                ))
+                )
             }
             // Discriminant
             mir::Rvalue::Aggregate(box kind, fields) => match kind {

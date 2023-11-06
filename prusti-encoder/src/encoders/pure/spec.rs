@@ -102,7 +102,7 @@ impl TaskEncoder for MirSpecEncoder {
                     }
                 ).unwrap().expr;
                 let expr = expr.reify(vcx, (*spec_def_id, &pre_args[1..]));
-                to_bool.apply(vcx, expr)
+                to_bool.apply(vcx, [expr])
             }).collect::<Vec<vir::Expr<'_>>>();
 
             let post_args = if pure {
@@ -128,7 +128,7 @@ impl TaskEncoder for MirSpecEncoder {
                     }
                 ).unwrap().expr;
                 let expr = expr.reify(vcx, (*spec_def_id, post_args));
-                to_bool.apply(vcx, expr)
+                to_bool.apply(vcx, [expr])
             }).collect::<Vec<vir::Expr<'_>>>();
             let data = MirSpecEncoderOutput {
                 pres,
