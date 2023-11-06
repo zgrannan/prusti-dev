@@ -12,7 +12,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{MethodIdent, UnknownArity};
+use vir::{MethodIdent, UnknownArity, CallableIdent};
 
 pub struct MirImpureEncoder;
 
