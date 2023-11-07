@@ -111,10 +111,10 @@ impl TaskEncoder for MirBuiltinEncoder {
                             pres: &[],
                             posts: &[],
                             expr: Some(
-                                ty_ref.from_fields.unwrap().apply(vcx,
-                                    &[vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                ty_ref.expect_prim().prim_to_snap.apply(vcx,
+                                    [vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
                                         kind: vir::UnOpKind::Not,
-                                        expr:  ty_ref.to_primitive.unwrap().apply(vcx, [vcx.mk_local_ex("arg")])
+                                        expr:  ty_ref.expect_prim().snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg")])
                                     })))]
                                 )
                             ),
@@ -146,12 +146,12 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::UnOp(
+                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::UnOp(
                                         vcx.alloc(vir::UnOpData {
                                             kind: vir::UnOpKind::Neg,
                                             expr: ty_out
-                                                .to_primitive
-                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg")]),
+                                                .expect_prim()
+                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg")]),
                                         }),
                                     ))]),
                                 ),
@@ -186,15 +186,15 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::BinOp(
+                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::BinOp(
                                         vcx.alloc(vir::BinOpData {
                                             kind: vir::BinOpKind::Add,
                                             lhs: ty_out
-                                                .to_primitive
-                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg1")]),
+                                                .expect_prim()
+                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
                                             rhs: ty_out
-                                                .to_primitive
-                                                .unwrap().apply(vcx, [vcx.mk_local_ex("arg2")]),
+                                                .expect_prim()
+                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
                                         }),
                                     ))]),
                                 ),
@@ -224,7 +224,7 @@ impl TaskEncoder for MirBuiltinEncoder {
                     ).unwrap();
                     let bool_cons = deps.require_ref::<crate::encoders::TypeEncoder>(
                         vcx.tcx.types.bool,
-                    ).unwrap().from_fields;
+                    ).unwrap().expect_prim().prim_to_snap;
                     Ok((
                         MirBuiltinEncoderOutput {
                             function: vcx.alloc(vir::FunctionData {
@@ -237,20 +237,20 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.from_fields.unwrap().apply(vcx, &[
-                                        ty_in.from_fields.unwrap().apply(vcx, &[vcx.alloc(vir::ExprData::BinOp(
+                                    ty_out.expect_structlike().field_snaps_to_snap.apply(vcx, &[
+                                        ty_in.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::BinOp(
                                             vcx.alloc(vir::BinOpData {
                                                 kind: vir::BinOpKind::Add,
                                                 lhs: ty_in
-                                                    .to_primitive
-                                                    .unwrap().apply(vcx, [vcx.mk_local_ex("arg1")]),
+                                                    .expect_prim()
+                                                    .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
                                                 rhs: ty_in
-                                                    .to_primitive
-                                                    .unwrap().apply(vcx, [vcx.mk_local_ex("arg2")]),
+                                                    .expect_prim()
+                                                    .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
                                             }),
                                         ))]),
                                         // TODO: overflow condition!
-                                        bool_cons.unwrap().apply(vcx, &[&vir::ExprData::Const(&vir::ConstData::Bool(
+                                        bool_cons.apply(vcx, [&vir::ExprData::Const(&vir::ConstData::Bool(
                                             false,
                                         ))]),
                                     ]),
