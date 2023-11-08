@@ -807,7 +807,7 @@ pub fn invariant(attr: TokenStream, tokens: TokenStream, two_state: bool) -> Tok
             }
         }
     };
-    eprintln!("Result: {result}");
+    // eprintln!("Result: {result}");
     result
 }
 

@@ -427,6 +427,18 @@ impl From<u32> for PermAmount {
     }
 }
 
+impl From<i32> for PermAmount {
+    fn from(_value: i32) -> PermAmount {
+        unimplemented!()
+    }
+}
+
+impl From<u64> for PermAmount {
+    fn from(_value: u64) -> PermAmount {
+        unimplemented!()
+    }
+}
+
 impl From<Int> for PermAmount {
     fn from(_value: Int) -> PermAmount {
         unimplemented!()

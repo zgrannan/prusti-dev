@@ -18,6 +18,8 @@ pub(crate) trait TypeInvariantEncoderInterface<'tcx> {
         &self,
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
+        param_env: &ty::ParamEnv<'tcx>,
+        override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr>;
 
@@ -56,6 +58,8 @@ impl<'v, 'tcx: 'v> TypeInvariantEncoderInterface<'tcx> for super::super::super::
         &self,
         pre_label: Option<&str>,
         ty: ty::Ty<'tcx>,
+        param_env: &ty::ParamEnv<'tcx>,
+        override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
         encoded_arg: vir::Expr,
     ) -> EncodingResult<vir::Expr> {
         if !config::enable_type_invariants() {
@@ -70,6 +74,6 @@ impl<'v, 'tcx: 'v> TypeInvariantEncoderInterface<'tcx> for super::super::super::
         if !needs_invariant_func(ty) {
             return Ok(true.into());
         }
-        encode_invariant_expr(pre_label, self, ty, encoded_arg)
+        encode_invariant_expr(pre_label, self, ty, param_env, override_substs, encoded_arg)
     }
 }

@@ -1,13 +1,14 @@
 use super::interface::TypeInvariantEncoderInterface;
 use crate::encoder::{
-    errors::{EncodingResult, EncodingError, SpannedEncodingResult},
+    errors::{EncodingError, EncodingResult, SpannedEncodingResult},
     high::types::HighTypeEncoderInterface,
     mir::{
         pure::SpecificationEncoderInterface, specifications::SpecificationsInterface,
         types::MirTypeEncoderInterface,
     },
+    mir_encoder::PRECONDITION_LABEL,
     snapshot::interface::SnapshotEncoderInterface,
-    Encoder, mir_encoder::PRECONDITION_LABEL,
+    Encoder,
 };
 use prusti_common::{vir_expr, vir_local};
 use prusti_interface::specs::typed;
@@ -42,7 +43,7 @@ const fn tykind_discriminant(value: &ty::TyKind) -> usize {
         ty::TyKind::Placeholder(_) => 23,
         ty::TyKind::Infer(_) => 24,
         ty::TyKind::Error(_) => 25,
-        ty::TyKind::GeneratorWitnessMIR(_, _) => 26
+        ty::TyKind::GeneratorWitnessMIR(_, _) => 26,
     }
 }
 
@@ -56,10 +57,7 @@ pub(super) fn needs_invariant_func(ty: ty::Ty<'_>) -> bool {
         ty::TyKind::Adt(adt_def, _) if adt_def.is_struct() || adt_def.is_enum() => true,
         ty::TyKind::Param(..) => true,
 
-        other => {
-            eprintln!("Don't need invariant function for type {:?}", tykind_discriminant(ty.kind()));
-            false
-        }
+        other => false,
     }
 }
 
@@ -89,22 +87,24 @@ pub(super) fn encode_invariant_stub<'p, 'v: 'p, 'tcx: 'v>(
 }
 
 fn replace_old_expr_with(expr: &vir::Expr, from: &vir::LocalVar, to: &vir::LocalVar) -> vir::Expr {
-    struct ReplaceOldFolder<'a> { from: &'a vir::LocalVar, to: &'a vir::LocalVar }
-    impl <'a> ExprFolder for ReplaceOldFolder<'a> {
+    struct ReplaceOldFolder<'a> {
+        from: &'a vir::LocalVar,
+        to: &'a vir::LocalVar,
+    }
+    impl<'a> ExprFolder for ReplaceOldFolder<'a> {
         fn fold_labelled_old(&mut self, expr: vir::LabelledOld) -> vir::Expr {
-            expr.base.fold_expr(|e|
-                match e {
-                    vir::Expr::Local(local) if &local.variable == self.from =>
-                        vir::Expr::local(self.to.clone()),
-                    _ => e
+            expr.base.fold_expr(|e| match e {
+                vir::Expr::Local(local) if &local.variable == self.from => {
+                    vir::Expr::local(self.to.clone())
                 }
-            )
+                _ => e,
+            })
         }
     }
     ReplaceOldFolder { from, to }.fold(expr.clone())
 }
 
-pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
+pub(super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
     pre_label: Option<&str>,
     encoder: &'p Encoder<'v, 'tcx>,
     ty: ty::Ty<'tcx>,
@@ -114,12 +114,22 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
 ) -> EncodingResult<vir::Expr> {
     let mut conjuncts = vec![];
     let (specs_option, substs) = match ty.kind() {
-        ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => 
-            (encoder.get_type_specs(adt_def.did()), substs),
+        ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => {
+            (encoder.get_type_specs(adt_def.did()), substs)
+        }
         ty::TyKind::Param(p) => {
-            let trait_did = param_env.caller_bounds().get(0).unwrap().as_trait_clause().unwrap().def_id();
-            (encoder.get_type_specs(trait_did), override_substs.as_ref().unwrap())
-        },
+            let trait_did = param_env
+                .caller_bounds()
+                .get(0)
+                .unwrap()
+                .as_trait_clause()
+                .unwrap()
+                .def_id();
+            (
+                encoder.get_type_specs(trait_did),
+                override_substs.as_ref().unwrap(),
+            )
+        }
         // other types should not make it here because of `needs_invariant_func`
         _ => unreachable!("{ty:?}"),
     };
@@ -129,7 +139,7 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
             typed::SpecificationItem::Inherent(invs) => {
                 let arg = match pre_label {
                     Some(label) => vir::Expr::labelled_old(label, encoded_arg.clone()),
-                    None        => encoded_arg.clone()
+                    None => encoded_arg.clone(),
                 };
                 conjuncts.extend(
                     invs.iter()
@@ -156,12 +166,11 @@ pub (super) fn encode_twostate_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
         fn fold_labelled_old(&mut self, expr: vir::LabelledOld) -> vir::Expr {
             match &self.0 {
                 Some(label) if label == &expr.label => vir::default_fold_expr(self, *expr.base),
-                _ => vir::Expr::LabelledOld(
-                    vir::LabelledOld {
-                        label: expr.label.clone(),
-                        base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
-                        position: expr.position
-                    })
+                _ => vir::Expr::LabelledOld(vir::LabelledOld {
+                    label: expr.label.clone(),
+                    base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
+                    position: expr.position,
+                }),
             }
         }
     }
@@ -174,82 +183,99 @@ pub(super) fn encode_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
     pre_label: Option<&str>,
     encoder: &'p Encoder<'v, 'tcx>,
     ty: ty::Ty<'tcx>,
+    param_env: &ty::ParamEnv<'tcx>,
+    override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
     encoded_arg: vir::Expr,
 ) -> EncodingResult<vir::Expr> {
-
     let mut conjuncts = vec![];
-    match ty.kind() {
-        ty::TyKind::Tuple(substs) => {
-            for (field_num, field_ty) in substs.iter().enumerate() {
-                let field_name = format!("tuple_{field_num}");
-                conjuncts.push(encoder.encode_invariant_func_app(
-                    pre_label,
-                    field_ty,
-                    vir::Expr::snap_app(vir::Expr::field(
-                        encoded_arg.clone(),
-                        encoder.encode_raw_ref_field(field_name.to_string(), field_ty)?,
-                    )),
-                )?);
-            }
+    if let ty::TyKind::Tuple(substs) = ty.kind() {
+        for (field_num, field_ty) in substs.iter().enumerate() {
+            let field_name = format!("tuple_{field_num}");
+            conjuncts.push(encoder.encode_invariant_func_app(
+                pre_label,
+                field_ty,
+                param_env,
+                override_substs,
+                vir::Expr::snap_app(vir::Expr::field(
+                    encoded_arg.clone(),
+                    encoder.encode_raw_ref_field(field_name.to_string(), field_ty)?,
+                )),
+            )?);
         }
-        ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => {
-            if let Some(specs) = encoder.get_type_specs(adt_def.did()) {
-                match &specs.invariant {
-                    typed::SpecificationItem::Empty => {}
-                    typed::SpecificationItem::Inherent(invs) => {
-                        let arg = match pre_label {
-                            Some(label) => vir::Expr::labelled_old(label, encoded_arg.clone()),
-                            None        => encoded_arg.clone()
-                        };
-                        conjuncts.extend(
-                            invs.iter()
-                                .map(|inherent_def_id| {
-                                    let assertion = encoder.encode_assertion(
-                                        inherent_def_id,
-                                        pre_label,
-                                        &[arg.clone()],
-                                        None,
-                                        true,
-                                        *inherent_def_id,
-                                        substs,
-                                    )?;
-                                    let result: SpannedEncodingResult<vir::Expr> = Ok(if pre_label.is_none() {
-                                        assertion.fold_expr(|e| {
-                                            match e {
-                                                vir::Expr::LabelledOld(e) if e.label == PRECONDITION_LABEL => *e.base,
-                                                _ => e
+    } else {
+        let (specs_option, substs) = match ty.kind() {
+            ty::TyKind::Adt(adt_def, substs) if adt_def.is_struct() || adt_def.is_enum() => {
+                (encoder.get_type_specs(adt_def.did()), substs)
+            }
+            ty::TyKind::Param(p) => {
+                let trait_did = param_env
+                    .caller_bounds()
+                    .get(0)
+                    .unwrap()
+                    .as_trait_clause()
+                    .unwrap()
+                    .def_id();
+                (
+                    encoder.get_type_specs(trait_did),
+                    override_substs.as_ref().unwrap(),
+                )
+            }
+            // other types should not make it here because of `needs_invariant_func`
+            _ => unreachable!("{ty:?}"),
+        };
+        if let Some(specs) = specs_option {
+            match &specs.invariant {
+                typed::SpecificationItem::Empty => {}
+                typed::SpecificationItem::Inherent(invs) => {
+                    let arg = match pre_label {
+                        Some(label) => vir::Expr::labelled_old(label, encoded_arg.clone()),
+                        None => encoded_arg.clone(),
+                    };
+                    conjuncts.extend(
+                        invs.iter()
+                            .map(|inherent_def_id| {
+                                let assertion = encoder.encode_assertion(
+                                    inherent_def_id,
+                                    pre_label,
+                                    &[arg.clone()],
+                                    None,
+                                    true,
+                                    *inherent_def_id,
+                                    substs,
+                                )?;
+                                let result: SpannedEncodingResult<vir::Expr> =
+                                    Ok(if pre_label.is_none() {
+                                        assertion.fold_expr(|e| match e {
+                                            vir::Expr::LabelledOld(e)
+                                                if e.label == PRECONDITION_LABEL =>
+                                            {
+                                                *e.base
                                             }
+                                            _ => e,
                                         })
                                     } else {
                                         assertion
                                     });
-                                    result
-                                })
-                                .collect::<Result<Vec<_>, _>>()?,
-                        )
-                    }
-                    _ => todo!(),
+                                result
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    )
                 }
+                _ => todo!(),
             }
         }
-        ty::TyKind::Param(..) => {
-            // Ignore 1s invariants for traits for now
-        },
-        // other types should not make it here because of `needs_invariant_func`
-        _ => unreachable!("{ty:?}"),
-    };
+    }
     let expr = conjuncts.into_iter().conjoin();
     struct RemoveOldFolder(Option<String>);
     impl ExprFolder for RemoveOldFolder {
         fn fold_labelled_old(&mut self, expr: vir::LabelledOld) -> vir::Expr {
             match &self.0 {
                 Some(label) if label == &expr.label => vir::default_fold_expr(self, *expr.base),
-                _ => vir::Expr::LabelledOld(
-                    vir::LabelledOld {
-                        label: expr.label.clone(),
-                        base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
-                        position: expr.position
-                    })
+                _ => vir::Expr::LabelledOld(vir::LabelledOld {
+                    label: expr.label.clone(),
+                    base: Box::new(RemoveOldFolder(Some(expr.label.clone())).fold(*expr.base)),
+                    position: expr.position,
+                }),
             }
         }
     }
@@ -261,6 +287,8 @@ pub(super) fn encode_invariant_expr<'p, 'v: 'p, 'tcx: 'v>(
 pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
     encoder: &'p Encoder<'v, 'tcx>,
     ty: ty::Ty<'tcx>,
+    param_env: &ty::ParamEnv<'tcx>,
+    override_substs: Option<&'tcx ty::List<ty::GenericArg<'tcx>>>,
 ) -> EncodingResult<vir::Function> {
     let tcx = encoder.env().tcx();
 
@@ -288,6 +316,8 @@ pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
                 conjuncts.push(encoder.encode_invariant_func_app(
                     None,
                     field_ty,
+                    param_env,
+                    override_substs,
                     vir::Expr::snap_app(vir::Expr::field(
                         arg_expr.clone(),
                         encoder.encode_raw_ref_field(field_name.to_string(), field_ty)?,
@@ -303,6 +333,8 @@ pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
                 conjuncts.push(encoder.encode_invariant_func_app(
                     None,
                     field_ty,
+                    param_env,
+                    override_substs,
                     vir::Expr::snap_app(vir::Expr::field(
                         arg_expr.clone(),
                         encoder.encode_raw_ref_field(field_name.to_string(), field_ty)?,
@@ -318,6 +350,8 @@ pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
                     conjuncts.push(encoder.encode_invariant_func_app(
                         None,
                         field_ty,
+                        param_env,
+                        override_substs,
                         vir::Expr::snap_app(vir::Expr::field(
                             arg_expr.clone(),
                             encoder.encode_struct_field(&field.ident(tcx).to_string(), field_ty)?,
@@ -347,7 +381,7 @@ pub(super) fn encode_invariant_def<'p, 'v: 'p, 'tcx: 'v>(
                             field_base.clone(),
                             encoder.encode_struct_field(&field.ident(tcx).to_string(), field_ty)?,
                         ));
-                        fields.push(encoder.encode_invariant_func_app(None, field_ty, field)?);
+                        fields.push(encoder.encode_invariant_func_app(None, field_ty, param_env, override_substs, field)?);
                     }
 
                     let discriminant_raw = adt_def

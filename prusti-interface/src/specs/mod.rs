@@ -548,7 +548,9 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let hir = self.env.query.hir();
                 let impl_id = hir.parent_id(hir.parent_id(self_id));
-                get_type_id_from_impl_node(hir.get(impl_id)).unwrap()
+                get_type_id_from_impl_node(hir.get(impl_id)).unwrap_or_else(||
+                    get_type_id_from_item(hir.get(impl_id)).unwrap() // For traits
+                )
             };
 
             // TODO: (invariants and trusted flag) visit the struct itself?
@@ -682,9 +684,27 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
 
 fn get_type_id_from_impl_node(node: prusti_rustc_interface::hir::Node) -> Option<DefId> {
     if let prusti_rustc_interface::hir::Node::Item(item) = node {
-        return Some(item.owner_id.to_def_id());
+        if let prusti_rustc_interface::hir::ItemKind::Impl(item_impl) = &item.kind {
+            if let prusti_rustc_interface::hir::TyKind::Path(
+                prusti_rustc_interface::hir::QPath::Resolved(_, path),
+            ) = item_impl.self_ty.kind
+            {
+                if let prusti_rustc_interface::hir::def::Res::Def(_, def_id) = path.res {
+                    return Some(def_id);
+                }
+            }
+        }
     }
     None
+}
+
+// For trait invariants
+fn get_type_id_from_item(node: prusti_rustc_interface::hir::Node) -> Option<DefId> {
+    if let prusti_rustc_interface::hir::Node::Item(item) = node {
+        Some(item.owner_id.to_def_id())
+    } else {
+        None
+    }
 }
 
 fn get_type_id_from_ty_node(node: prusti_rustc_interface::hir::Node) -> Option<DefId> {
