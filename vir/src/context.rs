@@ -67,7 +67,7 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
     pub fn mk_local_ex_local<Curr, Next>(&'tcx self, local: Local<'tcx>) -> ExprGen<'tcx, Curr, Next> {
-        self.arena.alloc(ExprGenData::Local(local))
+        self.arena.alloc(ExprGenData(ExprKindGenData::Local(local)))
     }
     pub fn mk_local_ex<Curr, Next>(&'tcx self, name: &'tcx str) -> ExprGen<'tcx, Curr, Next> {
         self.mk_local_ex_local(self.mk_local(name))
@@ -77,33 +77,33 @@ impl<'tcx> VirCtxt<'tcx> {
         target: &'tcx str,
         src_args: &[ExprGen<'tcx, Curr, Next>],
     ) -> ExprGen<'tcx, Curr, Next> {
-        self.arena.alloc(ExprGenData::FuncApp(self.arena.alloc(FuncAppGenData {
+        self.arena.alloc(ExprGenData(ExprKindGenData::FuncApp(self.arena.alloc(FuncAppGenData {
             target,
             args: self.alloc_slice(src_args),
-        })))
+        }))))
     }
     pub fn mk_pred_app(&'tcx self, target: &'tcx str, src_args: &[Expr<'tcx>]) -> Expr<'tcx> {
-        self.arena.alloc(ExprData::PredicateApp(self.arena.alloc(PredicateAppData {
+        self.arena.alloc(ExprGenData(ExprKindGenData::PredicateApp(self.arena.alloc(PredicateAppData {
             target,
             args: self.alloc_slice(src_args),
-        })))
+        }))))
     }
 
     pub fn mk_true(&'tcx self) -> Expr<'tcx> {
-        self.alloc(ExprData::Const(self.alloc(ConstData::Bool(true))))
+        self.alloc(ExprGenData(ExprKindGenData::Const(self.alloc(ConstData::Bool(true)))))
     }
 
     pub fn mk_conj(&'tcx self, elems: &[Expr<'tcx>]) -> Expr<'tcx> {
         if elems.len() == 0 {
-            return self.alloc(ExprData::Const(self.alloc(ConstData::Bool(true))));
+            return self.alloc(ExprGenData(ExprKindGenData::Const(self.alloc(ConstData::Bool(true)))));
         }
         let mut e = elems[0];
         for i in 1..elems.len() {
-            e = self.alloc(ExprData::BinOp(self.alloc(BinOpData {
+            e = self.alloc(ExprGenData(ExprKindGenData::BinOp(self.alloc(BinOpData {
                 kind: BinOpKind::And,
                 lhs: e,
                 rhs: elems[i],
-            })));
+            }))));
         }
         e
     }

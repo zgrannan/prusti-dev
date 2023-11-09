@@ -19,7 +19,7 @@ pub enum MirPureEncoderError {
 }
 
 type ExprInput<'vir> = (DefId, &'vir [vir::Expr<'vir>]);
-type ExprRetData<'vir> = vir::ExprGenData<'vir, ExprInput<'vir>, vir::Expr<'vir>>;
+type ExprRetData<'vir> = vir::ExprKindGenData<'vir, ExprInput<'vir>, vir::Expr<'vir>>;
 type ExprRet<'vir> = vir::ExprGen<'vir, ExprInput<'vir>, vir::Expr<'vir>>;
 
 #[derive(Clone, Debug)]
@@ -106,7 +106,7 @@ impl TaskEncoder for MirPureEncoder {
             // We wrap the expression with an additional lazy that will perform
             // some sanity checks. These requirements cannot be expressed using
             // only the type system.
-            vcx.alloc(vir::ExprGenData::Lazy(
+            vcx.alloc(vir::ExprKindGenData::Lazy(
                 vir::vir_format!(vcx, "pure body {def_id:?}"),
                 Box::new(move |vcx, lctx: ExprInput<'_>| {
                     // check: are we actually providing arguments for the
@@ -295,7 +295,7 @@ impl<'vir, 'enc> Encoder<'vir, 'enc>
         let mut init = Update::new();
         init.versions.insert(mir::RETURN_PLACE, 0);
         for local in 1..=self.body.arg_count {
-            let local_ex = self.vcx.alloc(vir::ExprGenData::Lazy(
+            let local_ex = self.vcx.alloc(vir::ExprKindGenData::Lazy(
                 vir::vir_format!(self.vcx, "pure in _{local}"),
                 Box::new(move |_vcx, lctx: ExprInput<'vir>| lctx.1[local - 1]),
             ));

@@ -1,12 +1,27 @@
 use std::fmt::Debug;
 
+use crate::VirCtxt;
 use crate::data::*;
 use crate::genrefs::*;
 use crate::refs::*;
 
 use vir_proc_macro::*;
+use crate::reify::*;
 
-#[derive(Reify)]
+impl <'vir, Curr:Copy, NextA, NextB> crate::Reify<'vir, Curr, NextA, NextB>
+  for &'vir UnOpGenData<'vir, Curr, ExprKindGen<'vir, NextA, NextB>> {
+    type Next = &'vir UnOpGenData<'vir, NextA, NextB>;
+    fn reify(&self, vcx: &'vir VirCtxt<'vir>, lctx: Curr) -> Self::Next {
+        let expr: ExprGen<'vir, NextA, NextB> = self.expr.reify(vcx, lctx);
+        vcx.alloc(
+            UnOpGenData {
+                kind: self.kind,
+                expr,
+            }
+        )
+    }
+  }
+
 pub struct UnOpGenData<'vir, Curr, Next> {
     #[reify_copy] pub kind: UnOpKind,
     pub expr: ExprGen<'vir, Curr, Next>,
@@ -81,7 +96,11 @@ impl<A, B: GenRow> GenRow for fn(A) -> B {
     type Next = B;
 }*/
 
-pub enum ExprGenData<'vir, Curr: 'vir, Next: 'vir> {
+
+// TODO: Include position
+pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>(pub ExprKindGenData<'vir, Curr, Next>);
+
+pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     Local(Local<'vir>),
     Field(ExprGen<'vir, Curr, Next>, &'vir str), // TODO: FieldApp?
     Old(ExprGen<'vir, Curr, Next>),
@@ -108,7 +127,7 @@ pub enum ExprGenData<'vir, Curr: 'vir, Next: 'vir> {
 
     Todo(&'vir str),
 }
-impl<'vir, Curr, Next> ExprGenData<'vir, Curr, Next> {
+impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
     pub fn lift<Prev>(&self) -> ExprGen<'vir, Prev, ExprGen<'vir, Curr, Next>> {
         match self {
             Self::Lazy(..) => panic!("cannot lift lazy expression"),

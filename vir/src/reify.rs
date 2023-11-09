@@ -20,24 +20,33 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
 {
     type Next = ExprGen<'vir, NextA, NextB>;
     fn reify(&self, vcx: &'vir VirCtxt<'vir>, lctx: Curr) -> Self::Next {
+        vcx.alloc(ExprGenData(self.0.reify(vcx, lctx)))
+    }
+}
+
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+    for ExprKindGen<'vir, Curr, ExprKindGen<'vir, NextA, NextB>>
+{
+    type Next = ExprKindGen<'vir, NextA, NextB>;
+    fn reify(&self, vcx: &'vir VirCtxt<'vir>, lctx: Curr) -> Self::Next {
         match self {
-            ExprGenData::Field(v, f) => vcx.alloc(ExprGenData::Field(v.reify(vcx, lctx), f)),
-            ExprGenData::Old(v) => vcx.alloc(ExprGenData::Old(v.reify(vcx, lctx))),
-            ExprGenData::AccField(v) => vcx.alloc(ExprGenData::AccField(v.reify(vcx, lctx))),
-            ExprGenData::Unfolding(v) => vcx.alloc(ExprGenData::Unfolding(v.reify(vcx, lctx))),
-            ExprGenData::UnOp(v) => vcx.alloc(ExprGenData::UnOp(v.reify(vcx, lctx))),
-            ExprGenData::BinOp(v) => vcx.alloc(ExprGenData::BinOp(v.reify(vcx, lctx))),
-            ExprGenData::Ternary(v) => vcx.alloc(ExprGenData::Ternary(v.reify(vcx, lctx))),
-            ExprGenData::Forall(v) => vcx.alloc(ExprGenData::Forall(v.reify(vcx, lctx))),
-            ExprGenData::Let(v) => vcx.alloc(ExprGenData::Let(v.reify(vcx, lctx))),
-            ExprGenData::FuncApp(v) => vcx.alloc(ExprGenData::FuncApp(v.reify(vcx, lctx))),
-            ExprGenData::PredicateApp(v) => vcx.alloc(ExprGenData::PredicateApp(v.reify(vcx, lctx))),
+            ExprKindGenData::Field(v, f) => vcx.alloc(ExprKindGenData::Field(v.reify(vcx, lctx), f)),
+            ExprKindGenData::Old(v) => vcx.alloc(ExprKindGenData::Old(v.reify(vcx, lctx))),
+            ExprKindGenData::AccField(v) => vcx.alloc(ExprKindGenData::AccField(v.reify(vcx, lctx))),
+            ExprKindGenData::Unfolding(v) => vcx.alloc(ExprKindGenData::Unfolding(v.reify(vcx, lctx))),
+            ExprKindGenData::UnOp(v) => vcx.alloc(ExprKindGenData::UnOp(v.reify(vcx, lctx))),
+            ExprKindGenData::BinOp(v) => vcx.alloc(ExprKindGenData::BinOp(v.reify(vcx, lctx))),
+            ExprKindGenData::Ternary(v) => vcx.alloc(ExprKindGenData::Ternary(v.reify(vcx, lctx))),
+            ExprKindGenData::Forall(v) => vcx.alloc(ExprKindGenData::Forall(v.reify(vcx, lctx))),
+            ExprKindGenData::Let(v) => vcx.alloc(ExprKindGenData::Let(v.reify(vcx, lctx))),
+            ExprKindGenData::FuncApp(v) => vcx.alloc(ExprKindGenData::FuncApp(v.reify(vcx, lctx))),
+            ExprKindGenData::PredicateApp(v) => vcx.alloc(ExprKindGenData::PredicateApp(v.reify(vcx, lctx))),
 
-            ExprGenData::Local(v) => vcx.alloc(ExprGenData::Local(v)),
-            ExprGenData::Const(v) => vcx.alloc(ExprGenData::Const(v)),
-            ExprGenData::Todo(v) => vcx.alloc(ExprGenData::Todo(v)),
+            ExprKindGenData::Local(v) => vcx.alloc(ExprKindGenData::Local(v)),
+            ExprKindGenData::Const(v) => vcx.alloc(ExprKindGenData::Const(v)),
+            ExprKindGenData::Todo(v) => vcx.alloc(ExprKindGenData::Todo(v)),
 
-            ExprGenData::Lazy(_, f) => f(vcx, lctx),
+            ExprKindGenData::Lazy(_, f) => f(vcx, lctx),
         }
     }
 }
