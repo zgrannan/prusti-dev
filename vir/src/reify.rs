@@ -5,7 +5,7 @@ use crate::refs::*;
 
 pub use vir_proc_macro::*;
 
-pub trait Reify<'vir, Curr, NextA, NextB> {
+pub trait Reify<'vir, Curr> {
     type Next: Sized;
 
     fn reify(
@@ -15,7 +15,7 @@ pub trait Reify<'vir, Curr, NextA, NextB> {
     ) -> Self::Next;
 }
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for ExprGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>
 {
     type Next = ExprGen<'vir, NextA, NextB>;
@@ -55,7 +55,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
 //   slice of reify-able elements? same for an Option of a slice;
 //   for now these implementations are generated in the Reify derive macro
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for [ExprGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>]
 {
     type Next = &'vir [ExprGen<'vir, NextA, NextB>];
@@ -66,7 +66,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
     }
 }
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for [&'vir [ExprGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>]]
 {
     type Next = &'vir [&'vir [ExprGen<'vir, NextA, NextB>]];
@@ -77,7 +77,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
     }
 }
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for [(ExprGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>, CfgBlockLabel<'vir>)]
 {
     type Next = &'vir [(ExprGen<'vir, NextA, NextB>, CfgBlockLabel<'vir>)];
@@ -88,7 +88,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
     }
 }
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for Option<ExprGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>>
 {
     type Next = Option<ExprGen<'vir, NextA, NextB>>;
@@ -97,7 +97,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
     }
 }
 
-impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr, NextA, NextB>
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for Option<&'vir [CfgBlockGen<'vir, Curr, ExprGen<'vir, NextA, NextB>>]>
 {
     type Next = Option<&'vir [CfgBlockGen<'vir, NextA, NextB>]>;
