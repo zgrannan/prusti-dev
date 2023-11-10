@@ -343,9 +343,7 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                     ).unwrap();
 
                     let ref_p = self.encode_place(place);
-                    self.stmt(vir::StmtData::Exhale(self.vcx.alloc(vir::ExprData::PredicateApp(
-                        place_ty_out.ref_to_pred.apply(self.vcx, [ref_p])
-                    ))));
+                    self.stmt(vir::StmtData::Exhale(self.vcx.mk_predicate_app_expr(place_ty_out.ref_to_pred.apply(self.vcx, [ref_p]))));
                 }
                 unsupported_op => panic!("unsupported repack op: {unsupported_op:?}"),
             }
@@ -371,9 +369,7 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                     lhs: tmp_exp,
                     rhs: snap_val,
                 })));
-                self.stmt(vir::StmtData::Exhale(self.vcx.alloc(vir::ExprData::PredicateApp(
-                    ty_out.ref_to_pred.apply(self.vcx, [place_exp])
-                ))));
+                self.stmt(vir::StmtData::Exhale(self.vcx.mk_predicate_app_expr(ty_out.ref_to_pred.apply(self.vcx, [place_exp]))));
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
@@ -597,11 +593,11 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
 
                     mir::Rvalue::BinaryOp(mir::BinOp::Eq, box (l, r)) =>
                         Some(bool_cons.apply(self.vcx,
-                            [self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                            [self.vcx.mk_bin_op_expr(self.vcx.alloc(vir::BinOpData {
                                 kind: vir::BinOpKind::CmpEq,
                                 lhs: self.encode_operand_snap(l),
                                 rhs: self.encode_operand_snap(r),
-                            })))],
+                            }))],
                         )),
                     mir::Rvalue::BinaryOp(mir::BinOp::Lt, box (l, r)) => {
                         let ty_l = self.deps.require_ref::<crate::encoders::TypeEncoder>(
@@ -611,11 +607,11 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                             r.ty(self.local_decls, self.vcx.tcx),
                         ).unwrap().expect_prim().snap_to_prim;
 
-                        Some(bool_cons.apply(self.vcx, [self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
+                        Some(bool_cons.apply(self.vcx, [self.vcx.mk_bin_op_expr(self.vcx.alloc(vir::BinOpData {
                             kind: vir::BinOpKind::CmpLt,
                             lhs: ty_l.apply(self.vcx, [self.encode_operand_snap(l)]),
                             rhs: ty_r.apply(self.vcx, [self.encode_operand_snap(r)]),
-                        })))]))
+                        }))]))
                     }
                     //mir::Rvalue::BinaryOp(BinOp, Box<(Operand<'tcx>, Operand<'tcx>)>) => {}
 

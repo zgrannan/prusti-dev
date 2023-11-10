@@ -112,10 +112,10 @@ impl TaskEncoder for MirBuiltinEncoder {
                             posts: &[],
                             expr: Some(
                                 ty_ref.expect_prim().prim_to_snap.apply(vcx,
-                                    [vcx.alloc(vir::ExprData::UnOp(vcx.alloc(vir::UnOpData {
+                                    [vcx.mk_unary_op_expr(vcx.alloc(vir::UnOpData {
                                         kind: vir::UnOpKind::Not,
                                         expr:  ty_ref.expect_prim().snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg")])
-                                    })))]
+                                    }))]
                                 )
                             ),
                         }),
@@ -146,14 +146,12 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::UnOp(
-                                        vcx.alloc(vir::UnOpData {
-                                            kind: vir::UnOpKind::Neg,
-                                            expr: ty_out
-                                                .expect_prim()
-                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg")]),
-                                        }),
-                                    ))]),
+                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.mk_unary_op_expr(vcx.alloc(vir::UnOpData {
+                                        kind: vir::UnOpKind::Neg,
+                                        expr: ty_out
+                                            .expect_prim()
+                                            .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg")]),
+                                    }))]),
                                 ),
                             }),
                         },
@@ -186,17 +184,15 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 pres: &[],
                                 posts: &[],
                                 expr: Some(
-                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::BinOp(
-                                        vcx.alloc(vir::BinOpData {
-                                            kind: vir::BinOpKind::Add,
-                                            lhs: ty_out
-                                                .expect_prim()
-                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
-                                            rhs: ty_out
-                                                .expect_prim()
-                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
-                                        }),
-                                    ))]),
+                                    ty_out.expect_prim().prim_to_snap.apply(vcx, [vcx.mk_bin_op_expr(vcx.alloc(vir::BinOpData {
+                                        kind: vir::BinOpKind::Add,
+                                        lhs: ty_out
+                                            .expect_prim()
+                                            .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
+                                        rhs: ty_out
+                                            .expect_prim()
+                                            .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
+                                    }))]),
                                 ),
                             }),
                         },
@@ -238,17 +234,15 @@ impl TaskEncoder for MirBuiltinEncoder {
                                 posts: &[],
                                 expr: Some(
                                     ty_out.expect_structlike().field_snaps_to_snap.apply(vcx, &[
-                                        ty_in.expect_prim().prim_to_snap.apply(vcx, [vcx.alloc(vir::ExprData::BinOp(
-                                            vcx.alloc(vir::BinOpData {
-                                                kind: vir::BinOpKind::Add,
-                                                lhs: ty_in
-                                                    .expect_prim()
-                                                    .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
-                                                rhs: ty_in
-                                                    .expect_prim()
-                                                    .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
-                                            }),
-                                        ))]),
+                                        ty_in.expect_prim().prim_to_snap.apply(vcx, [vcx.mk_bin_op_expr(vcx.alloc(vir::BinOpData {
+                                            kind: vir::BinOpKind::Add,
+                                            lhs: ty_in
+                                                .expect_prim()
+                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg1")]),
+                                            rhs: ty_in
+                                                .expect_prim()
+                                                .snap_to_prim.apply(vcx, [vcx.mk_local_ex("arg2")]),
+                                        }))]),
                                         // TODO: overflow condition!
                                         bool_cons.apply(vcx, [&vir::ExprData::Const(&vir::ConstData::Bool(
                                             false,

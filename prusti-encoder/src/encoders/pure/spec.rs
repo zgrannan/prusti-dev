@@ -112,7 +112,7 @@ impl TaskEncoder for MirSpecEncoder {
                     if idx == 0 {
                         arg
                     } else {
-                        vcx.alloc(vir::ExprData::Old(arg))
+                        vcx.mk_old_expr(arg)
                     }
                 }).collect();
                 vcx.alloc_slice(&post_args)

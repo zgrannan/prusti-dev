@@ -29,6 +29,14 @@ pub struct VirCtxt<'tcx> {
     
 }
 
+macro_rules! mk_expr_fn {
+    ($func_name:ident, $expr_type:ident, $expr_constructor:ident) => {
+        pub fn $func_name<Curr, Next>(&'tcx self, expr: $expr_type<'tcx, Curr, Next>) -> ExprGen<'tcx, Curr, Next> {
+            self.alloc(ExprGenData::$expr_constructor(expr))
+        }
+    };
+}
+
 impl<'tcx> VirCtxt<'tcx> {
     pub fn new(tcx: ty::TyCtxt<'tcx>, body: EnvBody<'tcx>) -> Self {
         Self {
@@ -56,18 +64,18 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     pub fn mk_local<'vir>(&'vir self, name: &'vir str) -> Local<'vir> {
-        self.arena.alloc(LocalData {
+        self.alloc(LocalData {
             name,
         })
     }
     pub fn mk_local_decl(&'tcx self, name: &'tcx str, ty: Type<'tcx>) -> LocalDecl<'tcx> {
-        self.arena.alloc(LocalDeclData {
+        self.alloc(LocalDeclData {
             name,
             ty,
         })
     }
     pub fn mk_local_ex_local<Curr, Next>(&'tcx self, local: Local<'tcx>) -> ExprGen<'tcx, Curr, Next> {
-        self.arena.alloc(ExprGenData::Local(local))
+        self.alloc(ExprGenData::Local(local))
     }
     pub fn mk_local_ex<Curr, Next>(&'tcx self, name: &'tcx str) -> ExprGen<'tcx, Curr, Next> {
         self.mk_local_ex_local(self.mk_local(name))
@@ -90,23 +98,42 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     pub fn mk_true(&'tcx self) -> Expr<'tcx> {
-        self.alloc(ExprData::Const(self.alloc(ConstData::Bool(true))))
+        self.mk_const_expr(self.alloc(ConstData::Bool(true)))
     }
 
     pub fn mk_conj(&'tcx self, elems: &[Expr<'tcx>]) -> Expr<'tcx> {
         if elems.len() == 0 {
-            return self.alloc(ExprData::Const(self.alloc(ConstData::Bool(true))));
+            return self.mk_true();
         }
         let mut e = elems[0];
         for i in 1..elems.len() {
-            e = self.alloc(ExprData::BinOp(self.alloc(BinOpData {
+            e = self.mk_bin_op_expr(self.alloc(BinOpData {
                 kind: BinOpKind::And,
                 lhs: e,
                 rhs: elems[i],
-            })));
+            }));
         }
         e
     }
+
+    pub fn mk_const_expr(&'tcx self, val: &'tcx ConstData) -> Expr<'tcx> {
+        self.alloc(ExprData::Const(val))
+    }
+
+    pub fn mk_field_expr<Curr, Next>(&'tcx self, expr: ExprGen<'tcx, Curr, Next>, field: &'tcx str) -> ExprGen<'tcx, Curr, Next> {
+        self.alloc(ExprGenData::Field(expr, field))
+    }
+
+    pub fn mk_old_expr<Curr, Next>(&'tcx self, expr: ExprGen<'tcx, Curr, Next>) -> ExprGen<'tcx, Curr, Next> {
+        self.alloc(ExprGenData::Old(expr))
+    }
+
+    mk_expr_fn!(mk_bin_op_expr, BinOpGen, BinOp);
+    mk_expr_fn!(mk_acc_field_expr, AccFieldGen, AccField);
+    mk_expr_fn!(mk_predicate_app_expr, PredicateAppGen, PredicateApp);
+    mk_expr_fn!(mk_unfolding_expr, UnfoldingGen, Unfolding);
+    mk_expr_fn!(mk_forall_expr, ForallGen, Forall);
+    mk_expr_fn!(mk_unary_op_expr, UnOpGen, UnOp);
 }
 
 thread_local! {
