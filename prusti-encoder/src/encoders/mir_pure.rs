@@ -20,7 +20,7 @@ pub enum MirPureEncoderError {
 
 type ExprInput<'vir> = (DefId, &'vir [vir::Expr<'vir>]);
 type ExprRetData<'vir> = vir::ExprKindGenData<'vir, ExprInput<'vir>, vir::Expr<'vir>>;
-type ExprRet<'vir> = vir::ExprGen<'vir, ExprInput<'vir>, vir::Expr<'vir>>;
+type ExprRet<'vir> = vir::ExprGen<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
 
 #[derive(Clone, Debug)]
 pub struct MirPureEncoderOutput<'vir> {

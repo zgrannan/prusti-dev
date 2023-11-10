@@ -6,22 +6,24 @@ use crate::genrefs::*;
 use crate::refs::*;
 
 use vir_proc_macro::*;
-use crate::reify::*;
+use crate::reify::Reify;
 
-impl <'vir, Curr:Copy, NextA, NextB> crate::Reify<'vir, Curr, NextA, NextB>
-  for &'vir UnOpGenData<'vir, Curr, ExprKindGen<'vir, NextA, NextB>> {
-    type Next = &'vir UnOpGenData<'vir, NextA, NextB>;
-    fn reify(&self, vcx: &'vir VirCtxt<'vir>, lctx: Curr) -> Self::Next {
-        let expr: ExprGen<'vir, NextA, NextB> = self.expr.reify(vcx, lctx);
-        vcx.alloc(
-            UnOpGenData {
-                kind: self.kind,
-                expr,
-            }
-        )
-    }
-  }
+// impl <'vir, Curr:Copy, NextA, NextB> crate::Reify<'vir, Curr>
+//   for &'vir UnOpGenData<'vir, Curr, ExprKindGen<'vir, NextA, NextB>> {
+//     type Next = &'vir UnOpGenData<'vir, NextA, NextB>;
+//     fn reify(&self, vcx: &'vir VirCtxt<'vir>, lctx: Curr) -> Self::Next {
+//         let t = &self.expr.0;
+//         let expr: ExprGen<'vir, NextA, NextB> = &ExprGenData(self.expr.0.reify(vcx, lctx));
+//         vcx.alloc(
+//             UnOpGenData {
+//                 kind: self.kind,
+//                 expr,
+//             }
+//         )
+//     }
+//   }
 
+#[derive(Reify)]
 pub struct UnOpGenData<'vir, Curr, Next> {
     #[reify_copy] pub kind: UnOpKind,
     pub expr: ExprGen<'vir, Curr, Next>,
@@ -98,7 +100,7 @@ impl<A, B: GenRow> GenRow for fn(A) -> B {
 
 
 // TODO: Include position
-pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>(pub ExprKindGenData<'vir, Curr, Next>);
+pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>(pub ExprKindGen<'vir, Curr, Next>);
 
 pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     Local(Local<'vir>),

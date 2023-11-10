@@ -598,14 +598,14 @@ impl TaskEncoder for TypeEncoder {
             // predicate
             let predicate = {
                 let expr = (0..field_ty_out.len())
-                    .map(|idx| vcx.alloc(vir::ExprData::PredicateApp(
+                    .map(|idx| vcx.mk_predicate_app_expr(
                         field_ty_out[idx].ref_to_pred.apply(vcx, [field_access[idx].projection_p.apply(vcx, [vcx.mk_local_ex("self_p")])])
-                    )))
-                    .reduce(|base, field_expr| vcx.alloc(vir::ExprData::BinOp(vcx.alloc(vir::BinOpData {
+                    ))
+                    .reduce(|base, field_expr| vcx.mk_bin_op(vcx.alloc(vir::BinOpData {
                         kind: vir::BinOpKind::And,
                         lhs: base,
                         rhs: field_expr,
-                    }))))
+                    })))
                     .unwrap_or_else(|| vcx.mk_true());
                 vcx.alloc(vir::PredicateData {
                     name: name_p,
@@ -638,10 +638,10 @@ impl TaskEncoder for TypeEncoder {
                         ]),
                         ret: ty_s,
                         pres: vcx.alloc_slice(&[
-                            vcx.alloc(vir::ExprData::PredicateApp(pred_app)),
+                            vcx.mk_predicate_app_expr(pred_app),
                         ]),
                         posts: &[],
-                        expr: Some(vcx.alloc(vir::ExprData::Unfolding(vcx.alloc(vir::UnfoldingData {
+                        expr: Some(vcx.mk_unfolding_expr(vcx.alloc(vir::UnfoldingData {
                             target: pred_app,
                             expr: field_snaps_to_snap.apply(
                                 vcx,
@@ -653,7 +653,7 @@ impl TaskEncoder for TypeEncoder {
                                     ]))
                                     .collect::<Vec<_>>()
                             ),
-                        })))),
+                        }))),
                     })
                 },
                 //method_refold: mk_refold(vcx, name_p, ty_s),
