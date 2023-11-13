@@ -1,11 +1,8 @@
-use std::cell::RefCell;
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
+use std::cell::RefCell;
 
-use crate::data::*;
-use crate::gendata::*;
-use crate::genrefs::*;
-use crate::refs::*;
+use crate::{data::*, gendata::*, genrefs::*, refs::*};
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {
@@ -20,13 +17,11 @@ pub struct VirCtxt<'tcx> {
     pub span_stack: Vec<i32>,
     // TODO: span stack
     // TODO: error positions?
-
     /// The compiler's typing context. This allows convenient access to most
     /// of the compiler's APIs.
     pub tcx: ty::TyCtxt<'tcx>,
 
     pub body: RefCell<EnvBody<'tcx>>,
-    
 }
 
 impl<'tcx> VirCtxt<'tcx> {
@@ -48,26 +43,21 @@ impl<'tcx> VirCtxt<'tcx> {
         &*self.arena.alloc_str(val)
     }
 
-/*    pub fn alloc_slice<'a, T: Copy>(&'tcx self, val: &'a [T]) -> &'tcx [T] {
-        &*self.arena.alloc_slice_copy(val)
-        }*/
     pub fn alloc_slice<T: Copy>(&self, val: &[T]) -> &[T] {
         &*self.arena.alloc_slice_copy(val)
     }
 
     pub fn mk_local<'vir>(&'vir self, name: &'vir str) -> Local<'vir> {
-        self.arena.alloc(LocalData {
-            name,
-        })
+        self.alloc(LocalData { name })
     }
     pub fn mk_local_decl<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> LocalDecl<'vir> {
-        self.arena.alloc(LocalDeclData {
-            name,
-            ty,
-        })
+        self.alloc(LocalDeclData { name, ty })
     }
-    pub fn mk_local_ex_local<'vir, Curr, Next>(&'vir self, local: Local<'vir>) -> ExprGen<'vir, Curr, Next> {
-        self.arena.alloc(ExprGenData::Local(local))
+    pub fn mk_local_ex_local<'vir, Curr, Next>(
+        &'vir self,
+        local: Local<'vir>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Local(local))
     }
     pub fn mk_local_ex<'vir, Curr, Next>(&'vir self, name: &'vir str) -> ExprGen<'vir, Curr, Next> {
         self.mk_local_ex_local(self.mk_local(name))
@@ -77,16 +67,133 @@ impl<'tcx> VirCtxt<'tcx> {
         target: &'vir str,
         src_args: &[ExprGen<'vir, Curr, Next>],
     ) -> ExprGen<'vir, Curr, Next> {
-        self.arena.alloc(ExprGenData::FuncApp(self.arena.alloc(FuncAppGenData {
+        self.alloc(ExprGenData::FuncApp(self.arena.alloc(FuncAppGenData {
             target,
             args: self.alloc_slice(src_args),
         })))
     }
     pub fn mk_pred_app<'vir>(&'vir self, target: &'vir str, src_args: &[Expr<'vir>]) -> Expr<'vir> {
-        self.arena.alloc(ExprData::PredicateApp(self.arena.alloc(PredicateAppData {
+        self.alloc(ExprData::PredicateApp(self.arena.alloc(PredicateAppData {
             target,
             args: self.alloc_slice(src_args),
         })))
+    }
+
+    pub fn mk_lazy_expr<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str,
+        func: Box<dyn for<'a> Fn(&'vir VirCtxt<'a>, Curr) -> Next + 'vir>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Lazy(name, func))
+    }
+
+    pub fn mk_ternary_expr<'vir, Curr, Next>(
+        &'vir self,
+        cond: ExprGen<'vir, Curr, Next>,
+        then: ExprGen<'vir, Curr, Next>,
+        else_: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Ternary(self.alloc(TernaryGenData {
+            cond,
+            then,
+            else_,
+        })))
+    }
+
+    pub fn mk_unary_op_expr<'vir, Curr, Next>(
+        &'vir self,
+        kind: UnOpKind,
+        expr: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::UnOp(self.alloc(UnOpGenData { kind, expr })))
+    }
+
+    pub fn mk_old_expr<'vir, Curr, Next>(
+        &'vir self,
+        expr: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Old(expr))
+    }
+
+    pub fn mk_forall_expr<'vir, Curr, Next>(
+        &'vir self,
+        qvars: &'vir [LocalDecl<'vir>],
+        triggers: &'vir [&'vir [ExprGen<'vir, Curr, Next>]],
+        body: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Forall(self.alloc(ForallGenData {
+            qvars,
+            triggers,
+            body,
+        })))
+    }
+
+    pub fn mk_let_expr<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str,
+        val: ExprGen<'vir, Curr, Next>,
+        expr: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Let(self.alloc(LetGenData { name, val, expr })))
+    }
+
+    pub fn mk_predicate_app_expr<'vir, Curr, Next>(
+        &'vir self,
+        pred_app: PredicateAppGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::PredicateApp(pred_app))
+    }
+
+    pub fn mk_bin_op_expr<'vir, Curr, Next>(
+        &'vir self,
+        kind: BinOpKind,
+        lhs: ExprGen<'vir, Curr, Next>,
+        rhs: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::BinOp(self.alloc(BinOpGenData {
+            kind,
+            lhs,
+            rhs,
+        })))
+    }
+
+    pub fn mk_field_expr<'vir, Curr, Next>(
+        &'vir self,
+        recv: ExprGen<'vir, Curr, Next>,
+        field: &'vir str,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Field(recv, field))
+    }
+
+    pub fn mk_unfolding_expr<'vir, Curr, Next>(
+        &'vir self,
+        target: PredicateAppGen<'vir, Curr, Next>,
+        expr: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Unfolding(
+            self.alloc(UnfoldingGenData { target, expr }),
+        ))
+    }
+
+    pub fn mk_acc_field_expr<'vir, Curr, Next>(
+        &'vir self,
+        recv: ExprGen<'vir, Curr, Next>,
+        field: &'vir str,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::AccField(
+            self.alloc(AccFieldGenData { recv, field }),
+        ))
+    }
+
+    pub fn mk_const_expr<'vir, Curr, Next>(
+        &'vir self,
+        value: ConstData,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Const(self.alloc(value)))
+    }
+
+    pub fn mk_todo_expr<'vir, Curr, Next>(&'vir self, msg: &'vir str) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::Todo(msg))
     }
 
     pub const fn mk_bool<'vir, const VALUE: bool>(&'vir self) -> Expr<'vir> {
@@ -149,12 +256,20 @@ impl<'tcx> VirCtxt<'tcx> {
             (u128::BITS, _) => {
                 // TODO: make this a `const` once `Expr` isn't invariant in `'vir` so that it can be `'const` instead
                 let half = self.mk_uint::<{ 1_u128 << u64::BITS }>();
-                self.alloc(ExprData::BinOp(self.alloc(BinOpGenData { kind: BinOpKind::Add, lhs: half, rhs: half })))
+                self.alloc(ExprData::BinOp(self.alloc(BinOpGenData {
+                    kind: BinOpKind::Add,
+                    lhs: half,
+                    rhs: half,
+                })))
             }
             _ => unreachable!(),
         }
     }
-    pub fn get_signed_shift_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Option<Expr<'vir>> {
+    pub fn get_signed_shift_int<'vir>(
+        &'vir self,
+        ty: Type,
+        rust_ty: &ty::TyKind,
+    ) -> Option<Expr<'vir>> {
         let int = match Self::get_int_data(ty, rust_ty) {
             (_, false) => return None,
             (u8::BITS, true) => self.mk_uint::<{ 1_u128 << (u8::BITS - 1) }>(),

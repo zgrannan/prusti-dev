@@ -104,9 +104,9 @@ macro_rules! vir_expr {
 #[macro_export]
 macro_rules! vir_expr {
     ($vcx:expr; $( $args:tt )* ) => {
-        &*$vcx.arena.alloc($crate::ExprData::Todo(
+        &*$vcx.mk_todo_expr(
             $vcx.alloc_str(stringify!($($args)*)),
-        ))
+        )
     }
 }
 
@@ -154,17 +154,17 @@ macro_rules! vir_domain_axiom {
                 $a.name(),
                 $b.name(),
             )),
-            expr: $vcx.alloc($crate::ExprData::Forall($vcx.alloc($crate::ForallData {
-                qvars: $vcx.alloc_slice(&[
+            expr: $vcx.mk_forall_expr(
+                $vcx.alloc_slice(&[
                     $vcx.mk_local_decl("val", $crate::vir_type!($vcx; $ty)),
                 ]),
-                triggers: $vcx.alloc_slice(&[$vcx.alloc_slice(&[inner])]),
-                body: $vcx.alloc($crate::ExprData::BinOp($vcx.alloc($crate::BinOpData {
-                    kind: $crate::BinOpKind::CmpEq,
-                    lhs: $a.apply($vcx, [inner]),
-                    rhs: val_ex,
-                }))),
-            }))),
+                $vcx.alloc_slice(&[$vcx.alloc_slice(&[inner])]),
+                $vcx.mk_bin_op_expr(
+                    $crate::BinOpKind::CmpEq,
+                    $a.apply($vcx, [inner]),
+                    val_ex,
+                ),
+            ),
         })
     }};
     ($vcx:expr; axiom $name:tt { $( $body:tt )* }) => {{

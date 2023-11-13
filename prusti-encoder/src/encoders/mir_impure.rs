@@ -143,7 +143,7 @@ impl TaskEncoder for MirImpureEncoder {
                             let name = vir::vir_format!(vcx, "_reach_bb{block}");
                             vcx.alloc(vir::StmtData::LocalDecl(
                                 vir::vir_local_decl! { vcx; [name] : Bool },
-                                Some(vcx.alloc(vir::ExprData::Todo("false"))),
+                                Some(vcx.mk_todo_expr("false")),
                             ))
                         }));
                 }
@@ -356,9 +356,9 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                     ).unwrap();
 
                     let ref_p = self.encode_place(place);
-                    self.stmt(vir::StmtData::Exhale(self.vcx.alloc(vir::ExprData::PredicateApp(
+                    self.stmt(vir::StmtData::Exhale(self.vcx.mk_predicate_app_expr(
                         place_ty_out.ref_to_pred.apply(self.vcx, [ref_p])
-                    ))));
+                    )));
                 }
                 unsupported_op => panic!("unsupported repack op: {unsupported_op:?}"),
             }
@@ -384,9 +384,9 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
                     lhs: tmp_exp,
                     rhs: snap_val,
                 })));
-                self.stmt(vir::StmtData::Exhale(self.vcx.alloc(vir::ExprData::PredicateApp(
+                self.stmt(vir::StmtData::Exhale(self.vcx.mk_predicate_app_expr(
                     ty_out.ref_to_pred.apply(self.vcx, [place_exp])
-                ))));
+                )));
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
@@ -450,24 +450,16 @@ impl<'vir, 'enc> EncoderVisitor<'vir, 'enc> {
         match constant.literal {
             mir::ConstantKind::Val(const_val, const_ty) => {
                 match const_ty.kind() {
-                    ty::TyKind::Tuple(tys) if tys.len() == 0 => self.vcx.alloc(vir::ExprData::Todo(
-                        vir::vir_format!(self.vcx, "s_Tuple0_cons()"),
-                    )),
+                    ty::TyKind::Tuple(tys) if tys.len() == 0 => self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Tuple0_cons()")),
                     ty::TyKind::Int(int_ty) => {
                         let scalar_val = const_val.try_to_scalar_int().unwrap();
-                        self.vcx.alloc(vir::ExprData::Todo(
-                            vir::vir_format!(self.vcx, "s_Int_{}_cons({})", int_ty.name_str(), scalar_val.try_to_int(scalar_val.size()).unwrap()),
-                        ))
+                        self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Int_{}_cons({})", int_ty.name_str(), scalar_val.try_to_int(scalar_val.size()).unwrap()))
                     }
                     ty::TyKind::Uint(uint_ty) => {
                         let scalar_val = const_val.try_to_scalar_int().unwrap();
-                        self.vcx.alloc(vir::ExprData::Todo(
-                            vir::vir_format!(self.vcx, "s_Uint_{}_cons({})", uint_ty.name_str(), scalar_val.try_to_uint(scalar_val.size()).unwrap()),
-                        ))
+                        self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Uint_{}_cons({})", uint_ty.name_str(), scalar_val.try_to_uint(scalar_val.size()).unwrap()))
                     }
-                    ty::TyKind::Bool => self.vcx.alloc(vir::ExprData::Todo(
-                        vir::vir_format!(self.vcx, "s_Bool_cons({})", const_val.try_to_bool().unwrap()),
-                    )),
+                    ty::TyKind::Bool => self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Bool_cons({})", const_val.try_to_bool().unwrap())),
                     unsupported_ty => todo!("unsupported constant literal type: {unsupported_ty:?}"),
                 }
             }
@@ -682,9 +674,7 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                     //mir::Rvalue::CopyForDeref(Place<'tcx>) => {}
                     other => {
                         tracing::error!("unsupported rvalue {other:?}");
-                        Some(self.vcx.alloc(vir::ExprData::Todo(
-                            vir::vir_format!(self.vcx, "rvalue {rvalue:?}"),
-                        )))
+                        Some(self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "rvalue {rvalue:?}")))
                     }
                 };
 
@@ -790,12 +780,8 @@ impl<'vir, 'enc> mir::visit::Visitor<'vir> for EncoderVisitor<'vir, 'enc> {
                 ).unwrap();
                 let enc = self.encode_operand_snap(cond);
                 let enc = e_bool.expect_prim().snap_to_prim.apply(self.vcx, [enc]);
-                let expected = self.vcx.alloc(vir::ExprData::Const(self.vcx.alloc(vir::ConstData::Bool(*expected))));
-                let assert = self.vcx.alloc(vir::ExprData::BinOp(self.vcx.alloc(vir::BinOpData {
-                    kind: vir::BinOpKind::CmpEq,
-                    lhs: enc,
-                    rhs: expected,
-                })));
+                let expected = self.vcx.mk_const_expr(vir::ConstData::Bool(*expected));
+                let assert = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, enc, expected);
                 self.stmt(vir::StmtData::Exhale(assert));
 
                 let target_bb = self.vcx.alloc(vir::CfgBlockLabelData::BasicBlock(target.as_usize()));
