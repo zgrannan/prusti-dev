@@ -256,11 +256,7 @@ impl<'tcx> VirCtxt<'tcx> {
             (u128::BITS, _) => {
                 // TODO: make this a `const` once `Expr` isn't invariant in `'vir` so that it can be `'const` instead
                 let half = self.mk_uint::<{ 1_u128 << u64::BITS }>();
-                self.alloc(ExprData::BinOp(self.alloc(BinOpGenData {
-                    kind: BinOpKind::Add,
-                    lhs: half,
-                    rhs: half,
-                })))
+                self.mk_bin_op_expr(BinOpKind::Add, half, half)
             }
             _ => unreachable!(),
         }
@@ -298,11 +294,7 @@ impl<'tcx> VirCtxt<'tcx> {
         }
         let mut e = elems[0];
         for i in 1..elems.len() {
-            e = self.alloc(ExprData::BinOp(self.alloc(BinOpData {
-                kind: BinOpKind::And,
-                lhs: e,
-                rhs: elems[i],
-            })));
+            e = self.mk_bin_op_expr(BinOpKind::And, e, elems[i]);
         }
         e
     }

@@ -240,8 +240,10 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
     ) -> ExprRet<'vir> {
         update.binds.iter()
             .rfold(expr, |expr, bind| match bind {
-                UpdateBind::Local(local, ver, val) => self.vcx.mk_let_expr(self.mk_local(*local, *ver), val, expr),
-                UpdateBind::Phi(idx, val) => self.vcx.mk_let_expr(self.mk_phi(*idx), val, expr),
+                UpdateBind::Local(local, ver, val) => 
+                    self.vcx.mk_let_expr(self.mk_local(*local, *ver), val, expr),
+                UpdateBind::Phi(idx, val) => 
+                    self.vcx.mk_let_expr(self.mk_phi(*idx), val, expr),
             })
     }
 
@@ -391,7 +393,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                     .fold(
                         self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, otherwise_update),
                         |expr, ((cond_val, target), (_, branch_update))| self.vcx.mk_ternary_expr(
-                            self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, discr_expr, discr_ty_out.expr_from_u128(cond_val).lift()),
+                            self.vcx.mk_bin_op_expr(
+                                vir::BinOpKind::CmpEq, 
+                                discr_expr, 
+                                discr_ty_out.expr_from_u128(cond_val).lift()
+                            ),
                             self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, branch_update),
                             expr,
                         ),
@@ -619,7 +625,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 ).unwrap().expect_prim().prim_to_snap;
 
                 ty_rvalue.apply(self.vcx,
-                    [self.vcx.mk_bin_op_expr(op.into(), ty_l.apply(self.vcx, [self.encode_operand(curr_ver, l)]), ty_r.apply(self.vcx, [self.encode_operand(curr_ver, r)]))],
+                    [self.vcx.mk_bin_op_expr(
+                        op.into(), 
+                        ty_l.apply(self.vcx, [self.encode_operand(curr_ver, l)]), 
+                        ty_r.apply(self.vcx, [self.encode_operand(curr_ver, r)])
+                    )],
                 )
             }
             // CheckedBinaryOp
@@ -691,16 +701,34 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 match constant.literal {
                     mir::ConstantKind::Val(const_val, const_ty) => {
                         match const_ty.kind() {
-                            ty::TyKind::Tuple(tys) if tys.len() == 0 => self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Tuple0_cons()")),
+                            ty::TyKind::Tuple(tys) if tys.len() == 0 => 
+                                self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Tuple0_cons()")),
                             ty::TyKind::Int(int_ty) => {
                                 let scalar_val = const_val.try_to_scalar_int().unwrap();
-                                self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Int_{}_cons({})", int_ty.name_str(), scalar_val.try_to_int(scalar_val.size()).unwrap()))
+                                self.vcx.mk_todo_expr(
+                                    vir::vir_format!(
+                                        self.vcx, 
+                                        "s_Int_{}_cons({})", 
+                                        int_ty.name_str(), 
+                                        scalar_val.try_to_int(scalar_val.size()).unwrap()
+                                    )
+                                )
                             }
                             ty::TyKind::Uint(uint_ty) => {
                                 let scalar_val = const_val.try_to_scalar_int().unwrap();
-                                self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Uint_{}_cons({})", uint_ty.name_str(), scalar_val.try_to_uint(scalar_val.size()).unwrap()))
+                                self.vcx.mk_todo_expr(
+                                    vir::vir_format!(
+                                        self.vcx, 
+                                        "s_Uint_{}_cons({})", 
+                                        uint_ty.name_str(), 
+                                        scalar_val.try_to_uint(scalar_val.size()).unwrap()
+                                    )
+                                )
                             }
-                            ty::TyKind::Bool => self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Bool_cons({})", const_val.try_to_bool().unwrap())),
+                            ty::TyKind::Bool => 
+                                self.vcx.mk_todo_expr(
+                                    vir::vir_format!(self.vcx, "s_Bool_cons({})", const_val.try_to_bool().unwrap())
+                                ),
                             unsupported_ty => todo!("unsupported constant literal type: {unsupported_ty:?}"),
                         }
                     }
@@ -718,7 +746,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         // TODO: remove (debug)
         if !curr_ver.contains_key(&place.local) {
             tracing::error!("unknown version of local! {}", place.local.as_usize());
-            return self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "unknown_version_{}", place.local.as_usize()));
+            return self.vcx.mk_todo_expr(
+                vir::vir_format!(self.vcx, "unknown_version_{}", place.local.as_usize())
+            );
         }
 
         let local = self.mk_local_ex(place.local, curr_ver[&place.local]);
