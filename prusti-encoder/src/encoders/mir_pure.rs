@@ -261,9 +261,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
     ) -> ExprRet<'vir> {
         update.binds.iter()
             .rfold(expr, |expr, bind| match bind {
-                UpdateBind::Local(local, ver, val) => 
+                UpdateBind::Local(local, ver, val) =>
                     self.vcx.mk_let_expr(self.mk_local(*local, *ver), val, expr),
-                UpdateBind::Phi(idx, val) => 
+                UpdateBind::Phi(idx, val) =>
                     self.vcx.mk_let_expr(self.mk_phi(*idx), val, expr),
             })
     }
@@ -312,7 +312,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
 
         let res = init.merge(update);
         let ret_version = res.versions.get(&mir::RETURN_PLACE).copied().unwrap_or(0);
-      
+
         self.reify_binds(res, self.mk_local_ex(mir::RETURN_PLACE, ret_version))
     }
 
@@ -404,8 +404,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                         self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, otherwise_update),
                         |expr, ((cond_val, target), (_, branch_update))| self.vcx.mk_ternary_expr(
                             self.vcx.mk_bin_op_expr(
-                                vir::BinOpKind::CmpEq, 
-                                discr_expr, 
+                                vir::BinOpKind::CmpEq,
+                                discr_expr,
                                 discr_ty_out.expr_from_u128(cond_val).lift()
                             ),
                             self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, branch_update),
@@ -499,7 +499,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
             },
             mir::StatementKind::StorageDead(..)
             | mir::StatementKind::FakeRead(..)
-            | mir::StatementKind::AscribeUserType(..) 
+            | mir::StatementKind::AscribeUserType(..)
             | mir::StatementKind::PlaceMention(..) => {}, // nop
             mir::StatementKind::Assign(box (dest, rvalue)) => {
                 assert!(dest.projection.is_empty());
@@ -537,8 +537,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
 
                 ty_rvalue.apply(self.vcx,
                     [self.vcx.mk_bin_op_expr(
-                        op.into(), 
-                        ty_l.apply(self.vcx, [self.encode_operand(curr_ver, l)]), 
+                        op.into(),
+                        ty_l.apply(self.vcx, [self.encode_operand(curr_ver, l)]),
                         ty_r.apply(self.vcx, [self.encode_operand(curr_ver, r)])
                     )],
                 )
@@ -612,15 +612,15 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 match constant.literal {
                     mir::ConstantKind::Val(const_val, const_ty) => {
                         match const_ty.kind() {
-                            ty::TyKind::Tuple(tys) if tys.len() == 0 => 
+                            ty::TyKind::Tuple(tys) if tys.len() == 0 =>
                                 self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "s_Tuple0_cons()")),
                             ty::TyKind::Int(int_ty) => {
                                 let scalar_val = const_val.try_to_scalar_int().unwrap();
                                 self.vcx.mk_todo_expr(
                                     vir::vir_format!(
-                                        self.vcx, 
-                                        "s_Int_{}_cons({})", 
-                                        int_ty.name_str(), 
+                                        self.vcx,
+                                        "s_Int_{}_cons({})",
+                                        int_ty.name_str(),
                                         scalar_val.try_to_int(scalar_val.size()).unwrap()
                                     )
                                 )
@@ -629,14 +629,14 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                                 let scalar_val = const_val.try_to_scalar_int().unwrap();
                                 self.vcx.mk_todo_expr(
                                     vir::vir_format!(
-                                        self.vcx, 
-                                        "s_Uint_{}_cons({})", 
-                                        uint_ty.name_str(), 
+                                        self.vcx,
+                                        "s_Uint_{}_cons({})",
+                                        uint_ty.name_str(),
                                         scalar_val.try_to_uint(scalar_val.size()).unwrap()
                                     )
                                 )
                             }
-                            ty::TyKind::Bool => 
+                            ty::TyKind::Bool =>
                                 self.vcx.mk_todo_expr(
                                     vir::vir_format!(self.vcx, "s_Bool_cons({})", const_val.try_to_bool().unwrap())
                                 ),
@@ -729,7 +729,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 _ => panic!("illegal prusti::builtin"),
             }
         }
-        
+
         match builtin.expect("call to unknown non-pure function in pure code") {
             PrustiBuiltin::SnapshotEquality => {
                 assert_eq!(args.len(), 2);
