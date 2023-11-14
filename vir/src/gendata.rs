@@ -41,8 +41,8 @@ pub struct FuncAppGenData<'vir, Curr, Next> {
 
 #[derive(Reify)]
 pub struct PredicateAppGenData<'vir, Curr, Next> {
-    #[reify_copy] pub target: &'vir str, // TODO: identifiers
-    pub args: &'vir [ExprGen<'vir, Curr, Next>],
+    #[reify_copy] pub(crate) target: &'vir str, // TODO: identifiers
+    pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
 }
 
 #[derive(Reify)]

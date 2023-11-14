@@ -387,17 +387,13 @@ impl TaskEncoder for TypeEncoder {
 
         fn mk_snap<'vir, 'tcx>(
             vcx: &'vir vir::VirCtxt<'tcx>,
-            predicate_name: &'vir str,
+            predicate: PredicateIdent<'vir, UnaryArity<'vir>>,
             snapshot_fn: FunctionIdent<'vir, UnaryArity<'vir>>,
             field_name: Option<&'vir str>,
             snapshot_ty: vir::Type<'vir>,
         ) -> vir::Function<'vir> {
-            let pred_app = vcx.alloc(vir::PredicateAppData {
-                target: predicate_name,
-                args: vcx.alloc_slice(&[
-                    vcx.mk_local_ex("self"),
-                ]),
-            });
+            let self_ = vcx.mk_local_ex("self");
+            let pred_app = predicate.apply(vcx, [self_]);
             vcx.alloc(vir::FunctionData {
                 name: snapshot_fn.name(),
                 args: vcx.alloc_slice(&[
@@ -408,7 +404,7 @@ impl TaskEncoder for TypeEncoder {
                     vcx.mk_predicate_app_expr(pred_app),
                 ]),
                 posts: &[],
-                expr: field_name.map(|field_name| vcx.mk_unfolding_expr(pred_app, vcx.mk_field_expr(vcx.mk_local_ex("self"), field_name))),
+                expr: field_name.map(|field_name| vcx.mk_unfolding_expr(pred_app, vcx.mk_field_expr(self_, field_name))),
             })
         }
         fn mk_structlike<'tcx, 'vir>(
@@ -582,12 +578,8 @@ impl TaskEncoder for TypeEncoder {
                 predicate,
                 unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
                 function_snap: {
-                    let pred_app = vcx.alloc(vir::PredicateAppData {
-                        target: name_p,
-                        args: vcx.alloc_slice(&[
-                            vcx.mk_local_ex("self_p"),
-                        ]),
-                    });
+                    let arg = vcx.mk_local_ex("self_p");
+                    let pred_app = ref_to_pred.apply(vcx, [arg]);
                     vcx.alloc(vir::FunctionData {
                         name: ref_to_snap.name(),
                         args: vcx.alloc_slice(&[
@@ -604,7 +596,7 @@ impl TaskEncoder for TypeEncoder {
                                 .iter()
                                 .enumerate()
                                 .map(|(idx, field_ty_out)| field_ty_out.ref_to_snap.apply(vcx, [
-                                    field_access[idx].projection_p.apply(vcx, [vcx.mk_local_ex("self_p")])
+                                    field_access[idx].projection_p.apply(vcx, [arg])
                                 ]))
                                 .collect::<Vec<_>>()
                         ))),
@@ -650,7 +642,7 @@ impl TaskEncoder for TypeEncoder {
                     } },
                     predicate: mk_simple_predicate(vcx, "p_Bool", "f_Bool"),
                     unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
-                    function_snap: mk_snap(vcx, "p_Bool", ref_to_snap, Some("f_Bool"), ty_s),
+                    function_snap: mk_snap(vcx, ref_to_pred, ref_to_snap, Some("f_Bool"), ty_s),
                     //method_refold: mk_refold(vcx, "p_Bool", ty_s),
                     field_projection_p: &[],
                     method_assign: mk_assign(vcx, "p_Bool", method_assign, ref_to_snap, ty_s),
@@ -701,7 +693,7 @@ impl TaskEncoder for TypeEncoder {
                     } },
                     predicate: mk_simple_predicate(vcx, name_p, name_field),
                     unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
-                    function_snap: mk_snap(vcx, name_p, ref_to_snap, Some(name_field), ty_s),
+                    function_snap: mk_snap(vcx, ref_to_pred, ref_to_snap, Some(name_field), ty_s),
                     //method_refold: mk_refold(vcx, name_p, ty_s),
                     field_projection_p: &[],
                     method_assign: mk_assign(vcx, name_p, method_assign, ref_to_snap, ty_s),
@@ -781,7 +773,7 @@ impl TaskEncoder for TypeEncoder {
                     } },
                     predicate: vir::vir_predicate! { vcx; predicate p_ParamTodo(self_p: Ref) },
                     unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
-                    function_snap: mk_snap(vcx, param_out.predicate_param_name, ref_to_snap, None, ty_s),
+                    function_snap: mk_snap(vcx, ref_to_pred, ref_to_snap, None, ty_s),
                     //method_refold: mk_refold(vcx, param_out.predicate_param_name, ty_s),
                     field_projection_p: &[],
                     method_assign: mk_assign(vcx, param_out.predicate_param_name, method_assign, ref_to_snap, ty_s),
@@ -829,7 +821,7 @@ impl TaskEncoder for TypeEncoder {
                     snapshot: vir::vir_domain! { vcx; domain s_Never {} },
                     predicate: vir::vir_predicate! { vcx; predicate p_Never(self_p: Ref) },
                     unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
-                    function_snap: mk_snap(vcx, "p_Never", ref_to_snap, None, ty_s),
+                    function_snap: mk_snap(vcx, ref_to_pred, ref_to_snap, None, ty_s),
                     //method_refold: mk_refold(vcx, "p_Never", ty_s),
                     field_projection_p: &[],
                     method_assign: mk_assign(vcx, "p_Never", method_assign, ref_to_snap, ty_s),
