@@ -735,11 +735,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 assert_eq!(args.len(), 2);
                 let lhs = self.encode_operand(&curr_ver, &args[0]);
                 let rhs = self.encode_operand(&curr_ver, &args[1]);
-                let eq_expr  = self.vcx.alloc(vir::ExprGenData::BinOp(self.vcx.alloc(vir::BinOpGenData {
-                    kind: vir::BinOpKind::CmpEq,
+                let eq_expr  = self.vcx.mk_bin_op_expr(
+                    vir::BinOpKind::CmpEq,
                     lhs,
                     rhs,
-                })));
+                );
 
                 let bool_cons = self.deps.require_ref::<crate::encoders::TypeEncoder>(
                     self.vcx.tcx.types.bool,
@@ -826,11 +826,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 ).unwrap();
                 let bool = bool.expect_prim();
 
-                bool.prim_to_snap.apply(self.vcx, [self.vcx.alloc(vir::ExprGenData::Forall(self.vcx.alloc(vir::ForallGenData {
+                bool.prim_to_snap.apply(self.vcx, [self.vcx.mk_forall_expr(
                     qvars,
-                    triggers: &[], // TODO
-                    body: bool.snap_to_prim.apply(self.vcx, [body]),
-                })))])
+                    &[], // TODO
+                    bool.snap_to_prim.apply(self.vcx, [body]),
+                )])
             }
         }
     }
