@@ -213,6 +213,200 @@ impl<'tcx> VirCtxt<'tcx> {
         &ExprData::Const(&ConstData::Int(VALUE))
     }
 
+    pub fn mk_domain_axiom<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str,
+        expr: ExprGen<'vir, Curr, Next>
+    ) -> DomainAxiomGen<'vir, Curr, Next> {
+        self.alloc(DomainAxiomGenData {
+            name,
+            expr
+        })
+    }
+
+    pub fn mk_function<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str, // TODO: identifiers
+        args: &'vir [LocalDecl<'vir>],
+        ret: Type<'vir>,
+        pres: &'vir [ExprGen<'vir, Curr, Next>],
+        posts: &'vir [ExprGen<'vir, Curr, Next>],
+        expr: Option<ExprGen<'vir, Curr, Next>>
+    ) -> FunctionGen<'vir, Curr, Next> {
+        // TODO: Typecheck pre and post conditions, expr and return type
+        self.alloc(FunctionGenData {
+            name,
+            args,
+            ret,
+            pres,
+            posts,
+            expr
+        })
+    }
+
+    pub fn mk_predicate<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str,
+        args: &'vir [LocalDecl<'vir>],
+        expr: Option<ExprGen<'vir, Curr, Next>>
+    ) -> PredicateGen<'vir, Curr, Next> {
+        self.alloc(PredicateGenData {
+            name,
+            args,
+            expr
+        })
+    }
+
+    pub fn mk_domain<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str,
+        typarams: &'vir [&'vir str],
+        axioms: &'vir [DomainAxiomGen<'vir, Curr, Next>],
+        functions: &'vir [DomainFunction<'vir>]
+    ) -> DomainGen<'vir, Curr, Next> {
+        self.alloc(DomainGenData {
+            name,
+            typarams,
+            axioms,
+            functions
+        })
+    }
+
+    pub fn mk_exhale_stmt<'vir, Curr, Next>(
+        &'vir self,
+        expr: ExprGen<'vir, Curr, Next>
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(StmtGenData::Exhale(expr))
+    }
+
+    pub fn mk_unfold_stmt<'vir, Curr, Next>(
+        &'vir self,
+        pred_app: PredicateAppGen<'vir, Curr, Next>
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(StmtGenData::Unfold(pred_app))
+    }
+
+    pub fn mk_fold_stmt<'vir, Curr, Next>(
+        &'vir self,
+        pred_app: PredicateAppGen<'vir, Curr, Next>
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(StmtGenData::Fold(pred_app))
+    }
+
+    pub fn mk_pure_assign_stmt<'vir, Curr, Next>(
+        &'vir self,
+        lhs: ExprGen<'vir, Curr, Next>,
+        rhs: ExprGen<'vir, Curr, Next>
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(
+            StmtGenData::PureAssign(
+                self.alloc(PureAssignGenData {
+                    lhs,
+                    rhs
+                })
+            )
+        )
+    }
+
+    pub fn mk_local_decl_stmt<'vir, Curr, Next>(
+        &'vir self,
+        local: LocalDecl<'vir>,
+        expr: Option<ExprGen<'vir, Curr, Next>>
+    ) ->  StmtGen<'vir, Curr, Next> {
+        self.alloc(StmtGenData::LocalDecl(local, expr))
+    }
+
+    pub fn mk_goto_stmt<'vir, Curr, Next>(
+        &'vir self,
+        block: CfgBlockLabel<'vir>
+    ) -> TerminatorStmtGen<'vir, Curr, Next> {
+        self.alloc(
+            TerminatorStmtGenData::Goto(block)
+        )
+    }
+
+    pub fn mk_dummy_stmt<'vir, Curr, Next>(
+        &'vir self,
+        msg: &'vir str
+    ) -> TerminatorStmtGen<'vir, Curr, Next> {
+        self.alloc(
+            TerminatorStmtGenData::Dummy(msg)
+        )
+    }
+
+    pub fn mk_comment_stmt<'vir, Curr, Next>(
+        &'vir self,
+        msg: &'vir str
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(
+            StmtGenData::Comment(msg)
+        )
+    }
+
+    pub fn mk_goto_if_stmt<'vir, Curr, Next>(
+        &'vir self,
+        value: ExprGen<'vir, Curr, Next>,
+        targets: &'vir [(ExprGen<'vir, Curr, Next>, CfgBlockLabel<'vir>)],
+        otherwise: CfgBlockLabel<'vir>,
+    ) -> TerminatorStmtGen<'vir, Curr, Next> {
+        self.alloc(
+            TerminatorStmtGenData::GotoIf(self.alloc(GotoIfGenData {
+                value,
+                targets,
+                otherwise
+            }))
+        )
+    }
+
+    pub fn mk_cfg_block<'vir, Curr, Next>(
+        &'vir self,
+        label: CfgBlockLabel<'vir>,
+        stmts: &'vir [StmtGen<'vir, Curr, Next>],
+        terminator: TerminatorStmtGen<'vir, Curr, Next>,
+    ) -> CfgBlockGen<'vir, Curr, Next> {
+        self.alloc(CfgBlockGenData {
+            label,
+            stmts,
+            terminator
+        })
+    }
+
+    pub fn mk_method<'vir, Curr, Next>(
+        &'vir self,
+        name: &'vir str, // TODO: identifiers
+        args: &'vir [LocalDecl<'vir>],
+        rets: &'vir [LocalDecl<'vir>],
+        pres: &'vir [ExprGen<'vir, Curr, Next>],
+        posts: &'vir [ExprGen<'vir, Curr, Next>],
+        blocks: Option<&'vir [CfgBlockGen<'vir, Curr, Next>]>, // first one is the entrypoint
+    ) -> MethodGen<'vir, Curr, Next> {
+        self.alloc(MethodGenData {
+            name,
+            args,
+            rets,
+            pres,
+            posts,
+            blocks
+        })
+    }
+
+    pub fn mk_program<'vir, Curr, Next>(
+        &'vir self,
+        fields: &'vir [Field<'vir>],
+        domains: &'vir [DomainGen<'vir, Curr, Next>],
+        predicates: &'vir [PredicateGen<'vir, Curr, Next>],
+        functions: &'vir [FunctionGen<'vir, Curr, Next>],
+        methods: &'vir [MethodGen<'vir, Curr, Next>]
+    ) -> ProgramGen<'vir, Curr, Next> {
+        self.alloc(ProgramGenData {
+            fields,
+            domains,
+            predicates,
+            functions,
+            methods
+        })
+    }
+
     const fn get_int_data(ty: Type, rust_ty: &ty::TyKind) -> (u32, bool) {
         assert!(matches!(rust_ty, ty::Int(_) | ty::Uint(_)));
         let TypeData::Int { bit_width, signed } = *ty else {

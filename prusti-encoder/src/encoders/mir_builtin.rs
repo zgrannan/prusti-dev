@@ -143,14 +143,14 @@ impl MirBuiltinEncoder {
             val = vcx.mk_ternary_expr(cond, snap_arg, val)
         }
 
-        vcx.alloc(vir::FunctionData {
+        vcx.mk_function(
             name,
-            args: vcx.alloc_slice(&[vcx.mk_local_decl("arg", e_ty.snapshot)]),
-            ret: e_res_ty.snapshot,
-            pres: &[],
-            posts: &[],
-            expr: Some(val),
-        })
+            vcx.alloc_slice(&[vcx.mk_local_decl("arg", e_ty.snapshot)]),
+            e_res_ty.snapshot,
+            &[],
+            &[],
+            Some(val)
+        )
     }
 
     fn handle_bin_op<'vir, 'tcx>(
@@ -241,17 +241,16 @@ impl MirBuiltinEncoder {
             BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset =>
                 (Vec::new(), val),
         };
-        vcx.alloc(vir::FunctionData {
-            name,
-            args: vcx.alloc_slice(&[
+        vcx.mk_function(name,
+            vcx.alloc_slice(&[
                 vcx.mk_local_decl("arg1", e_l_ty.snapshot),
                 vcx.mk_local_decl("arg2", e_r_ty.snapshot),
             ]),
-            ret: e_res_ty.snapshot,
-            pres: vcx.alloc_slice(&pres),
-            posts: &[],
-            expr: Some(val),
-        })
+            e_res_ty.snapshot,
+            vcx.alloc_slice(&pres),
+            &[],
+            Some(val)
+        )
     }
 
     fn handle_checked_bin_op<'vir, 'tcx>(
@@ -320,17 +319,17 @@ impl MirBuiltinEncoder {
         // `let wrapped_val == (val ..) in $tuple`
         let inner_let = vcx.mk_let_expr(wrapped_val_str, wrapped_val_exp, tuple);
 
-        vcx.alloc(vir::FunctionData {
+        vcx.mk_function(
             name,
-            args: vcx.alloc_slice(&[
+            vcx.alloc_slice(&[
                 vcx.mk_local_decl("arg1", e_l_ty.snapshot),
                 vcx.mk_local_decl("arg2", e_r_ty.snapshot),
             ]),
-            ret: e_res_ty.snapshot,
-            pres: &[],
-            posts: &[],
-            expr: Some(vcx.mk_let_expr(val_str, val_exp, inner_let)),
-        })
+            e_res_ty.snapshot,
+            &[],
+            &[],
+            Some(vcx.mk_let_expr(val_str, val_exp, inner_let))
+        )
     }
 
     /// Wrap the value in the range of the type, e.g. `uN` is wrapped in the
