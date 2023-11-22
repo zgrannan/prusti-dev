@@ -134,7 +134,7 @@ impl TaskEncoder for MirPureEncoder {
                     assert_eq!(lctx.1.len(), body.arg_count);
 
                     use vir::Reify;
-                    expr_inner.0.reify(vcx, lctx)
+                    expr_inner.kind.reify(vcx, lctx)
                 }),
             )
         });
@@ -298,7 +298,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         for local in 1..=self.body.arg_count {
             let local_ex = self.vcx.mk_lazy_expr(
                 vir::vir_format!(self.vcx, "pure in _{local}"),
-                Box::new(move |_vcx, lctx: ExprInput<'vir>| lctx.1[local - 1].0),
+                Box::new(move |_vcx, lctx: ExprInput<'vir>| lctx.1[local - 1].kind),
             );
             init.binds.push(UpdateBind::Local(local.into(), 0, local_ex));
             init.versions.insert(local.into(), 0);
