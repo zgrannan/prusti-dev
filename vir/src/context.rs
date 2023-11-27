@@ -53,6 +53,10 @@ impl<'tcx> VirCtxt<'tcx> {
     pub fn mk_local_decl<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> LocalDecl<'vir> {
         self.alloc(LocalDeclData { name, ty })
     }
+    pub fn mk_local_decl_local<'vir>(&'vir self, local: Local<'vir>) -> LocalDecl<'vir> {
+        self.alloc(LocalDeclData { name: local.name, ty: local.ty })
+    }
+
     pub fn mk_local_ex_local<'vir, Curr, Next>(
         &'vir self,
         local: Local<'vir>,
