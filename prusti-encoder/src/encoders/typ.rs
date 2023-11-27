@@ -1,10 +1,10 @@
 use prusti_rustc_interface::middle::ty;
 use rustc_type_ir::sty::TyKind;
-use task_encoder::{
-    TaskEncoder,
-    TaskEncoderDependencies,
+use task_encoder::{TaskEncoder, TaskEncoderDependencies};
+use vir::{
+    BinaryArity, CallableIdent, FunctionIdent, MethodIdent, NullaryArity, PredicateIdent,
+    UnaryArity, UnknownArity,
 };
-use vir::{BinaryArity, UnaryArity, NullaryArity, UnknownArity, FunctionIdent, MethodIdent, PredicateIdent, CallableIdent};
 
 pub struct TypeEncoder;
 
@@ -82,6 +82,14 @@ impl<'vir> TypeEncoderOutputRef<'vir> {
             _ => panic!("expected structlike type"),
         }
     }
+
+    pub fn prim_type(&self) -> Option<vir::Type<'vir>> {
+        match &self.specifics {
+            TypeEncoderOutputRefSub::Primitive(prim) => Some(prim.prim_type),
+            _ => None,
+        }
+    }
+
     pub fn expect_prim(&self) -> &TypeEncoderOutputRefSubPrim<'vir> {
         match &self.specifics {
             TypeEncoderOutputRefSub::Primitive(prim) => prim,
@@ -205,7 +213,8 @@ impl TaskEncoder for TypeEncoder {
             predicate_name: &'vir str,
             field_name: &'vir str,
         ) -> vir::Predicate<'vir> {
-            let predicate_body = vcx.mk_acc_field_expr(vcx.mk_local_ex("self_p"), field_name);
+            let predicate_body =
+                vcx.mk_acc_field_expr(vcx.mk_local_ex("self_p", &vir::TypeData::Ref), field_name);
             vir::vir_predicate! { vcx; predicate [predicate_name](self_p: Ref) { [predicate_body] } }
         }
         /*
@@ -279,24 +288,19 @@ impl TaskEncoder for TypeEncoder {
                 &[],
                 &[],
                 vcx.alloc_slice(&[
-                    vcx.mk_pred_app(predicate_name, &[vcx.mk_local_ex("_p")]),
+                    vcx.mk_pred_app(predicate_name, &[vcx.mk_local_ex("_p", &vir::TypeData::Ref)]),
                     vcx.mk_bin_op_expr(
                         vir::BinOpKind::CmpEq,
-                        snapshot_fn.apply(vcx, [vcx.mk_local_ex("_p")]),
-                        vcx.mk_local_ex("_s_new")
+                        snapshot_fn.apply(vcx, [vcx.mk_local_ex("_p", &vir::TypeData::Ref)]),
+                        vcx.mk_local_ex("_s_new", snapshot_ty),
                     ),
                 ]),
-                None
+                None,
             )
         }
 
-        fn mk_predicate_ident<'vir>(
-            name_p: &'vir str,
-        ) -> PredicateIdent<'vir, UnaryArity<'vir>> {
-            PredicateIdent::new(
-                name_p,
-                UnaryArity::new([&vir::TypeData::Ref]),
-            )
+        fn mk_predicate_ident<'vir>(name_p: &'vir str) -> PredicateIdent<'vir, UnaryArity<'vir>> {
+            PredicateIdent::new(name_p, UnaryArity::new([&vir::TypeData::Ref]))
         }
 
         fn mk_from_fields<'tcx, 'vir>(
@@ -396,7 +400,7 @@ impl TaskEncoder for TypeEncoder {
             field_name: Option<&'vir str>,
             snapshot_ty: vir::Type<'vir>,
         ) -> vir::Function<'vir> {
-            let self_ = vcx.mk_local_ex("self");
+            let self_ = vcx.mk_local_ex("self", &vir::TypeData::Ref);
             let pred_app = predicate.apply(vcx, [self_]);
             vcx.mk_function(
                 snapshot_fn.name(),
@@ -491,11 +495,11 @@ impl TaskEncoder for TypeEncoder {
 
             for (write_idx, write_ty_out) in field_ty_out.iter().enumerate() {
                 for (read_idx, _read_ty_out) in field_ty_out.iter().enumerate() {
-                    let slf = vcx.mk_local_ex("self");
-                    let val = vcx.mk_local_ex("val");
-                    let write_read = field_access[read_idx].read.apply(vcx, [
-                        field_access[write_idx].write.apply(vcx, [slf, val]),
-                    ]);
+                    let slf = vcx.mk_local_ex("self", ty_s);
+                    let val = vcx.mk_local_ex("val", write_ty_out.snapshot);
+                    let write_read = field_access[read_idx]
+                        .read
+                        .apply(vcx, [field_access[write_idx].write.apply(vcx, [slf, val])]);
                     let rhs = if read_idx == write_idx {
                         val
                     } else {
@@ -522,16 +526,18 @@ impl TaskEncoder for TypeEncoder {
                 let cons_qvars = vcx.alloc_slice(
                      &field_ty_out.iter()
                         .enumerate()
-                        .map(|(idx, field_ty_out)| vcx.mk_local_decl(
-                            vir::vir_format!(vcx, "f{idx}"),
-                            field_ty_out.snapshot,
-                        ))
-                        .collect::<Vec<_>>());
-                let cons_args = field_ty_out.iter()
+                        .map(|(idx, field_ty_out)| {
+                            vcx.mk_local_decl(
+                                vir::vir_format!(vcx, "f{idx}"),
+                                field_ty_out.snapshot,
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                let cons_args = field_ty_out
+                    .iter()
                     .enumerate()
-                    .map(|(idx, _field_ty_out)| vcx.mk_local_ex(
-                        vir::vir_format!(vcx, "f{idx}"),
-                    ))
+                    .map(|(idx, field_ty_out)| vcx.mk_local_ex(vir::vir_format!(vcx, "f{idx}"), field_ty_out.snapshot))
                     .collect::<Vec<_>>();
                 let cons_call = field_snaps_to_snap.apply(vcx, &cons_args);
 
@@ -554,33 +560,42 @@ impl TaskEncoder for TypeEncoder {
                         &field_ty_out
                             .iter()
                             .enumerate()
-                            .map(|(idx, _field_ty_out)|
-                                field_access[idx].read.apply(vcx, [vcx.mk_local_ex("self")])
-                            )
+                            .map(|(idx, _field_ty_out)| {
+                                field_access[idx].read.apply(vcx, [vcx.mk_local_ex("self", ty_s)])
+                            })
                             .collect::<Vec<_>>(),
                     );
-                    axioms.push(
-                        vcx.mk_domain_axiom(
-                            vir::vir_format!(vcx, "ax_{name_s}_cons"),
-                            vcx.mk_forall_expr(
-                                vcx.alloc_slice(&[vcx.mk_local_decl("self", ty_s)]),
-                                vcx.alloc_slice(&[vcx.alloc_slice(&[cons_call_with_reads])]),
-                                vcx.mk_bin_op_expr(
-                                    vir::BinOpKind::CmpEq,
-                                    cons_call_with_reads,
-                                    vcx.mk_local_ex("self")
-                                )
-                            )
-                        )
-                    );
+                    axioms.push(vcx.mk_domain_axiom(
+                        vir::vir_format!(vcx, "ax_{name_s}_cons"),
+                        vcx.mk_forall_expr(
+                            vcx.alloc_slice(&[vcx.mk_local_decl("self", ty_s)]),
+                            vcx.alloc_slice(&[vcx.alloc_slice(&[cons_call_with_reads])]),
+                            vcx.mk_bin_op_expr(
+                                vir::BinOpKind::CmpEq,
+                                cons_call_with_reads,
+                                vcx.mk_local_ex("self", ty_s),
+                            ),
+                        ),
+                    ));
                 }
             }
 
             // predicate
             let predicate = {
                 let expr = (0..field_ty_out.len())
-                    .map(|idx| vcx.mk_predicate_app_expr(field_ty_out[idx].ref_to_pred.apply(vcx, [field_access[idx].projection_p.apply(vcx, [vcx.mk_local_ex("self_p")])])))
-                    .reduce(|base, field_expr| vcx.mk_bin_op_expr(vir::BinOpKind::And, base, field_expr))
+                    .map(|idx| {
+                        vcx.mk_predicate_app_expr(
+                            field_ty_out[idx].ref_to_pred.apply(
+                                vcx,
+                                [field_access[idx]
+                                    .projection_p
+                                    .apply(vcx, [vcx.mk_local_ex("self_p", &vir::TypeData::Ref)])],
+                            ),
+                        )
+                    })
+                    .reduce(|base, field_expr| {
+                        vcx.mk_bin_op_expr(vir::BinOpKind::And, base, field_expr)
+                    })
                     .unwrap_or_else(|| vcx.mk_bool::<true>());
                 vcx.mk_predicate(
                     name_p,
@@ -600,13 +615,13 @@ impl TaskEncoder for TypeEncoder {
                 predicate,
                 unreachable_to_snap: mk_unreachable(vcx, unreachable_to_snap, ty_s),
                 function_snap: {
-                    let arg = vcx.mk_local_ex("self_p");
+                    let arg = vcx.mk_local_ex("self_p", &vir::TypeData::Ref);
                     let pred_app = ref_to_pred.apply(vcx, [arg]);
                     vcx.mk_function(
                         ref_to_snap.name(),
                         vcx.alloc_slice(&[vcx.mk_local_decl("self_p", &vir::TypeData::Ref)]),
                         ty_s,
-                        vcx.alloc_slice(&[ vcx.mk_predicate_app_expr(pred_app)]),
+                        vcx.alloc_slice(&[vcx.mk_predicate_app_expr(pred_app)]),
                         &[],
                         Some(
                             vcx.mk_unfolding_expr(

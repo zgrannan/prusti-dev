@@ -5,6 +5,7 @@ use crate::refs::*;
 
 pub struct LocalData<'vir> {
     pub name: &'vir str, // TODO: identifiers
+    pub ty: Type<'vir>,
 }
 
 pub struct LocalDeclData<'vir> {

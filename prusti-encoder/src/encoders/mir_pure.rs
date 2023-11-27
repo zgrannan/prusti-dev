@@ -218,12 +218,23 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         vir::vir_format!(self.vcx, "_{}_{}s_{}", self.encoding_depth, local.as_usize(), version)
     }
 
+    fn get_ty_for_local(
+        &mut self,
+        local: mir::Local
+    ) -> vir::Type<'tcx> {
+        let output = self.deps.require_ref::<crate::encoders::TypeEncoder>(
+            self.body.local_decls[local].ty,
+        ).unwrap();
+        output.prim_type().unwrap_or(&vir::TypeData::Ref)
+    }
+
     fn mk_local_ex(
-        &self,
+        &mut self,
         local: mir::Local,
         version: usize,
     ) -> ExprRet<'vir> {
-        self.vcx.mk_local_ex(self.mk_local(local, version))
+        let ty = self.get_ty_for_local(local);
+        self.vcx.mk_local_ex(self.mk_local(local, version), ty)
     }
 
     fn mk_phi(
@@ -238,8 +249,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         tuple_ref: crate::encoders::ViperTupleEncoderOutputRef<'vir>,
         idx: usize,
         elem_idx: usize,
+        ty: vir::Type<'vir>,
     ) -> ExprRet<'vir> {
-        tuple_ref.mk_elem(self.vcx, self.vcx.mk_local_ex(self.mk_phi(idx)), elem_idx)
+        tuple_ref.mk_elem(self.vcx, self.vcx.mk_local_ex(self.mk_phi(idx), ty), elem_idx)
     }
 
     fn bump_version(
@@ -269,7 +281,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
     }
 
     fn reify_branch(
-        &self,
+        &mut self,
         tuple_ref: &crate::encoders::ViperTupleEncoderOutputRef<'vir>,
         mod_locals: &Vec<mir::Local>,
         curr_ver: &HashMap<mir::Local, usize>,
@@ -313,7 +325,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         let res = init.merge(update);
         let ret_version = res.versions.get(&mir::RETURN_PLACE).copied().unwrap_or(0);
 
-        self.reify_binds(res, self.mk_local_ex(mir::RETURN_PLACE, ret_version))
+        let ex = self.mk_local_ex(mir::RETURN_PLACE, ret_version);
+        self.reify_binds(res, ex)
     }
 
     fn encode_cfg(
@@ -423,7 +436,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 // TODO: maybe this is unnecessary, we could instead use tuple
                 //   access directly instead of the locals going forward?
                 for (elem_idx, local) in mod_locals.iter().enumerate() {
-                    let expr = self.mk_phi_acc(tuple_ref.clone(), phi_idx, elem_idx);
+                    let ty = self.get_ty_for_local(*local);
+                    let expr = self.mk_phi_acc(tuple_ref.clone(), phi_idx, elem_idx, ty);
                     self.bump_version(&mut phi_update, *local, expr);
                     new_curr_ver.insert(*local, phi_update.versions[local]);
                 }
@@ -791,10 +805,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
                 reify_args.push(unsafe {
                     std::mem::transmute(self.encode_operand(&curr_ver, &args[1]))
                 });
-                reify_args.extend((0..qvars.len())
-                    .map(|idx| self.vcx.mk_local_ex(
-                        vir::vir_format!(self.vcx, "qvar_{}_{idx}", self.encoding_depth),
-                    )));
+                reify_args.extend(qvars.iter().map(|qvar| {
+                    self.vcx.mk_local_ex(qvar.name, qvar.ty)
+                }));
 
                 // TODO: recursively invoke MirPure encoder to encode
                 // the body of the closure; pass the closure as the

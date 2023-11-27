@@ -114,27 +114,41 @@ impl TaskEncoder for ViperTupleEncoder {
                 .collect::<Vec<_>>();
             let mut axioms = Vec::new();
             if !is_unit_tuple {
-                let qvars_decl = vcx.alloc_slice(&(0..*task_key)
-                    .map(|idx| vcx.mk_local_decl(qvars_names[idx], typaram_tys[idx]))
-                    .collect::<Vec<_>>());
-                let qvars_ex = (0..*task_key)
-                    .map(|idx| vcx.mk_local_ex(qvars_names[idx]))
-                    .collect::<Vec<_>>();
-                let cons_call = constructor.apply(vcx,
-                    &qvars_names.iter()
-                        .map(|qvar| vcx.mk_local_ex(qvar))
+                let qvars_decl = vcx.alloc_slice(
+                    &qvars_names
+                        .iter()
+                        .zip(typaram_tys.iter())
+                        .map(|(name, ty)| vcx.mk_local_decl(*name, *ty))
                         .collect::<Vec<_>>(),
                 );
+
+                let qvars_ex = qvars_names
+                    .iter()
+                    .zip(typaram_tys.iter())
+                    .map(|(name, ty)| vcx.mk_local_ex(*name, *ty))
+                    .collect::<Vec<_>>();
+
+                let cons_call = constructor.apply(vcx, &qvars_ex);
+
                 let axiom = vcx.mk_domain_axiom(
                     vir::vir_format!(vcx, "ax_Tuple_{task_key}_elem"),
                     vcx.mk_forall_expr(
                         qvars_decl,
                         vcx.alloc_slice(&[vcx.alloc_slice(&[cons_call])]),
-                        vcx.mk_conj(&(0..*task_key)
-                            .map(|idx| vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, elem_getters[idx].apply(vcx, [cons_call]), qvars_ex[idx]))
-                            .collect::<Vec<_>>()
-                        )
-                    )
+                        vcx.mk_conj(
+                            &qvars_ex
+                                .iter()
+                                .zip(elem_getters.iter())
+                                .map(|(ex, getter)| {
+                                    vcx.mk_bin_op_expr(
+                                        vir::BinOpKind::CmpEq,
+                                        getter.apply(vcx, [cons_call]),
+                                        *ex,
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                    ),
                 );
                 axioms.push(axiom);
             }

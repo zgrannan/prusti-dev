@@ -502,7 +502,7 @@ impl<'tcx, 'vir, 'enc> EncoderVisitor<'tcx, 'vir, 'enc> {
             vir::vir_local_decl! { self.vcx; [name] : [ty] },
             None,
         ));
-        let tmp = self.vcx.mk_local(name);
+        let tmp = self.vcx.mk_local(name, ty);
         (tmp, self.vcx.mk_local_ex_local(tmp))
     }
 }
@@ -525,7 +525,8 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncoderVisitor<'tcx, 'vir, 
             self.stmt(
                 self.vcx.mk_pure_assign_stmt(
                     self.vcx.mk_local_ex(
-                        vir::vir_format!(self.vcx, "_reach_bb{}", block.as_usize())
+                        vir::vir_format!(self.vcx, "_reach_bb{}", block.as_usize()),
+                        &vir::TypeData::Bool,
                     ),
                     self.vcx.mk_bool::<true>()
                 )

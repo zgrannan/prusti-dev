@@ -124,7 +124,7 @@ impl MirBuiltinEncoder {
 
         let e_res_ty = &e_ty;
         let prim_res_ty = e_res_ty.expect_prim();
-        let snap_arg = vcx.mk_local_ex("arg");
+        let snap_arg = vcx.mk_local_ex("arg", e_ty.snapshot);
         let prim_arg = e_ty.expect_prim().snap_to_prim.apply(vcx, [snap_arg]);
         // `prim_to_snap(-snap_to_prim(arg))`
         let mut val = prim_res_ty.prim_to_snap.apply(vcx,
@@ -181,10 +181,10 @@ impl MirBuiltinEncoder {
             function,
         });
         let lhs = e_l_ty.expect_prim().snap_to_prim.apply(vcx,
-            [vcx.mk_local_ex("arg1")],
+            [vcx.mk_local_ex("arg1", e_l_ty.snapshot)],
         );
         let mut rhs = e_r_ty.expect_prim().snap_to_prim.apply(vcx,
-            [vcx.mk_local_ex("arg2")],
+            [vcx.mk_local_ex("arg2", e_r_ty.snapshot)],
         );
         if matches!(op, Shl | Shr) {
             // RHS must be smaller than the bit width of the LHS, this is
@@ -296,16 +296,16 @@ impl MirBuiltinEncoder {
 
         // Unbounded value
         let val_exp = vcx.mk_bin_op_expr(vir::BinOpKind::from(op), e_l_ty.expect_prim().snap_to_prim.apply(vcx,
-            [vcx.mk_local_ex("arg1")],
+            [vcx.mk_local_ex("arg1", e_l_ty.snapshot)],
         ), e_r_ty.expect_prim().snap_to_prim.apply(vcx,
-            [vcx.mk_local_ex("arg2")],
+            [vcx.mk_local_ex("arg2", e_r_ty.snapshot)],
         ));
         let val_str = vir::vir_format!(vcx, "val");
-        let val = vcx.mk_local_ex(val_str);
+        let val = vcx.mk_local_ex(val_str, e_rvalue_pure_ty.expect_prim().prim_type);
         // Wrapped value
         let wrapped_val_exp = Self::get_wrapped_val(vcx, val, e_rvalue_pure_ty.expect_prim().prim_type, rvalue_pure_ty);
         let wrapped_val_str = vir::vir_format!(vcx, "wrapped_val");
-        let wrapped_val = vcx.mk_local_ex(wrapped_val_str);
+        let wrapped_val = vcx.mk_local_ex(wrapped_val_str, e_rvalue_pure_ty.expect_prim().prim_type);
         let wrapped_val_snap = e_rvalue_pure_ty.expect_prim().prim_to_snap.apply(vcx,
             [wrapped_val],
         );

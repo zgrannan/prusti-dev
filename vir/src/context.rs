@@ -47,8 +47,8 @@ impl<'tcx> VirCtxt<'tcx> {
         &*self.arena.alloc_slice_copy(val)
     }
 
-    pub fn mk_local<'vir>(&'vir self, name: &'vir str) -> Local<'vir> {
-        self.alloc(LocalData { name })
+    pub fn mk_local<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> Local<'vir> {
+        self.alloc(LocalData { name, ty })
     }
     pub fn mk_local_decl<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> LocalDecl<'vir> {
         self.alloc(LocalDeclData { name, ty })
@@ -61,8 +61,8 @@ impl<'tcx> VirCtxt<'tcx> {
             kind: self.alloc(ExprKindGenData::Local(local)),
         })
     }
-    pub fn mk_local_ex<'vir, Curr, Next>(&'vir self, name: &'vir str) -> ExprGen<'vir, Curr, Next> {
-        self.mk_local_ex_local(self.mk_local(name))
+    pub fn mk_local_ex<'vir, Curr, Next>(&'vir self, name: &'vir str, ty: Type<'vir>) -> ExprGen<'vir, Curr, Next> {
+        self.mk_local_ex_local(self.mk_local(name, ty))
     }
     pub(crate) fn mk_func_app<'vir, Curr, Next>(
         &'vir self,
