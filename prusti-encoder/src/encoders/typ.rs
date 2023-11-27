@@ -83,13 +83,6 @@ impl<'vir> TypeEncoderOutputRef<'vir> {
         }
     }
 
-    pub fn prim_type(&self) -> Option<vir::Type<'vir>> {
-        match &self.specifics {
-            TypeEncoderOutputRefSub::Primitive(prim) => Some(prim.prim_type),
-            _ => None,
-        }
-    }
-
     pub fn expect_prim(&self) -> &TypeEncoderOutputRefSubPrim<'vir> {
         match &self.specifics {
             TypeEncoderOutputRefSub::Primitive(prim) => prim,

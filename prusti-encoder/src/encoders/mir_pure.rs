@@ -225,7 +225,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Encoder<'tcx, 'vir, 'enc>
         let output = self.deps.require_ref::<crate::encoders::TypeEncoder>(
             self.body.local_decls[local].ty,
         ).unwrap();
-        output.prim_type().unwrap_or(&vir::TypeData::Ref)
+        output.snapshot
     }
 
     fn mk_local_ex(
