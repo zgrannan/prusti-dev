@@ -2,61 +2,45 @@ use prusti_rustc_interface::{middle::{mir, ty}, span::def_id::DefId};
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
-use std::cell::RefCell;
 
 use crate::encoders::{
-    MirPureEncoder, MirPureEncoderTask, SpecEncoder, SpecEncoderTask, TypeEncoder, mir_pure::PureKind,
+    MirPureEnc, MirPureEncTask, mir_pure::PureKind, MirSpecEnc, MirLocalDefEnc,
 };
 
-use super::TypeEncoderOutputRef;
-pub struct MirFunctionEncoder;
+use super::PredicateEncOutputRef;
+pub struct MirFunctionEnc;
 
 #[derive(Clone, Debug)]
-pub enum MirFunctionEncoderError {
+pub enum MirFunctionEncError {
     Unsupported,
 }
 
 #[derive(Clone, Debug)]
-pub struct MirFunctionEncoderOutputRef<'vir> {
+pub struct MirFunctionEncOutputRef<'vir> {
     pub function_ref: FunctionIdent<'vir, UnknownArity<'vir>>,
     /// Always `TypeData::Domain`.
-    pub return_type: &'vir TypeEncoderOutputRef<'vir>,
+    pub return_type: &'vir PredicateEncOutputRef<'vir>,
 }
-impl<'vir> task_encoder::OutputRefAny for MirFunctionEncoderOutputRef<'vir> {}
+impl<'vir> task_encoder::OutputRefAny for MirFunctionEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
-pub struct MirFunctionEncoderOutput<'vir> {
+pub struct MirFunctionEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
-thread_local! {
-    static CACHE: task_encoder::CacheStaticRef<MirFunctionEncoder> = RefCell::new(Default::default());
-}
+impl TaskEncoder for MirFunctionEnc {
+    task_encoder::encoder_cache!(MirFunctionEnc);
 
-impl TaskEncoder for MirFunctionEncoder {
     type TaskDescription<'vir> = (
         DefId, // ID of the function
         ty::GenericArgsRef<'vir>, // ? this should be the "signature", after applying the env/substs
         DefId, // Caller DefID
     );
 
-    type OutputRef<'vir> = MirFunctionEncoderOutputRef<'vir>;
-    type OutputFullLocal<'vir> = MirFunctionEncoderOutput<'vir>;
+    type OutputRef<'vir> = MirFunctionEncOutputRef<'vir>;
+    type OutputFullLocal<'vir> = MirFunctionEncOutput<'vir>;
 
-    type EncodingError = MirFunctionEncoderError;
-
-    fn with_cache<'tcx: 'vir, 'vir, F, R>(f: F) -> R
-    where
-        F: FnOnce(&'vir task_encoder::CacheRef<'tcx, 'vir, MirFunctionEncoder>) -> R,
-    {
-        CACHE.with(|cache| {
-            // SAFETY: the 'vir and 'tcx given to this function will always be
-            //   the same (or shorter) than the lifetimes of the VIR arena and
-            //   the rustc type context, respectively
-            let cache = unsafe { std::mem::transmute(cache) };
-            f(cache)
-        })
-    }
+    type EncodingError = MirFunctionEncError;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
         *task
@@ -81,7 +65,7 @@ impl TaskEncoder for MirFunctionEncoder {
         ).unwrap_or_default();
 
         vir::with_vcx(|vcx| {
-            let local_defs = deps.require_local::<crate::encoders::local_def::MirLocalDefEncoder>(
+            let local_defs = deps.require_local::<MirLocalDefEnc>(
                 (def_id, substs, Some(caller_def_id)),
             ).unwrap();
 
@@ -96,9 +80,9 @@ impl TaskEncoder for MirFunctionEncoder {
                 .collect();
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let function_ref = FunctionIdent::new(function_name, args);
-            deps.emit_output_ref::<Self>(*task_key, MirFunctionEncoderOutputRef { function_ref, return_type: local_defs.locals[mir::RETURN_PLACE].ty });
+            deps.emit_output_ref::<Self>(*task_key, MirFunctionEncOutputRef { function_ref, return_type: local_defs.locals[mir::RETURN_PLACE].ty });
 
-            let spec = deps.require_local::<crate::encoders::pure::spec::MirSpecEncoder>(
+            let spec = deps.require_local::<MirSpecEnc>(
                 (def_id, substs, Some(caller_def_id), true)
             ).unwrap();
 
@@ -112,11 +96,10 @@ impl TaskEncoder for MirFunctionEncoder {
             } else {
                 // Encode the body of the function
                 let expr = deps
-                    .require_local::<MirPureEncoder>(MirPureEncoderTask {
+                    .require_local::<MirPureEnc>(MirPureEncTask {
                         encoding_depth: 0,
                         kind: PureKind::Pure,
                         parent_def_id: def_id,
-                        promoted: None,
                         param_env: vcx.tcx.param_env(def_id),
                         substs,
                         caller_def_id,
@@ -130,7 +113,7 @@ impl TaskEncoder for MirFunctionEncoder {
             tracing::debug!("finished {def_id:?}");
 
             Ok((
-                MirFunctionEncoderOutput {
+                MirFunctionEncOutput {
                     function: vcx.mk_function(
                         function_name,
                         vcx.alloc_slice(&func_args),

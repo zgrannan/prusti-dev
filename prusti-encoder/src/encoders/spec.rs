@@ -8,12 +8,12 @@ use task_encoder::{
     TaskEncoderDependencies,
 };
 
-pub struct SpecEncoder;
+pub struct SpecEnc;
 
-pub type SpecEncoderError = ();
+pub type SpecEncError = ();
 
 #[derive(Clone, Debug)]
-pub struct SpecEncoderOutput<'vir> {
+pub struct SpecEncOutput<'vir> {
     //pub expr: vir::Expr<'vir>,
     pub pres: &'vir [DefId],
     pub posts: &'vir [DefId],
@@ -22,7 +22,6 @@ pub struct SpecEncoderOutput<'vir> {
 use std::cell::RefCell;
 thread_local! {
     static DEF_SPEC_MAP: RefCell<Option<DefSpecificationMap>> = RefCell::new(Default::default());
-    static CACHE: task_encoder::CacheStaticRef<SpecEncoder> = RefCell::new(Default::default());
 }
 
 pub fn with_def_spec<F, R>(f: F) -> R
@@ -51,33 +50,23 @@ pub fn init_def_spec(def_spec: DefSpecificationMap) {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SpecEncoderTask {
+pub struct SpecEncTask {
     pub def_id: DefId, // ID of the function
     // TODO: substs here?
 }
 
-impl TaskEncoder for SpecEncoder {
-    type TaskDescription<'vir> = SpecEncoderTask;
+impl TaskEncoder for SpecEnc {
+    task_encoder::encoder_cache!(SpecEnc);
+
+    type TaskDescription<'vir> = SpecEncTask;
 
     type TaskKey<'vir> = (
         DefId, // ID of the function
     );
 
-    type OutputFullLocal<'vir> = SpecEncoderOutput<'vir>;
+    type OutputFullLocal<'vir> = SpecEncOutput<'vir>;
 
-    type EncodingError = SpecEncoderError;
-
-    fn with_cache<'tcx, 'vir, F, R>(f: F) -> R
-       where F: FnOnce(&'vir task_encoder::CacheRef<'tcx, 'vir, SpecEncoder>) -> R,
-    {
-        CACHE.with(|cache| {
-            // SAFETY: the 'vir and 'tcx given to this function will always be
-            //   the same (or shorter) than the lifetimes of the VIR arena and
-            //   the rustc type context, respectively
-            let cache = unsafe { std::mem::transmute(cache) };
-            f(cache)
-        })
-    }
+    type EncodingError = SpecEncError;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
         (
@@ -109,7 +98,7 @@ impl TaskEncoder for SpecEncoder {
                     .and_then(|specs| specs.base_spec.posts.expect_empty_or_inherent())
                     .map(|specs| vcx.alloc_slice(specs))
                     .unwrap_or_default();
-                Ok((SpecEncoderOutput { pres, posts, }, () ))
+                Ok((SpecEncOutput { pres, posts, }, () ))
             })
         })
     }
