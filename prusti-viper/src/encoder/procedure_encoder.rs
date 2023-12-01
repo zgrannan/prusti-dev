@@ -5513,13 +5513,13 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     None,
                     ty,
                     &param_env,
-                    None,
+                    Some(self.substs),
                     (**argument).clone(),
                 )?;
                 invs_spec.push(inv_func_app);
                 let inv_func_app = self
                     .encoder
-                    .encode_twostate_invariant(None, ty, &param_env, None, (**argument).clone())
+                    .encode_twostate_invariant(None, ty, &param_env, Some(self.substs), (**argument).clone())
                     .unwrap();
                 twostate_invs_spec.push(inv_func_app);
                 Ok::<(), EncodingError>(())
