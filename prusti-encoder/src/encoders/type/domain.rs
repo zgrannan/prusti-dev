@@ -68,6 +68,7 @@ pub enum DomainEncSpecifics<'vir> {
     // structs, tuples
     StructLike(DomainDataStruct<'vir>),
     EnumLike(Option<DomainDataEnum<'vir>>),
+    Closure
 }
 
 #[derive(Clone, Debug)]
@@ -196,6 +197,13 @@ impl TaskEncoder for DomainEnc {
                 let specifics = enc.mk_struct_specifics(ty_params);
                 Ok((enc.finalize(), specifics))
             }
+            &TyKind::Closure(..) => {
+                // TODO: Support closures
+                let name = String::from("Closure");
+                let (mut enc, _) = DomainEncData::new(vcx, &name, [].into_iter());
+                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(name));
+                Ok((enc.finalize(), DomainEncSpecifics::Closure))
+            },
             kind => todo!("{kind:?}"),
         })
     }
@@ -316,7 +324,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 DomainDataVariant { name: *name, vid: *vid, discr: discr_vals[idx], fields }
             }).collect::<Vec<_>>());
             let discr_bounds = self.mk_discr_bounds_axioms(data.discr_prim, snap_to_discr_snap, discr_vals, data.has_explicit);
-            DomainDataEnum { 
+            DomainDataEnum {
                 discr_ty: data.discr_ty,
                 discr_prim: data.discr_prim,
                 discr_bounds,
