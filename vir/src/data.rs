@@ -87,11 +87,19 @@ pub enum ConstData {
     Null,
 }
 
+impl ConstData {
+    fn ty(&self) -> Type<'static> {
+        match self {
+            ConstData::Bool(_) => &TypeData::Bool,
+            ConstData::Int(_) => &TypeData::Int,
+            ConstData::Wildcard => &TypeData::Perm,
+            ConstData::Null => &TypeData::Ref
+        }
+    }
+}
+
 pub enum TypeData<'vir> {
-    Int {
-        bit_width: u8,
-        signed: bool,
-    },
+    Int,
     Bool,
     DomainTypeParam(DomainParamData<'vir>), // TODO: identifiers
     Domain(&'vir str, &'vir [Type<'vir>]), // TODO: identifiers

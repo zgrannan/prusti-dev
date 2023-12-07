@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    middle::ty::{self, TyKind, util::IntTypeExt},
+    middle::ty::{self, TyKind, util::IntTypeExt, IntTy, UintTy},
     abi,
     span::symbol,
 };
@@ -115,11 +115,11 @@ impl TaskEncoder for DomainEnc {
                     TyKind::Bool => (String::from("Bool"), &vir::TypeData::Bool),
                     TyKind::Int(kind) => (
                         format!("Int_{}", kind.name_str()),
-                        vcx.alloc(vir::TypeData::Int { bit_width: Self::get_bit_width(vcx.tcx, *task_key) as u8, signed: task_key.is_signed() }),
+                        &vir::TypeData::Int,
                     ),
                     TyKind::Uint(kind) => (
                         format!("Uint_{}", kind.name_str()),
-                        vcx.alloc(vir::TypeData::Int { bit_width: Self::get_bit_width(vcx.tcx, *task_key) as u8, signed: task_key.is_signed() }),
+                        &vir::TypeData::Int,
                     ),
                     _ => todo!(),
                 };
@@ -307,7 +307,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         data: Option<VariantData<'vir, 'tcx>>,
     ) -> DomainEncSpecifics<'vir> {
         let specifics = data.map(|data| {
-            let discr_vals: Vec<_> = data.variants.iter().map(|(_, _, _, discr)| data.discr_prim.expr_from_bits(discr.val)).collect();
+            let discr_vals: Vec<_> = data.variants.iter().map(|(_, _, _, discr)| data.discr_prim.expr_from_bits(discr.ty, discr.val)).collect();
             let snap_to_discr_snap = self.mk_discr_function(data.discr_ty);
             let variants = self.vcx.alloc_slice(&data.variants.iter().enumerate().map(|(idx, (name, vid, fields, _))| {
                 let discr = (snap_to_discr_snap, data.discr_prim.prim_to_snap.apply(self.vcx, [discr_vals[idx]]), *name);
@@ -561,10 +561,17 @@ impl<'vir> DomainEncSpecifics<'vir> {
     }
 }
 impl<'vir> DomainDataPrim<'vir> {
-    pub fn expr_from_bits(&self, value: u128) -> vir::Expr<'vir> {
+    pub fn expr_from_bits<'tcx>(&self, ty: ty::Ty<'tcx>, value: u128) -> vir::Expr<'vir> {
         match *self.prim_type {
             vir::TypeData::Bool => vir::with_vcx(|vcx| vcx.mk_const_expr(vir::ConstData::Bool(value != 0))),
-            vir::TypeData::Int { signed, bit_width } => {
+            vir::TypeData::Int => {
+                let (bit_width, signed) = match ty.kind() {
+                    TyKind::Int(IntTy::Isize) => ((std::mem::size_of::<isize>() * 8) as u64, true),
+                    TyKind::Int(ty) => (ty.bit_width().unwrap(), true),
+                    TyKind::Uint(UintTy::Usize) => ((std::mem::size_of::<usize>() * 8) as u64, true),
+                    TyKind::Uint(ty) => (ty.bit_width().unwrap(), false),
+                    kind => unreachable!("{kind:?}"),
+                };
                 let size = abi::Size::from_bits(bit_width);
                 let negative_value = if signed {
                     let value = size.sign_extend(value) as i128;
