@@ -99,6 +99,13 @@ pub enum TypeData<'vir> {
     // TODO: separate `TyParam` variant? `Domain` used for now
     Ref, // TODO: typed references ?
     Perm,
+    Unsupported(UnsupportedType<'vir>)
+}
+
+#[derive(Clone)]
+pub struct UnsupportedType<'vir> {
+    pub name: &'vir str,
+    pub fallback: Option<Type<'vir>>
 }
 
 #[derive(Clone, Copy, Debug)]

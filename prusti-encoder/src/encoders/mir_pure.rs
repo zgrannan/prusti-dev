@@ -209,9 +209,16 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         &mut self,
         local: mir::Local
     ) -> vir::Type<'tcx> {
-        self.deps.require_ref::<SnapshotEnc>(
-            self.body.local_decls[local].ty,
-        ).unwrap().snapshot
+        let ty = self.body.local_decls[local].ty;
+        if let ty::TyKind::Closure(..) = ty.kind() {
+            // TODO: Support closure types
+            &vir::TypeData::Unsupported(vir::UnsupportedType {
+                name: "closure",
+                fallback: None,
+            })
+        } else {
+            self.deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot
+        }
     }
 
     fn mk_local_ex(
@@ -320,7 +327,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         curr_ver: &HashMap<mir::Local, usize>,
         curr: mir::BasicBlock,
         join_point: mir::BasicBlock,
-    ) -> Update<'vir> {    
+    ) -> Update<'vir> {
         if curr == join_point {
             // We are done with the current fragment of the CFG, the rest is
             // handled in a parent call.
@@ -339,7 +346,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         // then walk terminator
         let term = self.body[curr].terminator.as_ref().unwrap();
         match &term.kind {
-            &mir::TerminatorKind::Goto { target } 
+            &mir::TerminatorKind::Goto { target }
             | &mir::TerminatorKind::FalseEdge { real_target: target, ..}
             => {
                 let rest_update = self.encode_cfg(&new_curr_ver, target, join_point);
