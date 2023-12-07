@@ -71,7 +71,7 @@ impl<'tcx> VirCtxt<'tcx> {
         &'vir self,
         target: &'vir str,
         src_args: &[ExprGen<'vir, Curr, Next>],
-        result_ty: Option<Type<'vir>>,
+        result_ty: Type<'vir>,
     ) -> ExprGen<'vir, Curr, Next> {
         self.alloc(ExprGenData {
             kind: self.alloc(ExprKindGenData::FuncApp(self.arena.alloc(FuncAppGenData {

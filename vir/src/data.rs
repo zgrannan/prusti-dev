@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 
 use prusti_rustc_interface::middle::mir;
-use crate::{refs::*, UnaryArity};
+use crate::{refs::*, FunctionIdent, UnknownArity, callable_idents::CallableIdent};
+
 
 pub struct LocalData<'vir> {
     pub name: &'vir str, // TODO: identifiers
@@ -115,6 +116,12 @@ pub struct DomainFunctionData<'vir> {
     pub(crate) name: &'vir str, // TODO: identifiers
     pub(crate) args: &'vir [Type<'vir>],
     pub(crate) ret: Type<'vir>,
+}
+
+impl <'vir> DomainFunctionData<'vir> {
+    pub fn ident(&self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
+        FunctionIdent::new(self.name, UnknownArity::new(self.args), self.ret)
+    }
 }
 
 pub enum CfgBlockLabelData {

@@ -178,15 +178,9 @@ impl<'vir, Curr, Next> Debug for ForallGenData<'vir, Curr, Next> {
 
 impl<'vir, Curr, Next> Debug for FuncAppGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        if self.result_ty.is_some() {
-            write!(f, "(")?;
-        }
         write!(f, "{}(", self.target)?;
         fmt_comma_sep(f, &self.args)?;
-        write!(f, ")")?;
-        if let Some(rt) = self.result_ty {
-            write!(f, ": {rt:?})")?;
-        }
+        write!(f, "): {:?}", self.result_ty)?;
         Ok(())
     }
 }

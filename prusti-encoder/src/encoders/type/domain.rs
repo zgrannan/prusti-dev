@@ -7,7 +7,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{BinaryArity, UnaryArity, UnknownArity, FunctionIdent, CallableIdent, Arity, ToKnownArity};
+use vir::{BinaryArity, UnaryArity, UnknownArity, FunctionIdent, CallableIdent, Arity, ToKnownArity, Function};
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
 /// Note: there should never be a dependency on `PredicateEnc` inside this
@@ -315,7 +315,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 DomainDataVariant { name: *name, vid: *vid, discr: discr_vals[idx], fields }
             }).collect::<Vec<_>>());
             let discr_bounds = self.mk_discr_bounds_axioms(data.discr_prim, snap_to_discr_snap, discr_vals, data.has_explicit);
-            DomainDataEnum { 
+            DomainDataEnum {
                 discr_ty: data.discr_ty,
                 discr_prim: data.discr_prim,
                 discr_bounds,
@@ -324,6 +324,12 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             }
         });
         DomainEncSpecifics::EnumLike(specifics)
+    }
+
+    fn push_function(&mut self, func: vir::DomainFunction<'vir>) -> FunctionIdent<'vir, UnknownArity<'vir>> {
+        let ident = func.ident();
+        self.functions.push(func);
+        ident
     }
 
     // Helper functions
@@ -338,8 +344,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         // Constructor
         let field_snaps_to_snap = {
             let name = vir::vir_format!(self.vcx, "{base}_cons");
-            self.functions.push(self.vcx.mk_domain_function(false, name, field_tys, self.self_ty));
-            FunctionIdent::new(name, vir::UnknownArity::new(field_tys))
+            self.push_function(self.vcx.mk_domain_function(false, name, field_tys, self.self_ty))
         };
 
         // Variables and definitions useful for axioms
@@ -348,14 +353,8 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             self.vcx.mk_local_decl(fnames[idx], ty)
         ).collect();
         let cons_qvars = self.vcx.alloc_slice(&cons_qvars);
-        let cons_args: Vec<_> = (0..field_tys.len()).map(|idx| self.vcx.mk_local_ex(fnames[idx])).collect();
-        let cons_call_with_qvars = if field_tys.is_empty() {
-            // TODO: workaround for `https://github.com/viperproject/silver/issues/236`
-            // remove once fixed.
-            field_snaps_to_snap.apply_ty(self.vcx, &cons_args, self.self_ty)
-        } else {
-            field_snaps_to_snap.apply(self.vcx, &cons_args)
-        };
+        let cons_args: Vec<_> = fnames.into_iter().map(|fname| self.vcx.mk_local_ex(fname)).collect();
+        let cons_call_with_qvars = field_snaps_to_snap.apply(self.vcx, &cons_args);
 
         // Discriminant axioms
         if let Some((get_discr, val, _)) = discr {
@@ -383,6 +382,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 let read = FunctionIdent::new(
                     name,
                     UnaryArity::new(args),
+                    field_ty
                 );
                 self.functions.push(self.vcx.mk_domain_function(false, name, args, field_ty));
 
@@ -402,6 +402,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 let write = FunctionIdent::new(
                     name,
                     BinaryArity::new(args),
+                    self.self_ty
                 );
                 self.functions.push(self.vcx.mk_domain_function(false, name, args, self.self_ty));
                 FieldFunctions { read, write }
@@ -466,6 +467,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         let snap_to_discr_snap = FunctionIdent::new(
             name,
             UnaryArity::new(types),
+            discr_ty
         );
         self.functions.push(self.vcx.mk_domain_function(false, name, types, discr_ty));
         snap_to_discr_snap
