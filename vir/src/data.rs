@@ -89,7 +89,7 @@ pub enum ConstData {
 }
 
 impl ConstData {
-    fn ty(&self) -> Type<'static> {
+    pub fn ty(&self) -> Type<'static> {
         match self {
             ConstData::Bool(_) => &TypeData::Bool,
             ConstData::Int(_) => &TypeData::Int,

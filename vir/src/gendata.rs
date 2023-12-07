@@ -117,7 +117,22 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
 
     Todo(&'vir str),
 }
+
+impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
+    pub fn ty(&self) -> Type<'vir> {
+        match self {
+            ExprKindGenData::Local(l) => l.ty,
+            ExprKindGenData::Field(_, f) => f.ty,
+            ExprKindGenData::Old(e) => e.ty(),
+            ExprKindGenData::Const(c) => c.ty(),
+        }
+    }
+}
+
 impl<'vir, Curr, Next> ExprGenData<'vir, Curr, Next> {
+    pub fn ty(&self) -> Type<'vir> {
+        self.kind.ty()
+    }
     pub fn lift<Prev>(&self) -> ExprGen<'vir, Prev, ExprKindGen<'vir, Curr, Next>> {
         match self.kind {
             ExprKindGenData::Lazy(..) => panic!("cannot lift lazy expression"),
