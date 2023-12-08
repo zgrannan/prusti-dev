@@ -52,7 +52,7 @@ pub struct ForallGenData<'vir, Curr, Next> {
 pub struct FuncAppGenData<'vir, Curr, Next> {
     #[reify_copy] pub(crate) target: &'vir str, // TODO: identifiers
     pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
-    #[reify_copy] pub(crate) result_ty: Option<Type<'vir>>,
+    #[reify_copy] pub(crate) result_ty: Type<'vir>,
 }
 
 #[derive(Reify)]

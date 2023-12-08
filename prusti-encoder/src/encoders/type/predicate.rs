@@ -271,11 +271,13 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         );
         let ref_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_snap", ref_to_pred.name()),
-            UnaryArity::new(vcx.alloc_array(&[snap_inst])),
+            UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
+            snap_inst
         );
         let unreachable_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
             NullaryArity::new(vcx.alloc_array(&[])),
+            snap_inst
         );
         let method_assign = MethodIdent::new(
             vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
@@ -305,7 +307,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             let name = vir::vir_format!(self.vcx, "{}_field_{idx}", base_name.unwrap_or(self.ref_to_pred.name()));
             let field = self.vcx.mk_function(name, self.self_decl, &vir::TypeData::Ref, &[], posts, None);
             self.ref_to_field_refs.push(field);
-            FunctionIdent::new(name, UnaryArity::new(&[&vir::TypeData::Ref]))
+            FunctionIdent::new(name, UnaryArity::new(&[&vir::TypeData::Ref]), &vir::TypeData::Ref)
         }).collect();
         PredicateEncDataStruct {
             snap_data,

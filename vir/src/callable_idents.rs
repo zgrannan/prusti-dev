@@ -1,36 +1,44 @@
 use crate::{ExprGen, PredicateAppGen, Type, PredicateAppGenData, StmtGenData, MethodCallGenData, VirCtxt, TypeData, DomainParamData};
 use sealed::sealed;
 
-pub trait CallableIdent<'vir, A: Arity<'vir>> {
-    fn new(name: &'vir str, args: A) -> Self;
+pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
+    fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
     fn name(&self) -> &'vir str;
     fn arity(&self) -> &A;
+    fn result_ty(&self) -> ResultTy;
 }
-pub trait ToKnownArity<'vir, T: 'vir>: CallableIdent<'vir, UnknownArityAny<'vir, T>> + Sized {
-    fn to_known<'tcx, K: CallableIdent<'vir, KnownArityAny<'vir, T, N>>, const N: usize>(self) -> K {
-        K::new(self.name(), KnownArityAny::new(self.arity().args().try_into().unwrap()))
+pub trait ToKnownArity<'vir, T: 'vir, ResultTy>: CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy> + Sized {
+    fn to_known<'tcx, K: CallableIdent<'vir, KnownArityAny<'vir, T, N>, ResultTy>, const N: usize>(self) -> K {
+        K::new(
+            self.name(),
+            KnownArityAny::new(self.arity().args().try_into().unwrap()),
+            self.result_ty(),
+        )
     }
 }
-impl<'vir, T: 'vir, K: CallableIdent<'vir, UnknownArityAny<'vir, T>>> ToKnownArity<'vir, T> for K {}
+impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy>> ToKnownArity<'vir, T, ResultTy> for K {}
 
 #[derive(Debug, Clone, Copy)]
-pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A);
-impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for FunctionIdent<'vir, A> {
-    fn new(name: &'vir str, args: A) -> Self {
-        Self(name, args)
+pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>);
+impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
+    fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
+        Self(name, args, result_ty)
     }
     fn name(&self) -> &'vir str {
         self.0
     }
     fn arity(&self) -> &A {
         &self.1
+    }
+    fn result_ty(&self) -> Type<'vir> {
+        self.2
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A);
-impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for MethodIdent<'vir, A> {
-    fn new(name: &'vir str, args: A) -> Self {
+impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
+    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
         Self(name, args)
     }
     fn name(&self) -> &'vir str {
@@ -38,13 +46,22 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for MethodIdent<'vir, A> {
     }
     fn arity(&self) -> &A {
         &self.1
+    }
+    fn result_ty(&self) -> () {
+       ()
+    }
+}
+
+impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
+    pub fn new(name: &'vir str, args: A) -> Self {
+        Self(name, args)
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A);
-impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for PredicateIdent<'vir, A> {
-    fn new(name: &'vir str, args: A) -> Self {
+impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
+    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
         Self(name, args)
     }
     fn name(&self) -> &'vir str {
@@ -52,13 +69,22 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for PredicateIdent<'vir, A> {
     }
     fn arity(&self) -> &A {
         &self.1
+    }
+    fn result_ty(&self) -> () {
+        ()
+    }
+}
+
+impl <'vir, A: Arity<'vir>> PredicateIdent<'vir, A> {
+    pub fn new(name: &'vir str, args: A) -> Self {
+        Self(name, args)
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct DomainIdent<'vir, A: Arity<'vir>>(&'vir str, A);
-impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for DomainIdent<'vir, A> {
-    fn new(name: &'vir str, args: A) -> Self {
+impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for DomainIdent<'vir, A> {
+    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
         Self(name, args)
     }
     fn name(&self) -> &'vir str {
@@ -67,8 +93,17 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A> for DomainIdent<'vir, A> {
     fn arity(&self) -> &A {
         &self.1
     }
+    fn result_ty(&self) -> () {
+        ()
+    }
 }
 pub type DomainIdentUnknownArity<'vir> = DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
+
+impl <'vir> DomainIdentUnknownArity<'vir> {
+    pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
+        Self(name, args)
+    }
+}
 
 #[sealed]
 pub trait Arity<'vir>: Copy {
@@ -153,7 +188,7 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
         args: [ExprGen<'vir, Curr, Next>; N]
     ) -> ExprGen<'vir, Curr, Next>{
         self.1.check_types(self.name(), &args);
-        vcx.mk_func_app(self.name(), &args, None)
+        vcx.mk_func_app(self.name(), &args, self.result_ty())
     }
 }
 impl<'vir, const N: usize> PredicateIdent<'vir, KnownArity<'vir, N>> {
@@ -205,19 +240,10 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>]
     ) -> ExprGen<'vir, Curr, Next>{
         self.1.check_types(self.name(), args);
-        vcx.mk_func_app(self.name(), args, None)
-    }
-    // TODO: deduplicate
-    pub fn apply_ty<'tcx, Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir VirCtxt<'tcx>,
-        args: &[ExprGen<'vir, Curr, Next>],
-        result_ty: Type<'vir>
-    ) -> ExprGen<'vir, Curr, Next>{
-        self.1.check_types(self.name(), args);
-        vcx.mk_func_app(self.name(), args, Some(result_ty))
+        vcx.mk_func_app(self.name(), args, self.result_ty())
     }
 }
+
 impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
