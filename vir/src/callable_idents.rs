@@ -1,5 +1,6 @@
-use crate::{ExprGen, PredicateAppGen, Type, PredicateAppGenData, StmtGenData, MethodCallGenData, VirCtxt, TypeData, DomainParamData};
+use crate::{ExprGen, PredicateAppGen, Type, PredicateAppGenData, StmtGenData, MethodCallGenData, VirCtxt, TypeData, DomainParamData, TySubsts};
 use sealed::sealed;
+use std::collections::HashMap;
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
@@ -131,17 +132,44 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
 }
 
 trait CheckTypes<'vir> {
-    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]);
+    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]) -> HashMap<&'vir str, Type<'vir>>;
 }
+
+fn unify<'vir>(substs: &mut HashMap<&'vir str, Type<'vir>>, param: &'vir str, ty: Type<'vir>) -> bool {
+    match substs.get(param) {
+        Some(s) => s == &ty,
+        None => substs.insert(param, ty) == None
+    }
+}
+
+fn check<'vir>(substs: &mut TySubsts<'vir>, expected: Type<'vir>, actual: Type<'vir>) -> bool {
+    match (expected, actual) {
+        (e, a) if e == a => true,
+        (TypeData::Domain(n1, a1), TypeData::Domain(n2, a2)) => {
+            n1 == n2 &&
+            a1.len() == a2.len() &&
+            a1.iter().zip(a2.iter()).all(|(e, a)| check(substs, e, a))
+        }
+        (TypeData::DomainTypeParam(p), a) => unify(substs, p.name, a),
+        _ => false,
+    }
+}
+
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
-    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]) {
-        if cfg!(debug_assertions) {
-            self.check_len_matches(name, args.len());
-            for (_arg, _ty) in args.iter().zip(self.args().into_iter()) {
-                // TODO: check that the types match
+    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]) -> TySubsts<'vir> {
+        self.check_len_matches(name, args.len());
+        let mut substs = TySubsts::new();
+        for (arg, expected) in args.iter().zip(self.args().into_iter()) {
+            let actual = arg.ty();
+            if !check(&mut substs, expected, actual) {
+                panic!(
+                    "{name} expected arguments {:?} but got argument types {:?}",
+                    self.args(),
+                    args.iter().map(|a| a.ty()).collect::<Vec<_>>()
+                )
             }
         }
-        // TODO: return result type
+        substs
     }
 }
 
@@ -239,8 +267,9 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>]
     ) -> ExprGen<'vir, Curr, Next>{
-        self.1.check_types(self.name(), args);
-        vcx.mk_func_app(self.name(), args, self.result_ty())
+        let substs = self.1.check_types(self.name(), args);
+        let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
+        vcx.mk_func_app(self.name(), args, result_ty)
     }
 }
 

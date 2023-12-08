@@ -261,6 +261,17 @@ impl<'tcx> VirCtxt<'tcx> {
         &ExprGenData { kind : &ExprKindGenData::Result }
     }
 
+    pub fn apply_ty_substs<'vir>(&'vir self, ty: Type<'vir>, substs: &TySubsts<'vir>) -> Type<'vir> {
+        match ty {
+            TypeData::DomainTypeParam(p) => substs.get(p.name).unwrap_or(&ty),
+            TypeData::Domain(name, args) => {
+                let args = args.iter().map(|t| self.apply_ty_substs(t, substs)).collect::<Vec<_>>();
+                self.alloc(TypeData::Domain(name, &self.alloc(args)))
+            }
+            other => other
+        }
+    }
+
     pub fn mk_field<'vir>(
         &'vir self,
         name: &'vir str,

@@ -141,7 +141,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::Old(e) => e.ty(),
             ExprKindGenData::Const(c) => c.ty(),
             ExprKindGenData::Result => &TypeData::Ref, // For now this always seems to be the case
-            ExprKindGenData::AccField(f) => &TypeData::Bool,
+            ExprKindGenData::AccField(_) => &TypeData::Bool,
             ExprKindGenData::Unfolding(f) => f.expr.ty(),
             ExprKindGenData::UnOp(u) => u.expr.ty(), // For now this always seems to be the case
             ExprKindGenData::BinOp(b) => b.ty(),
@@ -149,7 +149,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::Forall(_) => &TypeData::Bool,
             ExprKindGenData::Let(l) => l.expr.ty(),
             ExprKindGenData::FuncApp(a) => a.result_ty,
-            ExprKindGenData::PredicateApp(a) => &TypeData::Predicate,
+            ExprKindGenData::PredicateApp(_) => &TypeData::Predicate,
             ExprKindGenData::Lazy(_, _) => panic!("cannot get type of lazy expression"),
             ExprKindGenData::Todo(msg) => panic!("{msg}")
         }

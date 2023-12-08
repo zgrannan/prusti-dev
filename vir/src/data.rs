@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use prusti_rustc_interface::middle::mir;
 use crate::{refs::*, FunctionIdent, UnknownArity, callable_idents::CallableIdent};
+use std::collections::HashMap;
 
 
 pub struct LocalData<'vir> {
@@ -100,6 +101,7 @@ impl ConstData {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub enum TypeData<'vir> {
     Int,
     Bool,
@@ -112,13 +114,15 @@ pub enum TypeData<'vir> {
     Unsupported(UnsupportedType<'vir>)
 }
 
-#[derive(Clone)]
+pub type TySubsts<'vir> = HashMap<&'vir str, Type<'vir>>;
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct UnsupportedType<'vir> {
     pub name: &'vir str,
     pub fallback: Option<Type<'vir>>
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DomainParamData<'vir> {
     pub name: &'vir str, // TODO: identifiers
 }
