@@ -4687,7 +4687,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         None,
                         self.locals.get_type(contract.returned_value),
                         &param_env,
-                        None,
+                        Some(substs),
                         encoded_return,
                     )
                     .with_span(postcondition_span)?,
