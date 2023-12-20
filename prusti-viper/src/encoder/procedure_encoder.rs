@@ -250,7 +250,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
 
         let get_spec_expr = |substs| {
             self.encoder
-                .encode_invariant(self.mir, bb, self.proc_def_id, substs)
+                .encode_invariant(self.mir, bb, self.proc_def_id, substs, false)
         };
 
         for stmt in &block.statements {
@@ -300,7 +300,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
 
                     let refute_expr =
                         self.encoder
-                            .encode_invariant(self.mir, bb, self.proc_def_id, cl_substs)?;
+                            .encode_invariant(self.mir, bb, self.proc_def_id, cl_substs, false)?;
 
                     let refute_stmt = vir::Stmt::Refute(vir::Refute {
                         expr: refute_expr,
@@ -5617,6 +5617,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                             bbi,
                             self.proc_def_id,
                             cl_substs,
+                            true,
                         )?);
                         let invariant = match spec {
                             prusti_interface::specs::typed::LoopSpecification::Invariant(inv) => {
