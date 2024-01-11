@@ -58,6 +58,8 @@ impl TaskEncoder for SnapshotEnc {
             //     `Foo<i32, bool>` is normalised to `Foo<T, U>`
             let (ty, args) = match *task_key.kind() {
                 TyKind::Adt(adt, args) => {
+                    // TODO: Also encode nested
+                    // NORMALIZATION HERE
                     let id = ty::List::identity_for_item(vcx.tcx, adt.did()).iter()
                         .map(|id| Self::to_placeholder_arg(vcx.tcx, id));
                     let id = vcx.tcx.mk_args_from_iter(id);
@@ -127,33 +129,33 @@ impl TaskEncoder for SnapshotEnc {
 }
 
 impl SnapshotEnc {
-    pub fn from_viper_param(idx: u32) -> u32 {
-        u32::MAX - idx
-    }
-    fn to_viper_param(idx: u32) -> u32 {
-        // Use a very large index to indicate that this is not a Rust param
-        // which should be encoded as an empty domain, but that this is a Viper
-        // param which should be encoded as a type parameter.
-        u32::MAX - idx
-    }
-    fn is_viper_param(idx: u32) -> bool {
-        idx > u32::MAX / 2
-    }
+    // pub fn from_viper_param(idx: u32) -> u32 {
+    //     u32::MAX - idx
+    // }
+    // fn to_viper_param(idx: u32) -> u32 {
+    //     // Use a very large index to indicate that this is not a Rust param
+    //     // which should be encoded as an empty domain, but that this is a Viper
+    //     // param which should be encoded as a type parameter.
+    //     u32::MAX - idx
+    // }
+    // fn is_viper_param(idx: u32) -> bool {
+    //     idx > u32::MAX / 2
+    // }
 
-    pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
-        let name = idx.map(|idx| format!("T{idx}")).unwrap_or_else(|| String::from("T"));
-        tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
-            index: Self::to_viper_param(idx.unwrap_or_default() as u32),
-            name: symbol::Symbol::intern(&name),
-        }))
-    }
-    fn to_placeholder_arg<'tcx>(tcx: ty::TyCtxt<'tcx>, arg: ty::GenericArg<'tcx>) -> ty::GenericArg<'tcx> {
-        arg.as_type().map(|ty| {
-            let param = DomainEnc::expect_param(ty);
-            tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
-                index: Self::to_viper_param(param.index),
-                name: param.name,
-            })).into()
-        }).unwrap_or(arg)
-    }
+    // pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
+    //     let name = idx.map(|idx| format!("T{idx}")).unwrap_or_else(|| String::from("T"));
+    //     tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
+    //         index: Self::to_viper_param(idx.unwrap_or_default() as u32),
+    //         name: symbol::Symbol::intern(&name),
+    //     }))
+    // }
+    // fn to_placeholder_arg<'tcx>(tcx: ty::TyCtxt<'tcx>, arg: ty::GenericArg<'tcx>) -> ty::GenericArg<'tcx> {
+    //     arg.as_type().map(|ty| {
+    //         let param = DomainEnc::expect_param(ty);
+    //         tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
+    //             index: Self::to_viper_param(param.index),
+    //             name: param.name,
+    //         })).into()
+    //     }).unwrap_or(arg)
+    // }
 }

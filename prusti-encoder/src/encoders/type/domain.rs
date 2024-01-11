@@ -74,10 +74,11 @@ pub enum DomainEncSpecifics<'vir> {
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdentUnknownArity<'vir>,
+    pub type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
-use crate::encoders::SnapshotEnc;
+use crate::encoders::{SnapshotEnc, generic::TYP_DOMAIN, GenericEnc};
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
@@ -96,7 +97,19 @@ impl TaskEncoder for DomainEnc {
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        // Replaces instantiated type params with generic params
+        match task.kind() {
+            TyKind::Adt(def, _) =>
+                vir::with_vcx(|vcx| {
+                    vcx.tcx.mk_ty_from_kind(
+                        TyKind::Adt(
+                            *def,
+                            vcx.tcx.mk_args(&[]) // TODO: Use identity subst
+                        ),
+                    )
+                }),
+            _ => *task
+        }
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(
@@ -236,12 +249,18 @@ struct DomainEncData<'vir, 'tcx> {
     self_ty: vir::Type<'vir>,
     self_ex: vir::Expr<'vir>,
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
+    type_function: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
     axioms: Vec<vir::DomainAxiom<'vir>>,
     functions: Vec<vir::DomainFunction<'vir>>,
 }
 impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
     // Creation
-    pub fn new(vcx: &'vir vir::VirCtxt<'tcx>, base_name: &str, params: impl Iterator<Item = ty::Ty<'tcx>>) -> (Self, Vec<vir::Type<'vir>>) {
+    pub fn new(
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        base_name: &str,
+        params: impl Iterator<Item = ty::Ty<'tcx>>
+    ) -> (Self, Vec<vir::Type<'vir>>) {
+        eprintln!("Base name: {}", base_name);
         let domain_params: Vec<_> = params
             // The `task_to_key` translation should ensure that only `Param`s are allowed here.
             .map(DomainEnc::expect_param)
@@ -252,11 +271,27 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             vir::vir_format!(vcx, "s_{base_name}"),
             vir::UnknownArityAny::new(vcx.alloc_slice(&domain_params))
         );
-        let ty_params: Vec<_> = domain_params.into_iter().map(|t| vcx.alloc(vir::TypeData::DomainTypeParam(t))).collect();
+        let ty_params: Vec<_> = domain_params.iter().map(|t| vcx.alloc(vir::TypeData::DomainTypeParam(*t))).collect();
         let self_ty = domain.apply(vcx, &ty_params);
         let self_ex = vcx.mk_local_ex("self");
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl("self", self_ty)]);
-        (Self { vcx, domain, self_ty, self_ex, self_decl, axioms: Vec::new(), functions: Vec::new() }, ty_params)
+        let type_function = FunctionIdent::new(
+            vir::vir_format!(vcx, "{base_name}_type"),
+            UnknownArity::new(
+                vcx.alloc_slice(
+                    &domain_params.iter().map(|_| &TYP_DOMAIN).collect::<Vec<_>>().as_slice()
+                )
+            ),
+        );
+        (Self {
+            vcx,
+            domain,
+            self_ty,
+            self_ex, self_decl,
+            axioms: Vec::new(),
+            functions: Vec::new(),
+            type_function
+        }, ty_params)
     }
 
     // Intermediate values
@@ -268,7 +303,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         params: ty::GenericArgsRef<'tcx>,
     ) -> Vec<vir::Type<'vir>> {
         variant.fields.iter().map(|f| f.ty(self.vcx.tcx, params)).map(|ty| match *ty.kind() {
-            TyKind::Param(param) => ty_params[SnapshotEnc::from_viper_param(param.index) as usize],
+            TyKind::Param(_) => &TYP_DOMAIN,
             _ => deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot,
         }).collect()
     }
@@ -315,7 +350,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 DomainDataVariant { name: *name, vid: *vid, discr: discr_vals[idx], fields }
             }).collect::<Vec<_>>());
             let discr_bounds = self.mk_discr_bounds_axioms(data.discr_prim, snap_to_discr_snap, discr_vals, data.has_explicit);
-            DomainDataEnum { 
+            DomainDataEnum {
                 discr_ty: data.discr_ty,
                 discr_prim: data.discr_prim,
                 discr_bounds,
@@ -523,6 +558,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         DomainEncOutputRef {
             base_name,
             domain: self.domain,
+            type_function: self.type_function,
         }
     }
     fn finalize(self) -> vir::Domain<'vir> {
