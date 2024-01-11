@@ -315,7 +315,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 DomainDataVariant { name: *name, vid: *vid, discr: discr_vals[idx], fields }
             }).collect::<Vec<_>>());
             let discr_bounds = self.mk_discr_bounds_axioms(data.discr_prim, snap_to_discr_snap, discr_vals, data.has_explicit);
-            DomainDataEnum { 
+            DomainDataEnum {
                 discr_ty: data.discr_ty,
                 discr_prim: data.discr_prim,
                 discr_bounds,
@@ -562,13 +562,14 @@ impl<'vir> DomainEncSpecifics<'vir> {
 }
 impl<'vir> DomainDataPrim<'vir> {
     pub fn expr_from_bits<'tcx>(&self, ty: ty::Ty<'tcx>, value: u128) -> vir::Expr<'vir> {
+        let pointer_size = abi::TargetDataLayout::default().pointer_size.bits() as u64;
         match *self.prim_type {
             vir::TypeData::Bool => vir::with_vcx(|vcx| vcx.mk_const_expr(vir::ConstData::Bool(value != 0))),
             vir::TypeData::Int => {
                 let (bit_width, signed) = match ty.kind() {
-                    TyKind::Int(IntTy::Isize) => ((std::mem::size_of::<isize>() * 8) as u64, true),
+                    TyKind::Int(IntTy::Isize) => (pointer_size, true),
                     TyKind::Int(ty) => (ty.bit_width().unwrap(), true),
-                    TyKind::Uint(UintTy::Usize) => ((std::mem::size_of::<usize>() * 8) as u64, true),
+                    TyKind::Uint(UintTy::Usize) => (pointer_size, false),
                     TyKind::Uint(ty) => (ty.bit_width().unwrap(), false),
                     kind => unreachable!("{kind:?}"),
                 };

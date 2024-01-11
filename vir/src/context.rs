@@ -485,14 +485,20 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     const fn get_int_data(rust_ty: &ty::TyKind) -> (u32, bool) {
+        // TargetDataLayout::default().pointer_size cannot be used here because default() is not const
+        #[cfg(target_pointer_width = "32")]
+        let pointer_size = 32;
+        #[cfg(target_pointer_width = "64")]
+        let pointer_size = 64;
+
         match rust_ty {
-            ty::Int(ty::IntTy::Isize) => ((std::mem::size_of::<isize>() * 8) as u32, true),
+            ty::Int(ty::IntTy::Isize) => (pointer_size, true),
             ty::Int(ty::IntTy::I8) => (8, true),
             ty::Int(ty::IntTy::I16) => (16, true),
             ty::Int(ty::IntTy::I32) => (32, true),
             ty::Int(ty::IntTy::I64) => (64, true),
             ty::Int(ty::IntTy::I128) => (128, true),
-            ty::Uint(ty::UintTy::Usize) => ((std::mem::size_of::<usize>() * 8) as u32, true),
+            ty::Uint(ty::UintTy::Usize) => (pointer_size, true),
             ty::Uint(ty::UintTy::U8) => (8, false),
             ty::Uint(ty::UintTy::U16) => (16, false),
             ty::Uint(ty::UintTy::U32) => (32, false),
@@ -501,6 +507,7 @@ impl<'tcx> VirCtxt<'tcx> {
             _ => unreachable!(),
         }
     }
+
     pub const fn get_min_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
         match Self::get_int_data(rust_ty) {
             (_, false) => self.mk_uint::<0>(),
