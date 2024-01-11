@@ -485,7 +485,7 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     const fn get_int_data(rust_ty: &ty::TyKind) -> (u32, bool) {
-        // TargetDataLayout::default().pointer_size cannot be used here because default() is not const
+        // Use cfg(target_pointer_width) to determine size since this is a const fn
         #[cfg(target_pointer_width = "32")]
         let pointer_size = 32;
         #[cfg(target_pointer_width = "64")]
