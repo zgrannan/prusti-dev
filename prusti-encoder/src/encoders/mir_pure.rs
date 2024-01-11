@@ -214,7 +214,6 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             // TODO: Support closure types
             &vir::TypeData::Unsupported(vir::UnsupportedType {
                 name: "closure",
-                fallback: None,
             })
         } else {
             self.deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot

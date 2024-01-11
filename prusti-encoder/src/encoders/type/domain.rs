@@ -67,7 +67,7 @@ pub enum DomainEncSpecifics<'vir> {
     Primitive(DomainDataPrim<'vir>),
     // structs, tuples
     StructLike(DomainDataStruct<'vir>),
-    EnumLike(Option<DomainDataEnum<'vir>>)
+    EnumLike(Option<DomainDataEnum<'vir>>),
 }
 
 #[derive(Clone, Debug)]

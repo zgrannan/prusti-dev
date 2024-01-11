@@ -60,7 +60,7 @@ impl TaskEncoder for MirSpecEnc {
         vir::with_vcx(|vcx| {
             let local_iter = (1..=local_defs.arg_count).map(mir::Local::from);
             let all_args: Vec<_> = if pure {
-                let result_ty = vcx.alloc(local_defs.locals[mir::RETURN_PLACE].ty);
+                let result_ty = local_defs.locals[mir::RETURN_PLACE].ty;
                 local_iter
                     .map(|local| local_defs.locals[local].local_ex)
                     .chain([vcx.mk_local_ex(vir::vir_format!(vcx, "result"), result_ty.snapshot)])

@@ -105,7 +105,6 @@ pub enum TypeData<'vir> {
 #[derive(Clone)]
 pub struct UnsupportedType<'vir> {
     pub name: &'vir str,
-    pub fallback: Option<Type<'vir>>
 }
 
 #[derive(Clone, Copy, Debug)]
