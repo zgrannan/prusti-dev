@@ -561,7 +561,6 @@ impl<'vir> DomainEncSpecifics<'vir> {
 }
 impl<'vir> DomainDataPrim<'vir> {
     pub fn expr_from_bits<'tcx>(&self, ty: ty::Ty<'tcx>, value: u128) -> vir::Expr<'vir> {
-        let pointer_size = abi::TargetDataLayout::default().pointer_size.bits() as u64;
         match *self.prim_type {
             vir::TypeData::Bool => vir::with_vcx(|vcx| vcx.mk_const_expr(vir::ConstData::Bool(value != 0))),
             vir::TypeData::Int => {
