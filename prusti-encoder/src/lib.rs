@@ -7,6 +7,7 @@ extern crate rustc_serialize;
 extern crate rustc_type_ir;
 
 mod encoders;
+mod util;
 
 use prusti_interface::{environment::EnvBody, specs::typed::SpecificationItem};
 use prusti_rustc_interface::{

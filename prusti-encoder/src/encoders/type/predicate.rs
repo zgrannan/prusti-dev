@@ -563,7 +563,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         let typ = type_constructor.apply(
             self.vcx,
-            upcast_ty_params.iter().map(|p| self.vcx.mk_local_ex(p.name)).collect::<Vec<_>>().as_slice()
+            upcast_ty_params.iter().map(|p| self.vcx.mk_local_ex(p.name, &TYP_DOMAIN)).collect::<Vec<_>>().as_slice()
         );
 
         let method_upcast =

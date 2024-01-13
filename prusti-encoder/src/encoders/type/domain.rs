@@ -78,7 +78,7 @@ pub struct DomainEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
-use crate::encoders::{SnapshotEnc, generic::TYP_DOMAIN, GenericEnc};
+use crate::{encoders::{SnapshotEnc, generic::TYP_DOMAIN, GenericEnc}, util::to_placeholder};
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
@@ -101,13 +101,18 @@ impl TaskEncoder for DomainEnc {
         match task.kind() {
             TyKind::Adt(def, _) =>
                 vir::with_vcx(|vcx| {
-                    vcx.tcx.mk_ty_from_kind(
-                        TyKind::Adt(
-                            *def,
-                            vcx.tcx.mk_args(&[]) // TODO: Use identity subst
-                        ),
-                    )
+                    let id = ty::List::identity_for_item(vcx.tcx, def.did()).iter();
+                    let id = vcx.tcx.mk_args_from_iter(id);
+                    vcx.tcx.mk_ty_from_kind(TyKind::Adt( *def, id))
                 }),
+            TyKind::Tuple(tys) => {
+                vir::with_vcx(|vcx| {
+                    let new_tys = vcx.tcx.mk_type_list_from_iter((0..tys.len()).map(|index|
+                        to_placeholder(vcx.tcx, Some(index))
+                    ));
+                    vcx.tcx.mk_ty_from_kind(TyKind::Tuple(new_tys))
+                })
+            }
             _ => *task
         }
     }

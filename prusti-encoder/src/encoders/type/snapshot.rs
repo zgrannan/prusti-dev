@@ -25,6 +25,8 @@ pub struct SnapshotEncOutput<'vir> {
     pub specifics: DomainEncSpecifics<'vir>,
 }
 
+use crate::util::to_placeholder;
+
 use super::domain::{DomainEnc, DomainEncSpecifics};
 
 impl TaskEncoder for SnapshotEnc {
@@ -59,52 +61,30 @@ impl TaskEncoder for SnapshotEnc {
             let (ty, args) = match *task_key.kind() {
                 TyKind::Adt(adt, args) => {
                     // TODO: Also encode nested
-                    // NORMALIZATION HERE
-                    let id = ty::List::identity_for_item(vcx.tcx, adt.did()).iter()
-                        .map(|id| Self::to_placeholder_arg(vcx.tcx, id));
+                    let id = ty::List::identity_for_item(vcx.tcx, adt.did()).iter();
                     let id = vcx.tcx.mk_args_from_iter(id);
                     let ty = vcx.tcx.mk_ty_from_kind(TyKind::Adt(adt, id));
                     (ty, args.into_iter().flat_map(ty::GenericArg::as_type).collect())
                 }
                 TyKind::Tuple(tys) => {
                     let new_tys = vcx.tcx.mk_type_list_from_iter((0..tys.len()).map(|index|
-                        Self::to_placeholder(vcx.tcx, Some(index))
+                        to_placeholder(vcx.tcx, Some(index))
                     ));
                     let ty = vcx.tcx.mk_ty_from_kind(TyKind::Tuple(new_tys));
                     (ty, tys.to_vec())
                 }
-                TyKind::Param(mut param) => {
-                    // TODO: remove this hack of using a very large index to
-                    // indicate that this is a Viper param.
-                    if Self::is_viper_param(param.index) {
-                        // We are encoding a previously normalised type
-                        // parameter. Stop here.
-                        let snapshot = vcx.alloc(vir::TypeData::DomainTypeParam(vir::DomainParamData {
-                            name: vir::vir_format!(vcx, "{}", param.name),
-                        }));
-                        deps.emit_output_ref::<Self>(*task_key, SnapshotEncOutputRef { snapshot });
-                        let specifics = DomainEncSpecifics::Param;
-                        return Ok((SnapshotEncOutput { base_name: String::new(), snapshot, specifics }, ()));
-                    } else {
-                        // We want to encode a type parameter for e.g. a generic
-                        // method, this will result in an empty domain.
-                        param.name = symbol::Symbol::intern(&format!("Param{}", param.index));
-                        let ty = vcx.tcx.mk_ty_from_kind(TyKind::Param(param));
-                        (ty, Vec::new())
-                    }
-                }
                 TyKind::Array(orig, val) => {
-                    let ty = Self::to_placeholder(vcx.tcx, None);
+                    let ty = to_placeholder(vcx.tcx, None);
                     let ty = vcx.tcx.mk_ty_from_kind(TyKind::Array(ty, val));
                     (ty, vec![orig])
                 }
                 TyKind::Slice(orig) => {
-                    let ty = Self::to_placeholder(vcx.tcx, None);
+                    let ty = to_placeholder(vcx.tcx, None);
                     let ty = vcx.tcx.mk_ty_from_kind(TyKind::Slice(ty));
                     (ty, vec![orig])
                 }
                 TyKind::Ref(r, orig, m) => {
-                    let ty = Self::to_placeholder(vcx.tcx, None);
+                    let ty = to_placeholder(vcx.tcx, None);
                     let ty = vcx.tcx.mk_ty_from_kind(TyKind::Ref(r, ty, m));
                     (ty, vec![orig])
                 }
@@ -126,36 +106,4 @@ impl TaskEncoder for SnapshotEnc {
             Ok((SnapshotEncOutput { base_name, snapshot, specifics }, ()))
         })
     }
-}
-
-impl SnapshotEnc {
-    // pub fn from_viper_param(idx: u32) -> u32 {
-    //     u32::MAX - idx
-    // }
-    // fn to_viper_param(idx: u32) -> u32 {
-    //     // Use a very large index to indicate that this is not a Rust param
-    //     // which should be encoded as an empty domain, but that this is a Viper
-    //     // param which should be encoded as a type parameter.
-    //     u32::MAX - idx
-    // }
-    // fn is_viper_param(idx: u32) -> bool {
-    //     idx > u32::MAX / 2
-    // }
-
-    // pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
-    //     let name = idx.map(|idx| format!("T{idx}")).unwrap_or_else(|| String::from("T"));
-    //     tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
-    //         index: Self::to_viper_param(idx.unwrap_or_default() as u32),
-    //         name: symbol::Symbol::intern(&name),
-    //     }))
-    // }
-    // fn to_placeholder_arg<'tcx>(tcx: ty::TyCtxt<'tcx>, arg: ty::GenericArg<'tcx>) -> ty::GenericArg<'tcx> {
-    //     arg.as_type().map(|ty| {
-    //         let param = DomainEnc::expect_param(ty);
-    //         tcx.mk_ty_from_kind(TyKind::Param(ty::ParamTy {
-    //             index: Self::to_viper_param(param.index),
-    //             name: param.name,
-    //         })).into()
-    //     }).unwrap_or(arg)
-    // }
 }

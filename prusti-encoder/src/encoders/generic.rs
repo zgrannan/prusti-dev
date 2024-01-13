@@ -70,19 +70,19 @@ impl TaskEncoder for GenericEnc {
         );
         let typ = FunctionIdent::new("typ", UnaryArity::new(&[&TYP_DOMAIN]));
         vir::with_vcx(|vcx| {
-            let t = vcx.mk_local_ex("t");
+            let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
             let param_snapshot = vcx.mk_function(
                 "p_Param_snap",
                 vir::vir_arg_list! { vcx; self: Ref, t: Type },
                 vir::vir_type! { vcx; s_Param },
                 vcx.alloc_slice(&[vcx.mk_predicate_app_expr(param_predicate.apply(
                     vcx,
-                    [vcx.mk_local_ex("self"), t],
+                    [vcx.mk_local_ex("self", &TypeData::Ref), t],
                     None,
                 ))]),
                 vcx.alloc_slice(&[vcx.mk_bin_op_expr(
                     vir::BinOpKind::CmpEq,
-                    typ.apply(vcx, [vcx.mk_local_ex("result")]),
+                    typ.apply(vcx, [vcx.mk_local_ex("result", &TYP_DOMAIN)]),
                     t,
                 )]),
                 None,
@@ -94,7 +94,7 @@ impl TaskEncoder for GenericEnc {
                         }
                     },
                     predicate_param: vir::vir_predicate! { vcx; predicate p_Param(self_p: Ref, t: Type) },
-                    domain_type: vir::vir_domain! { vcx; domain s_Type { } },
+                    domain_type: vir::vir_domain! { vcx; domain Type { } },
                     param_to_snap: param_snapshot,
                 },
                 (),
