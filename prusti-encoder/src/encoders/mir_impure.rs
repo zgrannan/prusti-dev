@@ -318,7 +318,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         return;
                     }
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
-                    let place_ty_out = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                    let place_ty_out = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
                     let ref_to_pred = place_ty_out.expect_pred_variant_opt(place_ty.variant_index);
 
                     let ref_p = self.encode_place(place);
@@ -333,7 +333,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
                     assert!(place_ty.variant_index.is_none());
 
-                    let place_ty_out = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                    let place_ty_out = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
 
                     let ref_p = self.encode_place(place);
                     self.stmt(self.vcx.mk_exhale_stmt(self.vcx.mk_predicate_app_expr(
@@ -375,7 +375,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let ty = operand.ty(self.local_decls, self.vcx.tcx);
         match operand {
             &mir::Operand::Move(source) => {
-                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
+                let ty_out = PredicateEnc::require_ref(ty, self.deps).unwrap();
                 let place_exp = self.encode_place(Place::from(source));
                 let snap_val = ty_out.ref_to_snap.apply(self.vcx, [place_exp]);
 
@@ -387,7 +387,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
-                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
+                let ty_out = PredicateEnc::require_ref(ty, self.deps).unwrap();
                 ty_out.ref_to_snap.apply(self.vcx, [self.encode_place(Place::from(source))])
             }
             mir::Operand::Constant(box constant) =>
@@ -403,12 +403,12 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let (snap_val, ty_out) = match operand {
             &mir::Operand::Move(source) => return self.encode_place(Place::from(source)),
             &mir::Operand::Copy(source) => {
-                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
+                let ty_out = PredicateEnc::require_ref(ty, self.deps).unwrap();
                 let source = ty_out.ref_to_snap.apply(self.vcx, [self.encode_place(Place::from(source))]);
                 (source, ty_out)
             }
             mir::Operand::Constant(box constant) => {
-                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
+                let ty_out = PredicateEnc::require_ref(ty, self.deps).unwrap();
                 let constant = self.deps.require_local::<ConstEnc>((constant.literal, 0, self.def_id)).unwrap();
                 (constant, ty_out)
             }
@@ -435,7 +435,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn encode_place_element(&mut self, place_ty: mir::tcx::PlaceTy<'tcx>, elem: mir::PlaceElem<'tcx>, expr: vir::Expr<'vir>) -> vir::Expr<'vir> {
         match elem {
             mir::ProjectionElem::Field(field_idx, _) => {
-                let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                let e_ty = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
                 let field_access = e_ty.expect_variant_opt(place_ty.variant_index).ref_to_field_refs;
                 let projection_p = field_access[field_idx.as_usize()];
                 projection_p.apply(self.vcx, [expr])
@@ -444,7 +444,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             mir::ProjectionElem::Downcast(..) => expr,
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
-                let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                let e_ty = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
                 let ref_field = e_ty.expect_ref().ref_field;
                 self.vcx.mk_field_expr(expr, ref_field)
             }
@@ -570,9 +570,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 let proj_ref = self.encode_place(Place::from(*dest));
 
                 let rvalue_ty = rvalue.ty(self.local_decls, self.vcx.tcx);
-                let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(
-                    rvalue_ty,
-                ).unwrap();
+                let e_rvalue_ty = PredicateEnc::require_ref(rvalue_ty, self.deps).unwrap();
 
                 // The snapshot of the value that we are assigning.
                 let expr = match rvalue {
@@ -647,7 +645,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     }
                     mir::Rvalue::Discriminant(place) => {
                         let place_ty = place.ty(self.local_decls, self.vcx.tcx);
-                        let ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                        let ty = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
                         let place_expr = self.encode_place(Place::from(*place));
 
                         match ty.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
@@ -674,7 +672,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                 let dest_ty = dest.ty(self.local_decls, self.vcx.tcx);
                 assert!(dest_ty.variant_index.is_none());
-                let dest_ty_out = self.deps.require_ref::<PredicateEnc>(dest_ty.ty,).unwrap();
+                let dest_ty_out = PredicateEnc::require_ref(dest_ty.ty, self.deps).unwrap();
 
                 self.stmt(self.vcx.alloc(dest_ty_out.method_assign.apply(self.vcx, [proj_ref, expr])));
             }
@@ -725,9 +723,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             mir::TerminatorKind::SwitchInt { discr, targets } => {
                 //let discr_version = self.ssa_analysis.version.get(&(location, discr.local)).unwrap();
                 //let discr_name = vir::vir_format!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
-                let discr_ty = self.deps.require_ref::<PredicateEnc>(
-                    discr.ty(self.local_decls, self.vcx.tcx),
-                ).unwrap().expect_prim();
+                let discr_ty = PredicateEnc::require_ref(discr.ty(self.local_decls, self.vcx.tcx), self.deps).unwrap().expect_prim();
 
                 let goto_targets = self.vcx.alloc_slice(&targets.iter().enumerate()
                     .map(|(idx, (value, target))| {
@@ -809,9 +805,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 )).unwrap_or_else(|| self.unreachable())
             }
             mir::TerminatorKind::Assert { cond, expected, target, unwind, .. } => {
-                let e_bool = self.deps.require_ref::<PredicateEnc>(
-                    self.vcx.tcx.types.bool,
-                ).unwrap();
+                let e_bool = PredicateEnc::require_ref(self.vcx.tcx.types.bool, self.deps).unwrap();
                 let enc = self.encode_operand_snap(cond);
                 let enc = e_bool.expect_prim().snap_to_prim.apply(self.vcx, [enc]);
                 let expected = self.vcx.mk_const_expr(vir::ConstData::Bool(*expected));

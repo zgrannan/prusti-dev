@@ -10,7 +10,7 @@ use task_encoder::{
 };
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::encoders::{ViperTupleEnc, PredicateEnc, SnapshotEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
+use crate::{encoders::{ViperTupleEnc, PredicateEnc, SnapshotEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::MostGenericTy};
 
 pub struct MirPureEnc;
 
@@ -208,7 +208,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
     fn get_ty_for_local(
         &mut self,
         local: mir::Local
-    ) -> vir::Type<'tcx> {
+    ) -> vir::Type<'vir> {
         let ty = self.body.local_decls[local].ty;
         if let ty::TyKind::Closure(..) = ty.kind() {
             // TODO: Support closure types
@@ -216,7 +216,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 name: "closure",
             })
         } else {
-            self.deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot
+            SnapshotEnc::require_ref(ty, self.deps).unwrap().snapshot
         }
     }
 
@@ -355,9 +355,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             mir::TerminatorKind::SwitchInt { discr, targets } => {
                 // encode the discriminant operand
                 let discr_expr = self.encode_operand(&new_curr_ver, discr);
-                let discr_ty_out = self.deps.require_local::<SnapshotEnc>(
-                    discr.ty(self.body, self.vcx.tcx),
-                ).unwrap().specifics.expect_primitive();
+                let discr_ty_out = SnapshotEnc::require_local(discr.ty(self.body, self.vcx.tcx), self.deps).unwrap().specifics.expect_primitive();
 
                 // walk `curr` -> `targets[i]` -> `join` for each target. The
                 // join point the bb which is an immediate reverse dominator of
@@ -507,9 +505,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             mir::Rvalue::Use(op) => self.encode_operand(curr_ver, op),
             // Repeat
             mir::Rvalue::Ref(_, kind, place) => {
-                let e_rvalue_ty = self.deps.require_local::<SnapshotEnc>(
-                    rvalue_ty,
-                ).unwrap().specifics.expect_structlike().field_snaps_to_snap;
+                let e_rvalue_ty = SnapshotEnc::require_local(rvalue_ty, self.deps).unwrap().specifics.expect_structlike().field_snaps_to_snap;
                 let (snap, place_ref) = self.encode_place_with_ref(curr_ver, place);
                 if kind.mutability().is_mut() {
                     // We want to distinguish if `place` is a value that lives
@@ -578,9 +574,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     tuple_ref.mk_cons(self.vcx, &fields)
                 }
                 mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple => {
-                    let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(
-                        rvalue_ty,
-                    ).unwrap();
+                    let e_rvalue_ty = PredicateEnc::require_ref(rvalue_ty, self.deps).unwrap();
                     let sl = match kind {
                         mir::AggregateKind::Adt(_, vidx, _, _, _) =>
                             e_rvalue_ty.get_variant_any(*vidx),
@@ -593,13 +587,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             }
             mir::Rvalue::Discriminant(place) => {
                 let place_ty = place.ty(self.body, self.vcx.tcx);
-                let ty = self.deps.require_local::<SnapshotEnc>(place_ty.ty).unwrap().specifics;
+                let ty = SnapshotEnc::require_local(place_ty.ty, self.deps).unwrap().specifics;
                 match ty.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
                     Some(ty) => ty.unwrap().snap_to_discr_snap.apply(self.vcx, [self.encode_place(curr_ver, place)]),
                     None => {
-                        let e_rvalue_ty = self.deps.require_local::<SnapshotEnc>(
-                            rvalue_ty,
-                        ).unwrap().specifics.expect_primitive();
+                        let e_rvalue_ty = SnapshotEnc::require_local(rvalue_ty, self.deps).unwrap().specifics.expect_primitive();
                         // mir::Rvalue::Discriminant documents "Returns zero for types without discriminant"
                         let zero = self.vcx.mk_uint::<0>();
                         e_rvalue_ty.prim_to_snap.apply(self.vcx, [zero]).lift()
@@ -667,7 +659,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         match elem {
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
-                let e_ty = self.deps.require_local::<SnapshotEnc>(place_ty.ty).unwrap();
+                let e_ty = SnapshotEnc::require_local(place_ty.ty, self.deps).unwrap();
                 let place_ref = e_ty.specifics.expect_structlike().field_access.get(1).map(|r| r.read.apply(self.vcx, [expr]));
                 let expr = e_ty.specifics.expect_structlike().field_access[0].read.apply(self.vcx, [expr]);
                 (expr, place_ref)
@@ -683,7 +675,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                        (tuple_ref.mk_elem(self.vcx, expr, field_idx), place_ref)
                     }
                     _ => {
-                        let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                        let e_ty = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
                         let struct_like = e_ty.expect_variant_opt(place_ty.variant_index);
                         let proj = struct_like.snap_data.field_access[field_idx].read;
                         let place_ref = place_ref.map(|pr|
@@ -742,9 +734,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     rhs,
                 );
 
-                let bool_cons = self.deps.require_local::<SnapshotEnc>(
-                    self.vcx.tcx.types.bool,
-                ).unwrap().specifics.expect_primitive().prim_to_snap;
+                let bool_cons = SnapshotEnc::require_local(self.vcx.tcx.types.bool, self.deps).unwrap().specifics.expect_primitive().prim_to_snap;
                 bool_cons.apply(self.vcx, [eq_expr])
             }
             PrustiBuiltin::Forall => {
@@ -764,9 +754,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 let qvars = self.vcx.alloc_slice(&qvar_tys.iter()
                     .enumerate()
                     .map(|(idx, qvar_ty)| {
-                        let ty_out = self.deps.require_ref::<SnapshotEnc>(
-                            qvar_ty,
-                        ).unwrap();
+                        let ty_out = SnapshotEnc::require_ref(qvar_ty, self.deps).unwrap();
                         self.vcx.mk_local_decl(
                             vir::vir_format!(self.vcx, "qvar_{}_{idx}", self.encoding_depth),
                             ty_out.snapshot,
@@ -820,9 +808,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     ))
                     .lift();
 
-                let bool = self.deps.require_local::<SnapshotEnc>(
-                    self.vcx.tcx.types.bool,
-                ).unwrap().specifics;
+                let bool = SnapshotEnc::require_local(self.vcx.tcx.types.bool, self.deps).unwrap().specifics;
                 let bool = bool.expect_primitive();
 
                 bool.prim_to_snap.apply(self.vcx, [self.vcx.mk_forall_expr(

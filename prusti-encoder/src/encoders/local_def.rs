@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
-use crate::encoders::PredicateEncOutputRef;
+use crate::encoders::{PredicateEncOutputRef, PredicateEnc};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -76,9 +76,7 @@ impl TaskEncoder for MirLocalDefEnc {
                 let body = vcx.body.borrow_mut().get_impure_fn_body(local_def_id, substs, caller_def_id);
                 let locals = IndexVec::from_fn_n(|arg: mir::Local| {
                     let local = vir::vir_format!(vcx, "_{}p", arg.index());
-                    let ty = deps.require_ref::<crate::encoders::PredicateEnc>(
-                        body.local_decls[arg].ty,
-                    ).unwrap();
+                    let ty = PredicateEnc::require_ref(body.local_decls[arg].ty, deps).unwrap();
                     mk_local_def(vcx, local, ty)
                 }, body.local_decls.len());
                 MirLocalDefEncOutput {
@@ -98,9 +96,7 @@ impl TaskEncoder for MirLocalDefEnc {
                     } else {
                         sig.inputs()[arg.index() - 1]
                     };
-                    let ty = deps.require_ref::<crate::encoders::PredicateEnc>(
-                        ty,
-                    ).unwrap();
+                    let ty = PredicateEnc::require_ref(ty, deps).unwrap();
                     mk_local_def(vcx, local, ty)
                 }, sig.inputs_and_output.len());
 

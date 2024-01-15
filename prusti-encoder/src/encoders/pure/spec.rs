@@ -3,7 +3,7 @@ use prusti_rustc_interface::{middle::{mir, ty}, span::def_id::DefId};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
-use crate::encoders::{MirPureEnc, mir_pure::PureKind};
+use crate::{encoders::{MirPureEnc, mir_pure::PureKind}, util::MostGenericTy};
 pub struct MirSpecEnc;
 
 #[derive(Clone)]
@@ -78,7 +78,7 @@ impl TaskEncoder for MirSpecEnc {
             };
 
             let to_bool = deps.require_ref::<crate::encoders::PredicateEnc>(
-                vcx.tcx.types.bool,
+                MostGenericTy::bool(vcx.tcx)
             ).unwrap().expect_prim().snap_to_prim;
 
             let pres = specs.pres.iter().map(|spec_def_id| {

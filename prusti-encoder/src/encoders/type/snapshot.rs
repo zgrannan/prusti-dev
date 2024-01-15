@@ -4,7 +4,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::{
     TaskEncoder,
-    TaskEncoderDependencies,
+    TaskEncoderDependencies, TaskEncoderError,
 };
 
 /// Takes a Rust `Ty` and returns a Viper `Type`. The returned type is always a
@@ -22,17 +22,18 @@ impl<'vir> task_encoder::OutputRefAny for SnapshotEncOutputRef<'vir> {}
 pub struct SnapshotEncOutput<'vir> {
     pub base_name: String,
     pub snapshot: vir::Type<'vir>,
+    pub generics: &'vir [&'vir str],
     pub specifics: DomainEncSpecifics<'vir>,
 }
 
-use crate::util::to_placeholder;
+use crate::util::{to_placeholder, MostGenericTy, extract_type_params};
 
 use super::domain::{DomainEnc, DomainEncSpecifics};
 
 impl TaskEncoder for SnapshotEnc {
     task_encoder::encoder_cache!(SnapshotEnc);
 
-    type TaskDescription<'tcx> = ty::Ty<'tcx>;
+    type TaskDescription<'tcx> = MostGenericTy<'tcx>;
     type OutputRef<'vir> = SnapshotEncOutputRef<'vir>;
     type OutputFullLocal<'vir> = SnapshotEncOutput<'vir>;
     type EncodingError = ();
@@ -42,7 +43,7 @@ impl TaskEncoder for SnapshotEnc {
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(
-        task_key: &Self::TaskKey<'tcx>,
+        ty: &Self::TaskKey<'tcx>,
         deps: &mut TaskEncoderDependencies<'vir>,
     ) -> Result<(
         Self::OutputFullLocal<'vir>,
@@ -52,58 +53,46 @@ impl TaskEncoder for SnapshotEnc {
         Option<Self::OutputFullDependency<'vir>>,
     )> {
         vir::with_vcx(|vcx| {
-            // Here we need to normalise the task description.
-            // In particular, any concrete type parameter instantiation is replaced
-            // with the identity substitutions for the item.
-            // For example:
-            //     Assuming `struct Foo<T, U> { .. }`,
-            //     `Foo<i32, bool>` is normalised to `Foo<T, U>`
-            let (ty, args) = match *task_key.kind() {
-                TyKind::Adt(adt, args) => {
-                    // TODO: Also encode nested
-                    let id = ty::List::identity_for_item(vcx.tcx, adt.did()).iter();
-                    let id = vcx.tcx.mk_args_from_iter(id);
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Adt(adt, id));
-                    (ty, args.into_iter().flat_map(ty::GenericArg::as_type).collect())
-                }
-                TyKind::Tuple(tys) => {
-                    let new_tys = vcx.tcx.mk_type_list_from_iter((0..tys.len()).map(|index|
-                        to_placeholder(vcx.tcx, Some(index))
-                    ));
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Tuple(new_tys));
-                    (ty, tys.to_vec())
-                }
-                TyKind::Array(orig, val) => {
-                    let ty = to_placeholder(vcx.tcx, None);
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Array(ty, val));
-                    (ty, vec![orig])
-                }
-                TyKind::Slice(orig) => {
-                    let ty = to_placeholder(vcx.tcx, None);
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Slice(ty));
-                    (ty, vec![orig])
-                }
-                TyKind::Ref(r, orig, m) => {
-                    let ty = to_placeholder(vcx.tcx, None);
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Ref(r, ty, m));
-                    (ty, vec![orig])
-                }
-                _ => (*task_key, Vec::new()),
-            };
-            let out = deps.require_ref::<DomainEnc>(ty).unwrap();
-            let tys: Vec<_> = args.iter().map(|arg| deps.require_ref::<Self>(*arg).unwrap().snapshot).collect();
-            let snapshot = out.domain.apply(vcx, &tys);
-            deps.emit_output_ref::<Self>(*task_key, SnapshotEncOutputRef { snapshot });
+            let out = deps.require_ref::<DomainEnc>(*ty).unwrap();
+            let snapshot = out.domain.apply(vcx, []);
+            deps.emit_output_ref::<Self>(*ty, SnapshotEncOutputRef { snapshot });
+            let specifics = deps.require_dep::<DomainEnc>(*ty).unwrap();
+            let generics = vcx.alloc_slice(ty.generics().iter()
+                .map(|g| match g.kind() {
+                    TyKind::Param(param) => param.name.as_str(),
+                    _ => unreachable!(),
 
-            let mut names = vec![out.base_name];
-            for arg in args {
-                let arg = deps.require_local::<Self>(arg).unwrap();
-                names.push(arg.base_name);
+                }).collect::<Vec<_>>().as_slice());
+            Ok((SnapshotEncOutput { base_name: out.base_name, snapshot, specifics, generics }, ()))
+        })
+    }
+}
+
+impl SnapshotEnc {
+    pub fn require_ref<'tcx: 'vir, 'vir>(
+        ty: ty::Ty<'tcx>,
+        deps: &mut TaskEncoderDependencies<'vir>,
+    ) -> Result<SnapshotEncOutputRef<'vir>, TaskEncoderError<SnapshotEnc>> {
+        vir::with_vcx( |vcx| {
+        let (ty, args) = extract_type_params(vcx.tcx, ty);
+        for arg in args {
+            Self::require_ref(arg, deps)?;
+        }
+        deps.require_ref::<Self>(ty)
             }
-            // TODO: figure out nicer way to avoid name clashes
-            let base_name = names.join("_$_");
-            let specifics = deps.require_dep::<DomainEnc>(ty).unwrap();
-            Ok((SnapshotEncOutput { base_name, snapshot, specifics }, ()))
+        )
+    }
+
+    pub fn require_local<'tcx: 'vir, 'vir>(
+        ty: ty::Ty<'tcx>,
+        deps: &mut TaskEncoderDependencies<'vir>,
+    ) -> Result<SnapshotEncOutput<'vir>, TaskEncoderError<SnapshotEnc>> {
+        vir::with_vcx( |vcx| {
+        let (ty, args) = extract_type_params(vcx.tcx, ty);
+        for arg in args {
+            Self::require_local(arg, deps)?;
+        }
+        deps.require_local::<Self>(ty)
         })
     }
 }
