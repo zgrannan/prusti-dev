@@ -114,13 +114,12 @@ pub enum TypeData<'vir> {
     Unsupported(UnsupportedType<'vir>)
 }
 
-pub type TySubsts<'vir> = HashMap<&'vir str, Type<'vir>>;
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct UnsupportedType<'vir> {
     pub name: &'vir str,
-    pub fallback: Option<Type<'vir>>
 }
+
+pub type TySubsts<'vir> = HashMap<&'vir str, Type<'vir>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DomainParamData<'vir> {
