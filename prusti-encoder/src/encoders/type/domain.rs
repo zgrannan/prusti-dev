@@ -356,7 +356,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             self.vcx.mk_local_decl_local(fnames[idx])
         ).collect();
         let cons_qvars = self.vcx.alloc_slice(&cons_qvars);
-        let cons_args: Vec<_> = fnames.into_iter().map(|fname| self.vcx.mk_local_ex(fname)).collect();
+        let cons_args: Vec<_> = fnames.into_iter().map(|fname| self.vcx.mk_local_ex_local(fname)).collect();
         let cons_call_with_qvars = field_snaps_to_snap.apply(self.vcx, &cons_args);
 
         // Discriminant axioms

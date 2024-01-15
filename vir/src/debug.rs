@@ -180,7 +180,7 @@ impl<'vir, Curr, Next> Debug for FuncAppGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}(", self.target)?;
         fmt_comma_sep(f, &self.args)?;
-        write!(f, "): {:?}", self.result_ty)?;
+        write!(f, ")")?;
         Ok(())
     }
 }
