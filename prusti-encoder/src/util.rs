@@ -82,7 +82,6 @@ pub fn extract_type_params<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> (Mo
         }
         _ => (MostGenericTy(ty), Vec::new()),
     };
-    assert!(!matches!(generic_ty.kind(), ty::Param(_)));
     let arg_tys = arg_tys.into_iter().filter(|ty| !matches!(ty.kind(), ty::Param(_))).collect();
     (generic_ty, arg_tys)
 }
