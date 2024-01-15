@@ -387,11 +387,12 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .fold(
                         self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, otherwise_update),
                         |expr, ((cond_val, target), branch_update)| self.vcx.mk_ternary_expr(
-                            self.vcx.mk_bin_op_expr(
-                                vir::BinOpKind::CmpEq,
-                                discr_ty_out.snap_to_prim.apply(self.vcx, [discr_expr]),
-                                discr_ty_out.expr_from_bits(cond_val).lift()
-                            ),
+                            todo!(),
+                            // self.vcx.mk_bin_op_expr(
+                            //     vir::BinOpKind::CmpEq,
+                            //     discr_ty_out.snap_to_prim.apply(self.vcx, [discr_expr]),
+                            //     discr_ty_out.expr_from_bits(discr_ty, cond_val).lift()
+                            // ),
                             self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, branch_update),
                             expr,
                         ),

@@ -1,7 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
     BinaryArity, CallableIdent, DomainIdent, ExprData, FunctionIdent, NullaryArity, PredicateIdent,
-    TypeData, UnaryArity,
+    TypeData, UnaryArity, DomainParamData, KnownArityAny,
 };
 
 pub struct GenericEnc;
@@ -15,7 +15,7 @@ pub enum GenericEncError {
 pub struct GenericEncOutputRef<'vir> {
     pub snapshot_param_name: &'vir str,
     pub param_predicate: PredicateIdent<'vir, BinaryArity<'vir>>,
-    pub domain_type_name: DomainIdent<'vir, NullaryArity<'vir>>
+    pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 
@@ -28,6 +28,7 @@ pub struct GenericEncOutput<'vir> {
 }
 
 pub const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
+pub const SNAPSHOT_PARAM_DOMAIN: TypeData<'static> = TypeData::Domain("s_Param", &[]);
 
 impl TaskEncoder for GenericEnc {
     task_encoder::encoder_cache!(GenericEnc);
@@ -59,7 +60,7 @@ impl TaskEncoder for GenericEnc {
     > {
         let param_predicate =
             PredicateIdent::new("p_Param", BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]));
-        let type_domain_ident = DomainIdent::new("Type", NullaryArity::new(&[]));
+        let type_domain_ident = DomainIdent::nullary("Type");
         deps.emit_output_ref::<Self>(
             *task_key,
             GenericEncOutputRef {
@@ -68,7 +69,7 @@ impl TaskEncoder for GenericEnc {
                 domain_type_name: type_domain_ident
             },
         );
-        let typ = FunctionIdent::new("typ", UnaryArity::new(&[&TYP_DOMAIN]));
+        let typ = FunctionIdent::new("typ", UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]), &TYP_DOMAIN);
         vir::with_vcx(|vcx| {
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
             let param_snapshot = vcx.mk_function(

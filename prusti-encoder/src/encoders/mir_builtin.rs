@@ -101,7 +101,7 @@ impl MirBuiltinEnc {
 
         let name = vir::vir_format!(vcx, "mir_unop_{op:?}_{}", int_name(ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_ty.snapshot]));
-        let function = FunctionIdent::new(name, arity);
+        let function = FunctionIdent::new(name, arity, e_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
             function,
         });
@@ -154,7 +154,7 @@ impl MirBuiltinEnc {
 
         let name = vir::vir_format!(vcx, "mir_binop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
-        let function = FunctionIdent::new(name, arity);
+        let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
             function,
         });
@@ -247,7 +247,8 @@ impl MirBuiltinEnc {
 
         let name = vir::vir_format!(vcx, "mir_checkedbinop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
-        let function = FunctionIdent::new(name, arity);
+        let e_res_ty = SnapshotEnc::require_local(res_ty, deps).unwrap();
+        let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
             function,
         });

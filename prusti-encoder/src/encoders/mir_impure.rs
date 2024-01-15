@@ -344,7 +344,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             }
         }
     }
-    
+
 
     fn fpcs_repacks_location(
         &mut self,
@@ -713,7 +713,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             | mir::TerminatorKind::FalseEdge { real_target: target, .. }  => {
                 const REAL_TARGET_SUCC_IDX: usize = 0;
                 // Ensure that the terminator succ that we use for the repacks is the correct one
-                assert_eq!(&self.current_fpcs.as_ref().unwrap().terminator.succs[REAL_TARGET_SUCC_IDX].location.block, target);                
+                assert_eq!(&self.current_fpcs.as_ref().unwrap().terminator.succs[REAL_TARGET_SUCC_IDX].location.block, target);
                 self.fpcs_repacks_terminator(REAL_TARGET_SUCC_IDX, |rep| &rep.repacks_start);
 
                 self.vcx.mk_goto_stmt(
@@ -731,11 +731,11 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                         let extra_stmts = self.collect_terminator_repacks(idx, |rep| &rep.repacks_start);
                         (
-                            discr_ty.expr_from_bits(value),
+                            todo!(), // discr_ty.expr_from_bits(discr_ty_rs, value),
                             self.vcx.alloc(vir::CfgBlockLabelData::BasicBlock(target.as_usize())),
                             self.vcx.alloc_slice(&extra_stmts),
                         )
-                
+
                     })
                     .collect::<Vec<_>>());
                 let goto_otherwise = self.vcx.alloc(vir::CfgBlockLabelData::BasicBlock(
@@ -747,12 +747,13 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 let otherwise_stmts = self.collect_terminator_repacks(otherwise_succ_idx, |rep| &rep.repacks_start);
 
                 let discr_ex = discr_ty.snap_to_prim.apply(self.vcx, [self.encode_operand_snap(discr)]);
-                self.vcx.mk_goto_if_stmt(
-                    discr_ex, // self.vcx.mk_local_ex(discr_name),
-                    goto_targets,
-                    goto_otherwise,
-                    self.vcx.alloc_slice(&otherwise_stmts),
-                )
+                todo!()
+                // self.vcx.mk_goto_if_stmt(
+                //     discr_ex, // self.vcx.mk_local_ex(discr_name),
+                //     goto_targets,
+                //     goto_otherwise,
+                //     self.vcx.alloc_slice(&otherwise_stmts),
+                // )
             }
             mir::TerminatorKind::Return =>
                 self.vcx.mk_goto_stmt(self.vcx.alloc(vir::CfgBlockLabelData::End)),

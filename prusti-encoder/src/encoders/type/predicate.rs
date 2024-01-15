@@ -347,51 +347,56 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         snap_inst: vir::Type<'vir>,
         generics: &'vir [&'vir str],
     ) -> Self {
-        let self_ex = vcx.mk_local_ex("self", &vir::TypeData::Ref);
-        let generics: Vec<_> = generics.iter().map(|g| vcx.mk_local_decl(g, &TYP_DOMAIN)).collect();
-        let ref_to_pred_args = vec![self_ex];
-        for g in generics.iter() {
-            ref_to_pred_args.push(vcx.mk_local_ex(g.name, g.ty));
-        };
-        let ref_to_pred_arg_types: Vec<_> = ref_to_pred_args.iter().map(|e| e.kind.ty()).collect();
-        let ref_to_pred = vir::PredicateIdent::new(
-            vir::vir_format!(vcx, "p_{base_name}"),
-            vir::UnknownArity::new(vcx.alloc(&ref_to_pred_arg_types)),
-        );
-        let ref_to_snap = FunctionIdent::new(
-            vir::vir_format!(vcx, "{}_snap", ref_to_pred.name()),
-            UnaryArity::new(vcx.alloc_array(&[snap_inst])),
-        );
-        let unreachable_to_snap = FunctionIdent::new(
-            vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
-            NullaryArity::new(vcx.alloc_array(&[])),
-        );
-        let method_assign = MethodIdent::new(
-            vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
-            BinaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref, snap_inst])),
-        );
-        let method_upcast = MethodIdent::new(
-            vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
-            UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
-        );
-        let self_pred_read = ref_to_pred.apply(vcx, [self_ex], Some(vcx.mk_wildcard()));
+        todo!();
+        // let self_ex = vcx.mk_local_ex("self", &vir::TypeData::Ref);
+        // let generics: Vec<_> = generics.iter().map(|g| vcx.mk_local_decl(g, &TYP_DOMAIN)).collect();
+        // let ref_to_pred_args = vec![self_ex];
+        // for g in generics.iter() {
+        //     ref_to_pred_args.push(vcx.mk_local_ex(g.name, g.ty));
+        // };
+        // let ref_to_pred_arg_types: Vec<_> = ref_to_pred_args.iter().map(|e| e.kind.ty()).collect();
+        // let ref_to_pred = vir::PredicateIdent::new(
+        //     vir::vir_format!(vcx, "p_{base_name}"),
+        //     vir::UnknownArity::new(vcx.alloc(&ref_to_pred_arg_types)),
+        // );
+        // let ref_to_snap = FunctionIdent::new(
+        //     vir::vir_format!(vcx, "{}_snap", ref_to_pred.name()),
+        //     UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
+        //     snap_inst
+        // );
+        // let unreachable_to_snap = FunctionIdent::new(
+        //     vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
+        //     NullaryArity::new(vcx.alloc_array(&[])),
+        //     snap_inst
+        // );
+        // let method_assign = MethodIdent::new(
+        //     vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
+        //     BinaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref, snap_inst])),
+        // );
+        // let method_upcast = MethodIdent::new(
+        //     vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
+        //     UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
+        // );
+        todo!();
+        // let self_pred_read = ref_to_pred.apply(vcx, [self_ex], Some(vcx.mk_wildcard()));
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl("self", &vir::TypeData::Ref)]);
-        Self {
-            vcx,
-            generics: vcx.alloc_slice(&generics),
-            snap_inst,
-            ref_to_pred,
-            ref_to_snap,
-            unreachable_to_snap,
-            method_assign,
-            method_upcast,
-            self_ex,
-            self_pred_read,
-            self_decl,
-            fields: Vec::new(),
-            predicates: Vec::new(),
-            ref_to_field_refs: Vec::new(),
-        }
+        todo!()
+        // Self {
+        //     vcx,
+        //     generics: vcx.alloc_slice(&generics),
+        //     snap_inst,
+        //     ref_to_pred,
+        //     ref_to_snap,
+        //     unreachable_to_snap,
+        //     method_assign,
+        //     method_upcast,
+        //     self_ex,
+        //     self_pred_read,
+        //     self_decl,
+        //     fields: Vec::new(),
+        //     predicates: Vec::new(),
+        //     ref_to_field_refs: Vec::new(),
+        // }
     }
     pub fn tcx(&self) -> ty::TyCtxt<'tcx> {
         self.vcx.tcx
@@ -404,36 +409,20 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         snap_data: DomainDataStruct<'vir>,
     ) -> PredicateEncDataStruct<'vir> {
         let mut post = None;
-        let ref_to_field_refs: Vec<_> = (0..snap_data.field_access.len())
-            .map(|idx| {
-                let posts = post.unwrap_or_else(|| {
-                    // result is null iff input is null (will be null if reference
-                    // created in pure code).
-                    let in_null = self.vcx.mk_eq_expr(self.self_ex, self.vcx.mk_null());
-                    let out_null = self
-                        .vcx
-                        .mk_eq_expr(self.vcx.mk_result(), self.vcx.mk_null());
-                    self.vcx
-                        .alloc_slice(&[self.vcx.mk_eq_expr(in_null, out_null)])
-                });
-                post = Some(posts);
-                let name = vir::vir_format!(
-                    self.vcx,
-                    "{}_field_{idx}",
-                    base_name.unwrap_or(self.ref_to_pred.name())
-                );
-                let field = self.vcx.mk_function(
-                    name,
-                    self.self_decl,
-                    &vir::TypeData::Ref,
-                    &[],
-                    posts,
-                    None,
-                );
-                self.ref_to_field_refs.push(field);
-                FunctionIdent::new(name, UnaryArity::new(&[&vir::TypeData::Ref]))
-            })
-            .collect();
+        let ref_to_field_refs: Vec<_> = (0..snap_data.field_access.len()).map(|idx| {
+            let posts = post.unwrap_or_else(|| {
+                // result is null iff input is null (will be null if reference
+                // created in pure code).
+                let in_null = self.vcx.mk_eq_expr(self.self_ex, self.vcx.mk_null());
+                let out_null = self.vcx.mk_eq_expr(self.vcx.mk_result(), self.vcx.mk_null());
+                self.vcx.alloc_slice(&[self.vcx.mk_eq_expr(in_null, out_null)])
+            });
+            post = Some(posts);
+            let name = vir::vir_format!(self.vcx, "{}_field_{idx}", base_name.unwrap_or(self.ref_to_pred.name()));
+            let field = self.vcx.mk_function(name, self.self_decl, &vir::TypeData::Ref, &[], posts, None);
+            self.ref_to_field_refs.push(field);
+            FunctionIdent::new(name, UnaryArity::new(&[&vir::TypeData::Ref]), &vir::TypeData::Ref)
+        }).collect();
         PredicateEncDataStruct {
             snap_data,
             ref_to_field_refs: self.vcx.alloc_slice(&ref_to_field_refs),
@@ -496,14 +485,15 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     }
 
     pub fn output_ref(&self, specifics: PredicateEncData<'vir>) -> PredicateEncOutputRef<'vir> {
-        PredicateEncOutputRef {
-            ref_to_pred: self.ref_to_pred,
-            ref_to_snap: self.ref_to_snap,
-            unreachable_to_snap: self.unreachable_to_snap,
-            method_assign: self.method_assign,
-            snapshot: self.snap_inst,
-            specifics,
-        }
+        todo!()
+        // PredicateEncOutputRef {
+        //     ref_to_pred: self.ref_to_pred,
+        //     ref_to_snap: self.ref_to_snap,
+        //     unreachable_to_snap: self.unreachable_to_snap,
+        //     method_assign: self.method_assign,
+        //     snapshot: self.snap_inst,
+        //     specifics,
+        // }
     }
 
     // Intermediate values
@@ -536,11 +526,13 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     ) -> vir::Expr<'vir> {
         let fields_pred: Vec<_> = fields.iter().map(|f| f.self_field_pred).collect();
         let expr = self.vcx.mk_conj(&fields_pred);
-        self.predicates.push(self.vcx.mk_predicate(
-            predicate.unwrap_or(self.ref_to_pred).name(),
-            self.self_decl,
-            Some(expr),
-        ));
+
+        todo!();
+        // self.predicates.push(self.vcx.mk_predicate(
+        //     predicate.unwrap_or(self.ref_to_pred).name(),
+        //     self.self_decl,
+        //     Some(expr),
+        // ));
 
         let args: Vec<_> = fields.iter().map(|f| f.self_field_snap).collect();
         let expr = field_snaps_to_snap.apply(self.vcx, &args);
@@ -733,7 +725,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         let self_pred_app =
             self.vcx
-                .mk_predicate_app_expr(self.ref_to_pred.apply(self.vcx, [self.self_ex], None));
+                .mk_predicate_app_expr(self.ref_to_pred.apply(self.vcx, todo!(), None));
 
         // method_assign
         let name = self.method_assign.name();
@@ -745,7 +737,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let posts = self.vcx.alloc_slice(&[
             self_pred_app,
             self.vcx.mk_eq_expr(
-                self.ref_to_snap.apply(self.vcx, [self.self_ex]),
+                self.ref_to_snap.apply(self.vcx, todo!() /* [self.self_ex] */),
                 self.vcx.mk_local_ex_local(self_new_local),
             ),
         ]);
@@ -760,11 +752,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self.snap_inst
         );
 
-        let upcast_ty_params: Vec<_> = self
-            .generics
-            .iter()
-            .map(|p| self.vcx.mk_local_decl(p, &TYP_DOMAIN))
-            .collect();
+        let upcast_ty_params: Vec<_> = self.generics.to_vec();
 
         let upcast_method_params = self.vcx.alloc_slice(
             &[self.self_decl[0]]
