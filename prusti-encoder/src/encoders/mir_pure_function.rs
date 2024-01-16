@@ -7,7 +7,7 @@ use crate::encoders::{
     MirPureEnc, MirPureEncTask, mir_pure::PureKind, MirSpecEnc, MirLocalDefEnc,
 };
 
-use super::PredicateEncOutputRef;
+use super::{PredicateEncOutputRef, TyOps};
 pub struct MirFunctionEnc;
 
 #[derive(Clone, Debug)]
@@ -19,7 +19,7 @@ pub enum MirFunctionEncError {
 pub struct MirFunctionEncOutputRef<'vir> {
     pub function_ref: FunctionIdent<'vir, UnknownArity<'vir>>,
     /// Always `TypeData::Domain`.
-    pub return_type: &'vir PredicateEncOutputRef<'vir>,
+    pub return_type: &'vir TyOps<'vir>,
 }
 impl<'vir> task_encoder::OutputRefAny for MirFunctionEncOutputRef<'vir> {}
 

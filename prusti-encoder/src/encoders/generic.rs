@@ -1,7 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    BinaryArity, CallableIdent, DomainIdent, ExprData, FunctionIdent, NullaryArity, PredicateIdent,
-    TypeData, UnaryArity, DomainParamData, KnownArityAny,
+    BinaryArity, CallableIdent, DomainIdent, DomainParamData, ExprData, FunctionIdent,
+    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent,
 };
 
 pub struct GenericEnc;
@@ -14,17 +14,19 @@ pub enum GenericEncError {
 #[derive(Clone, Debug)]
 pub struct GenericEncOutputRef<'vir> {
     pub snapshot_param_name: &'vir str,
-    pub param_predicate: PredicateIdent<'vir, BinaryArity<'vir>>,
-    pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>
+    pub ref_to_pred: PredicateIdent<'vir, BinaryArity<'vir>>,
+    pub ref_to_snap: FunctionIdent<'vir, BinaryArity<'vir>>,
+    pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
+    pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
 pub struct GenericEncOutput<'vir> {
     pub snapshot_param: vir::Domain<'vir>,
-    pub predicate_param: vir::Predicate<'vir>,
+    pub ref_to_pred: vir::Predicate<'vir>,
     pub domain_type: vir::Domain<'vir>,
-    pub param_to_snap: vir::Function<'vir>,
+    pub ref_to_snap: vir::Function<'vir>,
 }
 
 pub const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
@@ -58,32 +60,47 @@ impl TaskEncoder for GenericEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        let param_predicate =
+        let ref_to_pred =
             PredicateIdent::new("p_Param", BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]));
         let type_domain_ident = DomainIdent::nullary("Type");
+        let ref_to_snap = FunctionIdent::new(
+            "p_Param_snap",
+            BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]),
+            &SNAPSHOT_PARAM_DOMAIN,
+        );
+        let method_assign = MethodIdent::new(
+            "assign_p_Param",
+            BinaryArity::new(&[&TypeData::Ref, &SNAPSHOT_PARAM_DOMAIN]),
+        );
         deps.emit_output_ref::<Self>(
             *task_key,
             GenericEncOutputRef {
                 snapshot_param_name: "s_Param",
-                param_predicate,
-                domain_type_name: type_domain_ident
+                ref_to_pred,
+                domain_type_name: type_domain_ident,
+                ref_to_snap,
+                method_assign
             },
         );
-        let typ = FunctionIdent::new("typ", UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]), &TYP_DOMAIN);
+        let typ = FunctionIdent::new(
+            "typ",
+            UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]),
+            &TYP_DOMAIN,
+        );
         vir::with_vcx(|vcx| {
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
-            let param_snapshot = vcx.mk_function(
+            let ref_to_snap = vcx.mk_function(
                 "p_Param_snap",
                 vir::vir_arg_list! { vcx; self: Ref, t: Type },
                 vir::vir_type! { vcx; s_Param },
-                vcx.alloc_slice(&[vcx.mk_predicate_app_expr(param_predicate.apply(
+                vcx.alloc_slice(&[vcx.mk_predicate_app_expr(ref_to_pred.apply(
                     vcx,
                     [vcx.mk_local_ex("self", &TypeData::Ref), t],
                     None,
                 ))]),
                 vcx.alloc_slice(&[vcx.mk_bin_op_expr(
                     vir::BinOpKind::CmpEq,
-                    typ.apply(vcx, [vcx.mk_local_ex("result", &TYP_DOMAIN)]),
+                    typ.apply(vcx, [vcx.mk_local_ex("result", &SNAPSHOT_PARAM_DOMAIN)]),
                     t,
                 )]),
                 None,
@@ -94,9 +111,9 @@ impl TaskEncoder for GenericEnc {
                             function typ(s_Param): Type;
                         }
                     },
-                    predicate_param: vir::vir_predicate! { vcx; predicate p_Param(self_p: Ref, t: Type) },
+                    ref_to_pred: vir::vir_predicate! { vcx; predicate p_Param(self_p: Ref, t: Type) },
                     domain_type: vir::vir_domain! { vcx; domain Type { } },
-                    param_to_snap: param_snapshot,
+                    ref_to_snap,
                 },
                 (),
             ))

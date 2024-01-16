@@ -53,6 +53,11 @@ impl TaskEncoder for SnapshotEnc {
         Option<Self::OutputFullDependency<'vir>>,
     )> {
         vir::with_vcx(|vcx| {
+
+            // Generics shouldn't be encoded here, because the snapshot encoder returns a vir::Type
+            // Generics are encoded as expressions (i.e. with type `s_Param`)
+            assert!(!matches!(ty.kind(), TyKind::Param(_)));
+
             let out = deps.require_ref::<DomainEnc>(*ty).unwrap();
             let snapshot = out.domain.apply(vcx, []);
             deps.emit_output_ref::<Self>(*ty, SnapshotEncOutputRef { snapshot });

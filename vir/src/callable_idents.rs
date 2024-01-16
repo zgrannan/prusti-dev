@@ -1,6 +1,24 @@
-use crate::{ExprGen, PredicateAppGen, Type, PredicateAppGenData, StmtGenData, MethodCallGenData, VirCtxt, TypeData, DomainParamData, TySubsts};
+use crate::{
+    DomainParamData, ExprGen, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData,
+    TySubsts, Type, TypeData, VirCtxt,
+};
 use sealed::sealed;
 use std::collections::HashMap;
+
+#[cfg(debug_assertions)]
+use std::{
+    sync::{atomic::{AtomicUsize, Ordering}, Mutex},
+    backtrace::Backtrace
+};
+
+#[cfg(debug_assertions)]
+use lazy_static::lazy_static;
+
+#[cfg(debug_assertions)]
+lazy_static! {
+    static ref BACKTRACES: Mutex<HashMap<usize, Backtrace>> = Mutex::new(HashMap::new());
+    static ref COUNTER: AtomicUsize = AtomicUsize::new(0);
+}
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
@@ -8,8 +26,16 @@ pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn arity(&self) -> &A;
     fn result_ty(&self) -> ResultTy;
 }
-pub trait ToKnownArity<'vir, T: 'vir, ResultTy>: CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy> + Sized {
-    fn to_known<'tcx, K: CallableIdent<'vir, KnownArityAny<'vir, T, N>, ResultTy>, const N: usize>(self) -> K {
+pub trait ToKnownArity<'vir, T: 'vir, ResultTy>:
+    CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy> + Sized
+{
+    fn to_known<
+        'tcx,
+        K: CallableIdent<'vir, KnownArityAny<'vir, T, N>, ResultTy>,
+        const N: usize,
+    >(
+        self,
+    ) -> K {
         K::new(
             self.name(),
             KnownArityAny::new(self.arity().args().try_into().unwrap()),
@@ -17,14 +43,33 @@ pub trait ToKnownArity<'vir, T: 'vir, ResultTy>: CallableIdent<'vir, UnknownArit
         )
     }
 }
-impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy>> ToKnownArity<'vir, T, ResultTy> for K {}
+impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, ResultTy>>
+    ToKnownArity<'vir, T, ResultTy> for K
+{
+}
 
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy)]
+pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, usize); // includes counter
+
+#[cfg(not(debug_assertions))]
 #[derive(Debug, Clone, Copy)]
 pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
+    #[cfg(not(debug_assertions))]
     fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
         Self(name, args, result_ty)
     }
+
+    #[cfg(debug_assertions)]
+    fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let backtrace = Backtrace::capture();
+        BACKTRACES.lock().unwrap().insert(id, backtrace);
+        Self(name, args, result_ty, id)
+    }
+
+
     fn name(&self) -> &'vir str {
         self.0
     }
@@ -33,6 +78,24 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<
     }
     fn result_ty(&self) -> Type<'vir> {
         self.2
+    }
+}
+
+impl <'vir, A: Arity<'vir, Arg=Type<'vir>>> FunctionIdent<'vir, A> {
+
+    #[cfg(debug_assertions)]
+    fn id(&self) -> usize {
+        self.3
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn as_unknown_arity(self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
+        FunctionIdent(self.name(), UnknownArity::new(self.1.args()), self.result_ty(), self.id())
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn as_unknown_arity(self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
+        FunctionIdent(self.name(), UnknownArity::new(self.1.args()), self.result_ty())
     }
 }
 
@@ -49,11 +112,11 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
         &self.1
     }
     fn result_ty(&self) -> () {
-       ()
+        ()
     }
 }
 
-impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
+impl<'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
         Self(name, args)
     }
@@ -76,9 +139,12 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A
     }
 }
 
-impl <'vir, A: Arity<'vir>> PredicateIdent<'vir, A> {
+impl<'vir, A: Arity<'vir, Arg=Type<'vir>>> PredicateIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
         Self(name, args)
+    }
+    pub fn as_unknown_arity(self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
+        PredicateIdent(self.0, UnknownArity::new(self.1.args()))
     }
 }
 
@@ -99,15 +165,16 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for DomainIdent<'vir, A> {
     }
 }
 
-impl <'vir> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>> {
+impl<'vir> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>> {
     pub fn nullary(name: &'vir str) -> Self {
         Self(name, KnownArityAny::new(&[]))
     }
 }
 
-pub type DomainIdentUnknownArity<'vir> = DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
+pub type DomainIdentUnknownArity<'vir> =
+    DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
 
-impl <'vir> DomainIdentUnknownArity<'vir> {
+impl<'vir> DomainIdentUnknownArity<'vir> {
     pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
         Self(name, args)
     }
@@ -134,18 +201,31 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
         &self.0
     }
     fn check_len_matches(&self, name: &str, len: usize) {
-        assert_eq!(self.0.len(), len, "{name} called with {len} args (expected {})", self.0.len());
+        assert_eq!(
+            self.0.len(),
+            len,
+            "{name} called with {len} args (expected {})",
+            self.0.len()
+        );
     }
 }
 
 trait CheckTypes<'vir> {
-    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]) -> HashMap<&'vir str, Type<'vir>>;
+    fn check_types<Curr: 'vir, Next: 'vir>(
+        &self,
+        name: &str,
+        args: &[ExprGen<'vir, Curr, Next>],
+    ) -> Option<HashMap<&'vir str, Type<'vir>>>;
 }
 
-fn unify<'vir>(substs: &mut HashMap<&'vir str, Type<'vir>>, param: &'vir str, ty: Type<'vir>) -> bool {
+fn unify<'vir>(
+    substs: &mut HashMap<&'vir str, Type<'vir>>,
+    param: &'vir str,
+    ty: Type<'vir>,
+) -> bool {
     match substs.get(param) {
         Some(s) => s == &ty,
-        None => substs.insert(param, ty) == None
+        None => substs.insert(param, ty) == None,
     }
 }
 
@@ -153,9 +233,9 @@ fn check<'vir>(substs: &mut TySubsts<'vir>, expected: Type<'vir>, actual: Type<'
     match (expected, actual) {
         (e, a) if e == a => true,
         (TypeData::Domain(n1, a1), TypeData::Domain(n2, a2)) => {
-            n1 == n2 &&
-            a1.len() == a2.len() &&
-            a1.iter().zip(a2.iter()).all(|(e, a)| check(substs, e, a))
+            n1 == n2
+                && a1.len() == a2.len()
+                && a1.iter().zip(a2.iter()).all(|(e, a)| check(substs, e, a))
         }
         (TypeData::DomainTypeParam(p), a) => unify(substs, p.name, a),
         _ => false,
@@ -163,20 +243,25 @@ fn check<'vir>(substs: &mut TySubsts<'vir>, expected: Type<'vir>, actual: Type<'
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
-    fn check_types<Curr: 'vir, Next: 'vir>(&self, name: &str, args: &[ExprGen<'vir, Curr, Next>]) -> TySubsts<'vir> {
+    fn check_types<Curr: 'vir, Next: 'vir>(
+        &self,
+        name: &str,
+        args: &[ExprGen<'vir, Curr, Next>],
+    ) -> Option<TySubsts<'vir>> {
         self.check_len_matches(name, args.len());
         let mut substs = TySubsts::new();
         for (arg, expected) in args.iter().zip(self.args().into_iter()) {
             let actual = arg.ty();
             if !check(&mut substs, expected, actual) {
-                panic!(
+                eprintln!(
                     "{name} expected arguments {:?} but got argument types {:?}",
                     self.args(),
                     args.iter().map(|a| a.ty()).collect::<Vec<_>>()
-                )
+                );
+                return None;
             }
         }
-        substs
+        Some(substs)
     }
 }
 
@@ -220,19 +305,31 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
-        args: [ExprGen<'vir, Curr, Next>; N]
-    ) -> ExprGen<'vir, Curr, Next>{
-        self.1.check_types(self.name(), &args);
-        vcx.mk_func_app(self.name(), &args, self.result_ty())
+        args: [ExprGen<'vir, Curr, Next>; N],
+    ) -> ExprGen<'vir, Curr, Next> {
+        if let Some(substs) = self.1.check_types(self.name(), &args) {
+            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
+            vcx.mk_func_app(self.name(), &args, result_ty)
+        } else {
+            #[cfg(not(debug_assertions))]
+            panic!("Function could not be applied");
+
+            #[cfg(debug_assertions)]
+            panic!(
+                "Function created at {} could not be applied",
+                BACKTRACES.lock().unwrap().get(&self.id()).unwrap()
+            );
+        }
     }
 }
+
 impl<'vir, const N: usize> PredicateIdent<'vir, KnownArity<'vir, N>> {
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
         args: [ExprGen<'vir, Curr, Next>; N],
         perm: Option<ExprGen<'vir, Curr, Next>>,
-    ) -> PredicateAppGen<'vir, Curr, Next>{
+    ) -> PredicateAppGen<'vir, Curr, Next> {
         self.1.check_types(self.name(), &args);
         vcx.alloc(PredicateAppGenData {
             target: self.name(),
@@ -245,8 +342,8 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
-        args: [ExprGen<'vir, Curr, Next>; N]
-    ) -> StmtGenData<'vir, Curr, Next>{
+        args: [ExprGen<'vir, Curr, Next>; N],
+    ) -> StmtGenData<'vir, Curr, Next> {
         self.1.check_types(self.name(), &args);
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
@@ -256,11 +353,7 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
     }
 }
 impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, N>> {
-    pub fn apply<'tcx>(
-        &self,
-        vcx: &'vir VirCtxt<'tcx>,
-        args: [Type<'vir>; N]
-    ) -> Type<'vir>{
+    pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: [Type<'vir>; N]) -> Type<'vir> {
         self.1.check_len_matches(self.name(), args.len());
         vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(&args)))
     }
@@ -269,14 +362,33 @@ impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData
 // Func arity checked at runtime
 
 impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
+    #[cfg(not(debug_assertions))]
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
-        args: &[ExprGen<'vir, Curr, Next>]
-    ) -> ExprGen<'vir, Curr, Next>{
-        let substs = self.1.check_types(self.name(), args);
+        args: &[ExprGen<'vir, Curr, Next>],
+    ) -> ExprGen<'vir, Curr, Next> {
+        eprintln!("OHNOOHNO");
+        let substs = self.1.check_types(self.name(), args).unwrap();
         let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
         vcx.mk_func_app(self.name(), args, result_ty)
+    }
+
+    #[cfg(debug_assertions)]
+    pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir VirCtxt<'tcx>,
+        args: &[ExprGen<'vir, Curr, Next>],
+    ) -> ExprGen<'vir, Curr, Next> {
+        if let Some(substs) = self.1.check_types(self.name(), args) {
+            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
+            vcx.mk_func_app(self.name(), args, result_ty)
+        } else {
+            panic!(
+                "Function created at {:?} could not be applied",
+                BACKTRACES.lock().unwrap().get(&self.id()).unwrap()
+            );
+        }
     }
 }
 
@@ -286,7 +398,7 @@ impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
         perm: Option<ExprGen<'vir, Curr, Next>>,
-    ) -> PredicateAppGen<'vir, Curr, Next>{
+    ) -> PredicateAppGen<'vir, Curr, Next> {
         self.1.check_types(self.name(), args);
         vcx.alloc(PredicateAppGenData {
             target: self.name(),
@@ -299,8 +411,8 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
-        args: &[ExprGen<'vir, Curr, Next>]
-    ) -> StmtGenData<'vir, Curr, Next>{
+        args: &[ExprGen<'vir, Curr, Next>],
+    ) -> StmtGenData<'vir, Curr, Next> {
         self.1.check_types(self.name(), args);
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
@@ -310,11 +422,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
     }
 }
 impl<'vir> DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>> {
-    pub fn apply<'tcx>(
-        &self,
-        vcx: &'vir VirCtxt<'tcx>,
-        args: &[Type<'vir>]
-    ) -> Type<'vir> {
+    pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: &[Type<'vir>]) -> Type<'vir> {
         self.1.check_len_matches(self.name(), args.len());
         vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(args)))
     }

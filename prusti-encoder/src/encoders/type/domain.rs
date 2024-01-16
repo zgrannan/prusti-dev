@@ -206,22 +206,15 @@ impl TaskEncoder for DomainEnc {
                 let specifics = enc.mk_struct_specifics(ty_params);
                 Ok((enc.finalize(), specifics))
             }
+            &TyKind::Param(param) => {
+                unreachable!("param ty: {param:?}")
+            },
             kind => todo!("{kind:?}"),
         })
     }
 }
 
 impl DomainEnc {
-
-    fn get_bit_width(tcx: ty::TyCtxt, ty: ty::Ty) -> u64 {
-        let pointer_size = tcx.data_layout.pointer_size.bits() as u32;
-        match ty.kind() {
-            // TODO: maybe we don't want to use the target architecture bit-width when verifying?
-            ty::TyKind::Int(ty) => ty.normalize(pointer_size).bit_width().unwrap(),
-            ty::TyKind::Uint(ty) => ty.normalize(pointer_size).bit_width().unwrap(),
-            kind => unreachable!("tried to get bit width of non-integer type {kind:?}"),
-        }
-    }
 
     pub fn expect_param(ty: ty::Ty) -> ty::ParamTy {
         match ty.kind() {
