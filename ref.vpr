@@ -1,0 +1,198 @@
+
+domain Type {
+    function i32(): Type
+    function implements_clone(Type): Bool
+    axiom {
+        implements_clone(i32())
+    }
+}
+
+domain s_Param {
+    function type(s_Param): Type
+}
+function p_Param_snap(self: Ref, t: Type): s_Param
+    requires p_Param(self, t)
+    ensures type(result) == t
+predicate p_Param(self: Ref, t: Type)
+
+method drop(x: Ref, t: Type)
+    requires p_Param(x, t)
+
+// impl Clone for i32
+// impl Into<u64> for u32
+
+/*
+fn foo(x: i32) { x.clone(); }
+*/
+
+// fn identity<T>(x: T) -> T where T: Clone
+// identity(x) = x.clone()
+method identity(x: Ref, t: Type) returns (r: Ref)
+    requires p_Param(x, t)
+    requires implements_clone(t)
+    ensures p_Param(r, t)
+    ensures old(p_Param_snap(x, t)) == p_Param_snap(r, t)
+{
+    r := x
+}
+
+// struct Foo<T>(T)
+domain s_Foo {
+    function s_Foo_cons(t: s_Param): s_Foo
+    function s_Foo_type(t: Type): Type
+
+    function s_Foo_typeof(s_Foo): Type
+
+    // axiom {
+    //     forall f: s_Foo ::
+    // }
+
+    axiom {
+        forall t: Type :: {implements_clone(s_Foo_type(t))} implements_clone(t) ==> implements_clone(s_Foo_type(t))
+    }
+}
+
+field p_Foo_val: Ref
+
+predicate p_Foo(self: Ref, t1: Type) {
+    acc(self.p_Foo_val) && p_Param(self.p_Foo_val, t1)
+}
+
+function p_Foo_snap(self: Ref, t1: Type): s_Foo
+    requires p_Foo(self, t1)
+{
+    unfolding p_Foo(self, t1) in
+        s_Foo_cons(p_Param_snap(self.p_Foo_val, t1))
+}
+
+
+
+// struct Holder<T, U, V> { tupl: (T, U), val: V }
+
+field p_Holder_tupl: Ref
+field p_Holder_val: Ref
+
+predicate p_Holder(self: Ref, t1: Type, t2: Type, t3: Type) {
+    acc(self.p_Holder_tupl)
+        && p_Tuple2(self.p_Holder_tupl, t1, t2)
+        && acc(self.p_Holder_val)
+        && p_Param(self.p_Holder_val, t3)
+}
+
+domain s_Holder {
+    function s_Holder_cons(tupl: s_Tuple2, val: s_Param): s_Holder
+    function s_Holder_type(t1: Type, t2: Type, t3: Type): Type
+}
+
+domain s_Tuple2 {
+    function s_Tuple2_cons(t1: s_Param, t2: s_Param): s_Tuple2
+    function s_Tuple2_type(t1: Type, t2: Type): Type
+}
+
+field p_Tuple2_fst: Ref
+field p_Tuple2_snd: Ref
+
+predicate p_Tuple2(self: Ref, t1: Type, t2: Type) {
+    acc(self.p_Tuple2_fst) && p_Param(self.p_Tuple2_fst, t1) &&
+    acc(self.p_Tuple2_snd) && p_Param(self.p_Tuple2_snd, t2)
+}
+
+function p_Tuple2_snap(self: Ref, t1: Type, t2: Type): s_Tuple2
+    requires p_Tuple2(self, t1, t2)
+{
+    unfolding p_Tuple2(self, t1, t2) in
+        s_Tuple2_cons(p_Param_snap(self.p_Tuple2_fst, t1), p_Param_snap(self.p_Tuple2_snd, t2))
+}
+
+function p_Holder_snap(self: Ref, t1: Type, t2: Type, t3: Type): s_Holder
+    requires p_Holder(self, t1, t2, t3)
+{
+    unfolding p_Holder(self, t1, t2, t3) in
+        s_Holder_cons(
+            p_Tuple2_snap(self.p_Holder_tupl, t1, t2),
+            p_Param_snap(self.p_Holder_val, t3)
+        )
+}
+
+// enum Enum<A,B> { Foo1(A, B), Foo2(A) }
+
+domain s_Enum {
+    function s_Enum_type(t1: Type, t2: Type): Type
+}
+
+predicate p_Enum_snap(self: Ref, t1: Type, t2: Type) {
+    acc(self.p_Enum_discr)
+        && (self.p_Enum_discr == 1 ==> acc(self.p_Enum_Foo1_val))
+        && (self.p_Enum_discr == 2 ==> acc(self.p_Enum_Foo2_val))
+}
+
+predicate p_Enum_Foo1(self: Ref, t1: Type)
+
+field p_Enum_discr: Int
+field p_Enum_Foo1_val: Ref
+field p_Enum_Foo2_val: Ref
+field p_Enum_Foo1_val_f1_val: Ref
+field p_Enum_Foo2_val_f1_val: Ref
+field p_Enum_Foo2_val_f2_val: Ref
+
+domain s_i32 {
+    function s_i32_cons(v: Int): s_i32
+    function s_i32_read(v: s_i32): Int
+
+    unique function s_i32_type(): Type
+    function s_i32_upcast(s_i32): s_Param
+    function s_i32_downcast(s_Param): s_i32
+    axiom {
+        forall s: s_i32 :: {s_i32_upcast(s)} s_i32_downcast(s_i32_upcast(s)) == s
+    }
+
+    axiom {
+        implements_clone(s_i32_type())
+    }
+}
+
+function p_i32_snap(self: Ref): s_i32
+    requires p_i32(self)
+{
+    unfolding p_i32(self) in self.val
+}
+field val: s_i32
+predicate p_i32(self: Ref) {
+    acc(self.val)
+}
+
+// TODO: rename, abstract/concretize
+method upcast_i32(self: Ref)
+    requires p_i32(self)
+    ensures p_Param(self, s_i32_type())
+    ensures p_Param_snap(self, s_i32_type()) == s_i32_upcast(old(p_i32_snap(self)))
+
+method downcast_i32(self: Ref)
+    requires p_Param(self, s_i32_type())
+    ensures p_i32(self)
+    ensures old(p_Param_snap(self, s_i32_type())) == s_i32_upcast(p_i32_snap(self))
+
+method drop_i32(x: Ref)
+requires p_i32(x){
+    // drop(x, s_i32_type())
+}
+
+/*
+  fn foo(x: i32) -> i32 {
+      identity(x)
+  }
+*/
+method foo(x: Ref)
+    requires p_i32(x)
+{
+
+    // let r = identity(x);
+    upcast_i32(x)
+    // p_Param_snap(x, s_i32_type()) == s_i32_upcast(old(p_i32_snap(x)))
+    var r: Ref
+    r := identity(x, s_i32_type())
+    // old(p_Param_snap(x, t)) == p_Param_snap(r, t)
+    downcast_i32(r)
+    // old(p_Param_snap(r, s_i32_type())) == s_i32_upcast(p_i32_snap(r))
+
+}

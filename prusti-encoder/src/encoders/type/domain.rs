@@ -12,7 +12,7 @@ use vir::{
 /// You probably never want to use this, use `SnapshotEnc` instead.
 /// Note: there should never be a dependency on `PredicateEnc` inside this
 /// encoder!
-pub(super) struct DomainEnc;
+pub struct DomainEnc;
 
 #[derive(Clone, Copy, Debug)]
 pub struct FieldFunctions<'vir> {
@@ -76,12 +76,15 @@ pub enum DomainEncSpecifics<'vir> {
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
+
+    /// Takes as input the generics for this type (if any),
+    /// and returns the resulting type. Used for generics
     pub type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::{
-    encoders::{generic::TYP_DOMAIN, GenericEnc, SnapshotEnc},
+    encoders::{generic::{TYP_DOMAIN, SNAPSHOT_PARAM_DOMAIN}, GenericEnc, SnapshotEnc},
     util::{extract_type_params, to_placeholder, MostGenericTy},
 };
 
@@ -272,17 +275,22 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .collect();
 
         let self_ty = domain.apply(vcx, []);
-        let type_function = FunctionIdent::new(
-            vir::vir_format!(vcx, "{base_name}_type"),
-            UnknownArity::new(
-                vcx.alloc_slice(
+        let type_function_args = vcx.alloc_slice(
                     &domain_params
                         .iter()
                         .map(|_| &TYP_DOMAIN)
                         .collect::<Vec<_>>()
                         .as_slice(),
-                ),
-            ),
+                );
+        let type_function_ident = FunctionIdent::new(
+            vir::vir_format!(vcx, "s_{base_name}_type"),
+            UnknownArity::new(type_function_args),
+            &TYP_DOMAIN
+        );
+        let type_function = vcx.mk_domain_function(
+            false,
+            type_function_ident.name(),
+            type_function_args,
             &TYP_DOMAIN
         );
         let self_local = vcx.mk_local("self", self_ty);
@@ -296,8 +304,8 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 self_ex,
                 self_decl,
                 axioms: Vec::new(),
-                functions: Vec::new(),
-                type_function,
+                functions: vec![type_function],
+                type_function: type_function_ident,
             },
             ty_params,
         )
@@ -316,7 +324,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
             .map(|ty| match *ty.kind() {
-                TyKind::Param(_) => &TYP_DOMAIN,
+                TyKind::Param(_) => &SNAPSHOT_PARAM_DOMAIN,
                 _ => SnapshotEnc::require_local(ty, deps).unwrap().snapshot,
             })
             .collect()

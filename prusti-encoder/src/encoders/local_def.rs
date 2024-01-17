@@ -29,11 +29,31 @@ pub struct TyOps<'vir> {
     pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
 }
 
-impl <'vir> TyOps<'vir> {
-    pub fn ref_to_args<'tcx>(&self, vcx: &'vir vir::VirCtxt<'tcx>, self_ref: vir::Expr<'vir>) -> &'vir [vir::Expr<'vir>] {
+impl <'vir> From<&PredicateEncOutputRef<'vir>> for TyOps<'vir> {
+    fn from(pred: &PredicateEncOutputRef<'vir>) -> Self {
+        TyOps {
+            generics: pred.generics,
+            ref_to_pred: pred.ref_to_pred,
+            ref_to_snap: pred.ref_to_snap,
+            snapshot: pred.snapshot,
+            method_assign: pred.method_assign,
+        }
+    }
+}
+
+impl <'vir> HasGenerics<'vir> for TyOps<'vir> {
+    fn generics(&self) -> &'vir [vir::LocalDecl<'vir>] {
+        self.generics
+    }
+}
+
+pub trait HasGenerics<'vir> {
+    fn generics(&self) -> &'vir [vir::LocalDecl<'vir>];
+
+    fn ref_to_args<'tcx>(&self, vcx: &'vir vir::VirCtxt<'tcx>, self_ref: vir::Expr<'vir>) -> &'vir [vir::Expr<'vir>] {
         assert!(self_ref.ty() == &TypeData::Ref);
         let mut args = vec![self_ref];
-        for g in self.generics.iter() {
+        for g in self.generics().iter() {
             args.push(vcx.mk_local_ex(g.name, g.ty));
         }
         vcx.alloc_slice(&args)
@@ -148,13 +168,6 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(vcx: &'vir vir::VirCtxt<'tcx>, ty: ty::Ty<'t
         };
     } else {
         let predicate_ref = PredicateEnc::require_ref(ty, deps).unwrap();
-        TyOps {
-            generics: predicate_ref.generics,
-            ref_to_pred: predicate_ref.ref_to_pred,
-            ref_to_snap: predicate_ref.ref_to_snap,
-            snapshot: predicate_ref.snapshot,
-            method_assign: predicate_ref.method_assign,
-        }
-
+        (&predicate_ref).into()
     }
 }

@@ -4,6 +4,8 @@ use vir::{
     KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent,
 };
 
+use super::{TyOps, predicate::mk_method_assign};
+
 pub struct GenericEnc;
 
 #[derive(Clone, Debug)]
@@ -21,12 +23,25 @@ pub struct GenericEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 
+impl<'vir> From<&GenericEncOutputRef<'vir>> for TyOps<'vir> {
+    fn from(output_ref: &GenericEncOutputRef<'vir>) -> Self {
+        TyOps {
+            generics: &[],
+            ref_to_pred: output_ref.ref_to_pred.as_unknown_arity(),
+            ref_to_snap: output_ref.ref_to_snap.as_unknown_arity(),
+            snapshot: &SNAPSHOT_PARAM_DOMAIN,
+            method_assign: output_ref.method_assign,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GenericEncOutput<'vir> {
     pub snapshot_param: vir::Domain<'vir>,
     pub ref_to_pred: vir::Predicate<'vir>,
     pub domain_type: vir::Domain<'vir>,
     pub ref_to_snap: vir::Function<'vir>,
+    pub method_assign: vir::Method<'vir>,
 }
 
 pub const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
@@ -72,22 +87,36 @@ impl TaskEncoder for GenericEnc {
             "assign_p_Param",
             BinaryArity::new(&[&TypeData::Ref, &SNAPSHOT_PARAM_DOMAIN]),
         );
+
+
+        let output_ref = GenericEncOutputRef {
+            snapshot_param_name: "s_Param",
+            ref_to_pred,
+            domain_type_name: type_domain_ident,
+            ref_to_snap,
+            method_assign
+        };
         deps.emit_output_ref::<Self>(
             *task_key,
-            GenericEncOutputRef {
-                snapshot_param_name: "s_Param",
-                ref_to_pred,
-                domain_type_name: type_domain_ident,
-                ref_to_snap,
-                method_assign
-            },
+            output_ref
         );
+
         let typ = FunctionIdent::new(
             "typ",
             UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]),
             &TYP_DOMAIN,
         );
+
+
         vir::with_vcx(|vcx| {
+            let ty_ops: TyOps<'vir> = TyOps {
+                generics: vcx.alloc_slice(&[vcx.mk_local_decl("t", &TYP_DOMAIN)]),
+                ref_to_pred: ref_to_pred.as_unknown_arity(),
+                ref_to_snap: ref_to_snap.as_unknown_arity(),
+                snapshot: &SNAPSHOT_PARAM_DOMAIN,
+                method_assign: method_assign,
+            };
+            let method_assign = mk_method_assign(vcx, &ty_ops);
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
             let ref_to_snap = vcx.mk_function(
                 "p_Param_snap",
@@ -107,6 +136,7 @@ impl TaskEncoder for GenericEnc {
             );
             Ok((
                 GenericEncOutput {
+                    method_assign,
                     snapshot_param: vir::vir_domain! { vcx; domain s_Param {
                             function typ(s_Param): Type;
                         }

@@ -362,19 +362,6 @@ impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData
 // Func arity checked at runtime
 
 impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
-    #[cfg(not(debug_assertions))]
-    pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir VirCtxt<'tcx>,
-        args: &[ExprGen<'vir, Curr, Next>],
-    ) -> ExprGen<'vir, Curr, Next> {
-        eprintln!("OHNOOHNO");
-        let substs = self.1.check_types(self.name(), args).unwrap();
-        let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
-        vcx.mk_func_app(self.name(), args, result_ty)
-    }
-
-    #[cfg(debug_assertions)]
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,
@@ -384,10 +371,14 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
             vcx.mk_func_app(self.name(), args, result_ty)
         } else {
+            #[cfg(debug_assertions)]
             panic!(
-                "Function created at {:?} could not be applied",
+                "Function created at {} could not be applied",
                 BACKTRACES.lock().unwrap().get(&self.id()).unwrap()
             );
+
+            #[cfg(not(debug_assertions))]
+            panic!("Function could not be applied");
         }
     }
 }
