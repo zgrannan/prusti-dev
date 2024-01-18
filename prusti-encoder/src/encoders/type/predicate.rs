@@ -4,10 +4,9 @@ use prusti_rustc_interface::{
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
 use vir::{
-    BinaryArity, CallableIdent, FunctionIdent, MethodIdent, NullaryArity, PredicateIdent,
-    UnaryArity, UnknownArity, VirCtxt, TypeData,
+    add_debug_note, BinaryArity, CallableIdent, FunctionIdent, MethodIdent, NullaryArity,
+    PredicateIdent, TypeData, UnaryArity, UnknownArity, VirCtxt,
 };
-use vir::add_debug_note;
 
 /// Takes a Rust `Ty` and returns various Viper predicates and functions for
 /// working with the type.
@@ -54,7 +53,7 @@ pub enum PredicateEncData<'vir> {
     // structs, tuples
     StructLike(PredicateEncDataStruct<'vir>),
     EnumLike(Option<PredicateEncDataEnum<'vir>>),
-    Ref(PredicateEncDataRef<'vir>)
+    Ref(PredicateEncDataRef<'vir>),
 }
 
 // TODO: should output refs actually be references to structs...?
@@ -78,7 +77,11 @@ pub struct PredicateEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for PredicateEncOutputRef<'vir> {}
 
 impl<'vir> PredicateEncOutputRef<'vir> {
-    pub fn ref_to_args<'tcx>(&self, vcx: &'vir vir::VirCtxt<'tcx>, self_ref: vir::Expr<'vir>) -> &'vir [vir::Expr<'vir>] {
+    pub fn ref_to_args<'tcx>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        self_ref: vir::Expr<'vir>,
+    ) -> &'vir [vir::Expr<'vir>] {
         let ops: TyOps<'vir> = self.into();
         ops.ref_to_args(vcx, self_ref)
     }
@@ -166,7 +169,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::{
     encoders::{
         generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
-        get_ty_ops, GenericEnc, TyOps, HasGenerics, require_ref_for_ty,
+        get_ty_ops, require_ref_for_ty, GenericEnc, HasGenerics, TyOps,
     },
     util::{extract_type_params, MostGenericTy},
 };
@@ -328,12 +331,16 @@ struct PredicateEncValues<'vir, 'tcx> {
     /// self: Ref
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
 
+    /// input decls for ref_to_snap, ref_to_pred
+    /// i.e. self_decl + generics
+    ref_to_decls: &'vir [vir::LocalDecl<'vir>],
+
     fields: Vec<vir::Field<'vir>>,
     predicates: Vec<vir::Predicate<'vir>>,
     ref_to_field_refs: Vec<vir::Function<'vir>>,
 }
 
-impl <'vir, 'tcx> From<&PredicateEncValues<'vir, 'tcx>> for TyOps<'vir> {
+impl<'vir, 'tcx> From<&PredicateEncValues<'vir, 'tcx>> for TyOps<'vir> {
     fn from(pred: &PredicateEncValues<'vir, 'tcx>) -> Self {
         TyOps {
             generics: pred.generics,
@@ -343,7 +350,6 @@ impl <'vir, 'tcx> From<&PredicateEncValues<'vir, 'tcx>> for TyOps<'vir> {
             method_assign: pred.method_assign,
         }
     }
-
 }
 
 impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
@@ -359,20 +365,22 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             .iter()
             .map(|g| vcx.mk_local_decl(g, &TYP_DOMAIN))
             .collect();
-        let mut ref_to_pred_args = vec![self_ex];
-        for g in generic_decls.iter() {
-            ref_to_pred_args.push(vcx.mk_local_ex(g.name, g.ty));
-        }
-        let ref_to_pred_arg_types: Vec<_> = ref_to_pred_args.iter().map(|e| e.kind.ty()).collect();
-        let ref_to_args = vir::UnknownArity::new(vcx.alloc_slice(&ref_to_pred_arg_types));
+        let mut ref_to_decls = vec![vcx.mk_local_decl("self", &vir::TypeData::Ref)];
+        ref_to_decls.extend(generic_decls.iter());
+        let ref_to_arg_tys = vir::UnknownArity::new(
+            vcx.alloc_slice(&ref_to_decls.iter().map(|d| d.ty).collect::<Vec<_>>()),
+        );
         let ref_to_pred =
-            vir::PredicateIdent::new(vir::vir_format!(vcx, "p_{base_name}"), ref_to_args);
+            vir::PredicateIdent::new(vir::vir_format!(vcx, "p_{base_name}"), ref_to_arg_tys);
         let ref_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_snap", ref_to_pred.name()),
-            ref_to_args,
+            ref_to_arg_tys,
             snap_inst,
         );
-        add_debug_note!(ref_to_snap.debug_info(), format!("At this time generics were {generics:?}"));
+        add_debug_note!(
+            ref_to_snap.debug_info(),
+            format!("At this time generics were {generics:?}")
+        );
         let unreachable_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
             NullaryArity::new(vcx.alloc_array(&[])),
@@ -386,7 +394,11 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
             UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
         );
-        let self_pred_read = ref_to_pred.apply(vcx, &ref_to_pred_args, Some(vcx.mk_wildcard()));
+        let ref_to_args = ref_to_decls
+            .iter()
+            .map(|d| vcx.mk_local_ex(d.name, d.ty))
+            .collect::<Vec<_>>();
+        let self_pred_read = ref_to_pred.apply(vcx, &ref_to_args, Some(vcx.mk_wildcard()));
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl("self", &vir::TypeData::Ref)]);
         Self {
             vcx,
@@ -400,6 +412,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self_ex,
             self_pred_read,
             self_decl,
+            ref_to_decls: vcx.alloc_slice(&ref_to_decls),
             fields: Vec::new(),
             predicates: Vec::new(),
             ref_to_field_refs: Vec::new(),
@@ -558,7 +571,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         self.predicates.push(self.vcx.mk_predicate(
             predicate.unwrap_or(self.ref_to_pred).name(),
-            self.self_decl,
+            self.ref_to_decls,
             Some(expr),
         ));
 
@@ -591,17 +604,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let self_field = self.vcx.mk_field_expr(self.self_ex, field);
         let fn_snap_body = self.vcx.mk_unfolding_expr(self.self_pred_read, self_field);
         self.finalize(deps, ty, Some(fn_snap_body))
-    }
-    pub fn mk_param(
-        mut self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
-    ) -> PredicateEncOutput<'vir> {
-        self.predicates.push(
-            self.vcx
-                .mk_predicate(self.ref_to_pred.name(), self.self_decl, None),
-        );
-        self.finalize(deps, ty, None)
     }
 
     pub fn mk_struct(
@@ -735,9 +737,11 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         ty: &MostGenericTy<'tcx>,
         fn_snap_body: Option<vir::Expr<'vir>>,
     ) -> PredicateEncOutput<'vir> {
+        let mut ref_to_args = vec![self.self_decl[0]];
+        ref_to_args.extend_from_slice(self.generics);
         let function_snap = self.vcx.mk_function(
             self.ref_to_snap.name(),
-            self.self_decl,
+            self.vcx.alloc_slice(&ref_to_args),
             self.snap_inst,
             self.vcx
                 .alloc_slice(&[self.vcx.mk_predicate_app_expr(self.self_pred_read)]),
@@ -761,10 +765,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             .mk_predicate_app_expr(self.ref_to_pred.apply(self.vcx, &self_args, None));
 
         // method_assign
-        let method_assign = mk_method_assign(
-            self.vcx,
-            &(&self).into()
-        );
+        let method_assign = mk_method_assign(self.vcx, &(&self).into());
 
         // method_upcast
         let param_predicate = deps.require_ref::<GenericEnc>(()).unwrap().ref_to_pred;
@@ -832,8 +833,7 @@ pub fn mk_method_assign<'vir, 'tcx>(
     let self_new_local = vcx.mk_local_decl("self_new", ops.snapshot);
 
     let ref_to_args = ops.ref_to_args(vcx, self_ex);
-    let self_pred_app = vcx
-        .mk_predicate_app_expr(ops.ref_to_pred.apply(vcx, ref_to_args, None));
+    let self_pred_app = vcx.mk_predicate_app_expr(ops.ref_to_pred.apply(vcx, ref_to_args, None));
 
     let mut assign_args = vec![self_local];
     assign_args.extend_from_slice(ops.generics);
@@ -847,7 +847,14 @@ pub fn mk_method_assign<'vir, 'tcx>(
             vcx.mk_local_ex(self_new_local.name, ops.snapshot),
         ),
     ]);
-    vcx.mk_method(ops.method_assign.name(), &assign_args, &[], &[], posts, None)
+    vcx.mk_method(
+        ops.method_assign.name(),
+        &assign_args,
+        &[],
+        &[],
+        posts,
+        None,
+    )
 }
 
 struct FieldApp<'vir> {

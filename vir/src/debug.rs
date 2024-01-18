@@ -1,13 +1,14 @@
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
-use crate::data::*;
-use crate::gendata::*;
+use crate::{data::*, gendata::*};
 
 fn fmt_comma_sep_display<T: Display>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
     els.iter()
         .enumerate()
         .map(|(idx, el)| {
-            if idx > 0 { write!(f, ", ")? }
+            if idx > 0 {
+                write!(f, ", ")?
+            }
             el.fmt(f)
         })
         .collect::<FmtResult>()
@@ -16,7 +17,9 @@ fn fmt_comma_sep<T: Debug>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
     els.iter()
         .enumerate()
         .map(|(idx, el)| {
-            if idx > 0 { write!(f, ", ")? }
+            if idx > 0 {
+                write!(f, ", ")?
+            }
             el.fmt(f)
         })
         .collect::<FmtResult>()
@@ -32,10 +35,7 @@ fn fmt_comma_sep_lines<T: Debug>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult 
     Ok(())
 }
 fn indent(s: String) -> String {
-    s
-        .split("\n")
-        .intersperse("\n  ")
-        .collect::<String>()
+    s.split("\n").intersperse("\n  ").collect::<String>()
 }
 
 impl<'vir, Curr, Next> Debug for AccFieldGenData<'vir, Curr, Next> {
@@ -52,19 +52,23 @@ impl<'vir, Curr, Next> Debug for BinOpGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "(")?;
         self.lhs.fmt(f)?;
-        write!(f, ") {} (", match self.kind {
-            BinOpKind::CmpEq => "==",
-            BinOpKind::CmpNe => "!=",
-            BinOpKind::CmpGt => ">",
-            BinOpKind::CmpGe => ">=",
-            BinOpKind::CmpLt => "<",
-            BinOpKind::CmpLe => "<=",
-            BinOpKind::And => "&&",
-            BinOpKind::Or => "||",
-            BinOpKind::Add => "+",
-            BinOpKind::Sub => "-",
-            BinOpKind::Mod => "%",
-        })?;
+        write!(
+            f,
+            ") {} (",
+            match self.kind {
+                BinOpKind::CmpEq => "==",
+                BinOpKind::CmpNe => "!=",
+                BinOpKind::CmpGt => ">",
+                BinOpKind::CmpGe => ">=",
+                BinOpKind::CmpLt => "<",
+                BinOpKind::CmpLe => "<=",
+                BinOpKind::And => "&&",
+                BinOpKind::Or => "||",
+                BinOpKind::Add => "+",
+                BinOpKind::Sub => "-",
+                BinOpKind::Mod => "%",
+            }
+        )?;
         self.rhs.fmt(f)?;
         write!(f, ")")
     }
@@ -100,8 +104,14 @@ impl<'vir, Curr, Next> Debug for DomainGenData<'vir, Curr, Next> {
             write!(f, "]")?;
         }
         writeln!(f, " {{")?;
-        self.axioms.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
-        self.functions.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
+        self.axioms
+            .iter()
+            .map(|el| el.fmt(f))
+            .collect::<FmtResult>()?;
+        self.functions
+            .iter()
+            .map(|el| el.fmt(f))
+            .collect::<FmtResult>()?;
         writeln!(f, "}}")
     }
 }
@@ -190,8 +200,14 @@ impl<'vir, Curr, Next> Debug for FunctionGenData<'vir, Curr, Next> {
         writeln!(f, "function {}(", self.name)?;
         fmt_comma_sep_lines(f, &self.args)?;
         writeln!(f, "): {:?}", self.ret)?;
-        self.pres.iter().map(|el| writeln!(f, "  requires {:?}", el)).collect::<FmtResult>()?;
-        self.posts.iter().map(|el| writeln!(f, "  ensures {:?}", el)).collect::<FmtResult>()?;
+        self.pres
+            .iter()
+            .map(|el| writeln!(f, "  requires {:?}", el))
+            .collect::<FmtResult>()?;
+        self.posts
+            .iter()
+            .map(|el| writeln!(f, "  ensures {:?}", el))
+            .collect::<FmtResult>()?;
         if let Some(expr) = self.expr {
             write!(f, "{{\n  ")?;
             expr.fmt(f)?;
@@ -238,8 +254,14 @@ impl<'vir, Curr, Next> Debug for MethodGenData<'vir, Curr, Next> {
         } else {
             writeln!(f, ")")?;
         }
-        self.pres.iter().map(|el| writeln!(f, "  requires {:?}", el)).collect::<FmtResult>()?;
-        self.posts.iter().map(|el| writeln!(f, "  ensures {:?}", el)).collect::<FmtResult>()?;
+        self.pres
+            .iter()
+            .map(|el| writeln!(f, "  requires {:?}", el))
+            .collect::<FmtResult>()?;
+        self.posts
+            .iter()
+            .map(|el| writeln!(f, "  ensures {:?}", el))
+            .collect::<FmtResult>()?;
         if let Some(blocks) = self.blocks.as_ref() {
             writeln!(f, "{{")?;
             for block in blocks.iter() {
@@ -263,7 +285,8 @@ impl<'vir, Curr, Next> Debug for PredicateGenData<'vir, Curr, Next> {
         if let Some(expr) = self.expr {
             write!(f, " {{\n  ")?;
             expr.fmt(f)?;
-            writeln!(f, "\n}}")
+            writeln!(f, "\n}}")?;
+            writeln!(f, "{}", expr.debug_info.to_debug_comment())
         } else {
             writeln!(f, "")
         }
@@ -295,11 +318,7 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
                 }
                 Ok(())
             }
-            Self::PureAssign(data) => write!(f, "{:?} := {:?} /*\n {}\n */",
-                data.lhs,
-                data.rhs,
-                data.rhs.debug_info.to_debug_string()
-            ),
+            Self::PureAssign(data) => write!(f, "{:?} := {:?}", data.lhs, data.rhs,),
             Self::Inhale(data) => write!(f, "inhale {:?}", data),
             Self::Exhale(data) => write!(f, "exhale {:?}", data),
             Self::Unfold(data) => write!(f, "unfold {:?}", data),
@@ -311,7 +330,11 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
                 }
                 write!(f, "{}(", data.method)?;
                 fmt_comma_sep(f, &data.args)?;
-                write!(f, ")")
+                write!(f, ")")?;
+                for arg in data.args {
+                    write!(f, "{}", arg.debug_info.to_debug_comment())?
+                }
+                Ok(())
             }
             Self::Comment(info) => write!(f, "// {}", info),
             Self::Dummy(info) => write!(f, "// {}", info),
@@ -378,7 +401,7 @@ impl<'vir> Debug for TypeData<'vir> {
             Self::Ref => write!(f, "Ref"),
             Self::Perm => write!(f, "Perm"),
             Self::Predicate => write!(f, "Predicate"),
-            Self::Unsupported(u) => u.fmt(f)
+            Self::Unsupported(u) => u.fmt(f),
         }
     }
 }
@@ -397,10 +420,15 @@ impl<'vir> Display for DomainParamData<'vir> {
 
 impl<'vir, Curr, Next> Debug for UnOpGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}({:?})", match self.kind {
-            UnOpKind::Neg => "-",
-            UnOpKind::Not => "!",
-        }, self.expr)
+        write!(
+            f,
+            "{}({:?})",
+            match self.kind {
+                UnOpKind::Neg => "-",
+                UnOpKind::Not => "!",
+            },
+            self.expr
+        )
     }
 }
 

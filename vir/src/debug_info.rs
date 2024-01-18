@@ -36,14 +36,14 @@ impl DebugInfoData {
 }
 
 #[cfg(debug_assertions)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DebugInfo(usize);
 
 #[cfg(debug_assertions)]
 pub const DEBUGINFO_NONE: DebugInfo = DebugInfo(usize::MAX);
 
 #[cfg(not(debug_assertions))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DebugInfo(());
 
 #[cfg(not(debug_assertions))]
@@ -66,6 +66,11 @@ macro_rules! add_debug_note {
 }
 
 impl DebugInfo {
+
+    pub fn to_debug_comment(&self) -> String {
+        format!("/*\n{}\n*/", self.to_debug_string())
+    }
+
     #[cfg(debug_assertions)]
     pub fn new() -> DebugInfo {
         let id = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -76,6 +81,9 @@ impl DebugInfo {
 
     #[cfg(debug_assertions)]
     pub fn to_debug_string(&self) -> String {
+        if self == &DEBUGINFO_NONE {
+            return String::from("Entity not created with debug info");
+        }
         let map = DEBUG_DATA.lock().unwrap();
         let data = map.get(&self.0).unwrap();
         format!("Notes: {:?}\n\nBacktrace:{}", data.debug_notes, data.backtrace)

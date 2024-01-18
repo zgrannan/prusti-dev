@@ -358,9 +358,9 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     let place_ty_out = get_ty_ops(self.vcx, place_ty.ty, self.deps);
 
                     let ref_p = self.encode_place(place);
-                    let args = place_ty_out.ref_to_args(self.vcx, ref_p);
+                    let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);
                     self.stmt(self.vcx.mk_exhale_stmt(self.vcx.mk_predicate_app_expr(
-                        place_ty_out.ref_to_pred.apply(self.vcx, args, None),
+                        place_ty_out.ref_to_pred.apply(self.vcx, &args, None),
                     )));
                 }
                 unsupported_op => panic!("unsupported repack op: {unsupported_op:?}"),
@@ -396,37 +396,24 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             &mir::Operand::Move(source) => {
                 let ty_out = get_ty_ops(self.vcx, ty, self.deps);
                 let place_exp = self.encode_place(Place::from(source));
-                let (_, arg_tys) = extract_type_params(self.vcx.tcx, ty);
-                eprintln!("arg_tys for {ty:?}: {:?}", arg_tys);
-                let mut args = vec![place_exp];
-
-                if matches!(ty.kind(), ty::TyKind::Param(_)) {
-                    // This is a type parameter, so the snapshot encoding must
-                    // include the relevant type
-                    // TODO: Currently we rely on assuming that the value for this
-                    //       is a parameter in scope...
-                    args.push(get_viper_type_value(self.vcx, self.deps, ty));
-                } else {
-                    for arg in arg_tys {
-                        args.push(get_viper_type_value(self.vcx, self.deps, arg))
-                    }
-                }
+                let args = ref_to_args(self.vcx, place_exp, ty, self.deps);
                 let snap_val = ty_out.ref_to_snap.apply(self.vcx, &args);
 
                 let tmp_exp = self.new_tmp(ty_out.snapshot).1;
                 self.stmt(self.vcx.mk_pure_assign_stmt(tmp_exp, snap_val));
                 self.stmt(
-                    self.vcx.mk_exhale_stmt(
-                        self.vcx
-                            .mk_predicate_app_expr(ty_out.ref_to_pred.apply(self.vcx, &args, None)),
-                    ),
+                    self.vcx
+                        .mk_exhale_stmt(self.vcx.mk_predicate_app_expr(
+                            ty_out.ref_to_pred.apply(self.vcx, &args, None),
+                        )),
                 );
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
                 let ty_out = get_ty_ops(self.vcx, ty, self.deps);
-                let args = ty_out.ref_to_args(self.vcx, self.encode_place(Place::from(source)));
-                ty_out.ref_to_snap.apply(self.vcx, args)
+                let viper_ref =  self.encode_place(Place::from(source));
+                let args = ref_to_args(self.vcx, viper_ref, ty, self.deps);
+                ty_out.ref_to_snap.apply(self.vcx, &args)
             }
             mir::Operand::Constant(box constant) => self
                 .deps
@@ -945,4 +932,27 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
         };
         assert!(self.current_terminator.replace(terminator).is_none());
     }
+}
+
+fn ref_to_args<'vir, 'tcx>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    viper_ref: vir::Expr<'vir>,
+    ty: ty::Ty<'tcx>,
+    deps: &mut TaskEncoderDependencies<'vir>,
+) -> Vec<vir::Expr<'vir>> {
+    let mut args = vec![viper_ref];
+
+    if matches!(ty.kind(), ty::TyKind::Param(_)) {
+        // This is a type parameter, so the snapshot encoding must
+        // include the relevant type
+        // TODO: Currently we rely on assuming that the value for this
+        //       is a parameter in scope...
+        args.push(get_viper_type_value(vcx, deps, ty));
+    } else {
+        let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
+        for arg in arg_tys {
+            args.push(get_viper_type_value(vcx, deps, arg))
+        }
+    }
+    args
 }
