@@ -5,12 +5,6 @@ use crate::{
 use sealed::sealed;
 use std::collections::HashMap;
 
-#[cfg(debug_assertions)]
-use std::{
-    sync::{atomic::{AtomicUsize, Ordering}, Mutex},
-    backtrace::Backtrace
-};
-
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
     fn name(&self) -> &'vir str;

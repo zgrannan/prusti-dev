@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::data::*;
+use crate::debug_info::DEBUGINFO_NONE;
 use crate::debug_info::DebugInfo;
 use crate::genrefs::*;
 use crate::refs::*;
@@ -106,12 +107,6 @@ pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>{
 }
 
 impl <'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
-    pub const fn new_const(kind: ExprKindGen<'vir, Curr, Next>) -> Self {
-        ExprGenData {
-            kind,
-            debug_info: DebugInfo::none()
-        }
-    }
     pub fn new(kind: ExprKindGen<'vir, Curr, Next>) -> Self {
         ExprGenData {
             kind,

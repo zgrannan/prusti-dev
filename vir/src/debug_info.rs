@@ -9,20 +9,31 @@ use std::{
 };
 
 #[cfg(debug_assertions)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DebugInfo(usize);
+
+#[cfg(not(debug_assertions))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DebugInfo(());
+
+#[cfg(debug_assertions)]
 lazy_static! {
+    // TODO: make different CFG flag
+    // TODO: put into vir arena
+    // TODO: could be a vec
     static ref DEBUG_DATA: Mutex<HashMap<usize, DebugInfoData>> = Mutex::new(HashMap::new());
     static ref COUNTER: AtomicUsize = AtomicUsize::new(0);
 }
 
 #[cfg(debug_assertions)]
-pub struct DebugInfoData {
+struct DebugInfoData {
     pub backtrace: Backtrace,
     pub debug_notes: Vec<String>
 }
 
 #[cfg(debug_assertions)]
 impl DebugInfoData {
-    pub fn new() -> DebugInfoData {
+    fn new() -> DebugInfoData {
         let backtrace = Backtrace::capture();
         DebugInfoData {
             backtrace,
@@ -30,46 +41,19 @@ impl DebugInfoData {
         }
     }
 
-    pub fn add_debug_note<S: Into<String>>(&mut self, note: S) {
-        self.debug_notes.push(note.into());
+    fn add_debug_note(&mut self, note: String) {
+        self.debug_notes.push(note);
     }
 }
-
-#[cfg(debug_assertions)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DebugInfo(usize);
 
 #[cfg(debug_assertions)]
 pub const DEBUGINFO_NONE: DebugInfo = DebugInfo(usize::MAX);
 
 #[cfg(not(debug_assertions))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DebugInfo(());
-
-#[cfg(not(debug_assertions))]
 pub const DEBUGINFO_NONE: DebugInfo = DebugInfo(());
-
-#[cfg(not(debug_assertions))]
-#[macro_export]
-macro_rules! add_debug_info {
-    ($debug_info:expr, $msg: expr) => {
-        ()
-    };
-}
-
-#[cfg(debug_assertions)]
-#[macro_export]
-macro_rules! add_debug_note {
-    ($debug_info:expr, $msg: expr) => {
-        $debug_info.add_debug_note($msg)
-    };
-}
 
 impl DebugInfo {
 
-    pub fn to_debug_comment(&self) -> String {
-        format!("/*\n{}\n*/", self.to_debug_string())
-    }
 
     #[cfg(debug_assertions)]
     pub fn new() -> DebugInfo {
@@ -77,6 +61,11 @@ impl DebugInfo {
         let data = DebugInfoData::new();
         DEBUG_DATA.lock().unwrap().insert(id, data);
         DebugInfo(id)
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub fn new() -> DebugInfo {
+        DebugInfo(())
     }
 
     #[cfg(debug_assertions)]
@@ -89,30 +78,36 @@ impl DebugInfo {
         format!("Notes: {:?}\n\nBacktrace:{}", data.debug_notes, data.backtrace)
     }
 
-    #[cfg(debug_assertions)]
-    pub fn add_debug_note(&self, note: String) {
-        let mut map = DEBUG_DATA.lock().unwrap();
-        let data = map.get_mut(&self.0).unwrap();
-        data.add_debug_note(note);
-    }
-
-    #[cfg(debug_assertions)]
-    pub const fn none() -> DebugInfo {
-        DebugInfo(usize::MAX)
-    }
-
-    #[cfg(not(debug_assertions))]
-    pub fn new() -> DebugInfo {
-        DebugInfo(())
-    }
-
     #[cfg(not(debug_assertions))]
     pub fn to_debug_string(&self) -> String {
         String::from("No debug info collected. Rebuild with debug assertions enabled.")
     }
 
-    #[cfg(not(debug_assertions))]
-    pub const fn none() -> DebugInfo {
-        DebugInfo(())
+    pub fn to_debug_comment(&self) -> String {
+        format!("/*\n{}\n*/", self.to_debug_string())
     }
+
+    #[cfg(debug_assertions)]
+    pub fn add_debug_note_never_call_this_function_directly(&self, note: String) {
+        let mut map = DEBUG_DATA.lock().unwrap();
+        let data = map.get_mut(&self.0).unwrap();
+        data.add_debug_note(note);
+    }
+}
+
+// TODO: format as part of macro
+#[cfg(debug_assertions)]
+#[macro_export]
+macro_rules! add_debug_note {
+    ($debug_info:expr, $msg: expr) => {
+        $debug_info.add_debug_note_never_call_this_function_directly($msg)
+    };
+}
+
+#[cfg(not(debug_assertions))]
+#[macro_export]
+macro_rules! add_debug_info {
+    ($debug_info:expr, $msg: expr) => {
+        ()
+    };
 }

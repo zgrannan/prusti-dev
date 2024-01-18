@@ -285,8 +285,7 @@ impl<'vir, Curr, Next> Debug for PredicateGenData<'vir, Curr, Next> {
         if let Some(expr) = self.expr {
             write!(f, " {{\n  ")?;
             expr.fmt(f)?;
-            writeln!(f, "\n}}")?;
-            writeln!(f, "{}", expr.debug_info.to_debug_comment())
+            writeln!(f, "\n}}")
         } else {
             writeln!(f, "")
         }
@@ -330,11 +329,7 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
                 }
                 write!(f, "{}(", data.method)?;
                 fmt_comma_sep(f, &data.args)?;
-                write!(f, ")")?;
-                for arg in data.args {
-                    write!(f, "{}", arg.debug_info.to_debug_comment())?
-                }
-                Ok(())
+                write!(f, ")")
             }
             Self::Comment(info) => write!(f, "// {}", info),
             Self::Dummy(info) => write!(f, "// {}", info),
