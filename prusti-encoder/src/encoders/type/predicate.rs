@@ -77,14 +77,6 @@ pub struct PredicateEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for PredicateEncOutputRef<'vir> {}
 
 impl<'vir> PredicateEncOutputRef<'vir> {
-    pub fn ref_to_args<'tcx>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        self_ref: vir::Expr<'vir>,
-    ) -> &'vir [vir::Expr<'vir>] {
-        let ops: TyOps<'vir> = self.into();
-        ops.ref_to_args(vcx, self_ref)
-    }
     pub fn expect_prim(&self) -> DomainDataPrim<'vir> {
         match self.specifics {
             PredicateEncData::Primitive(prim) => prim,
@@ -169,7 +161,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::{
     encoders::{
         generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
-        get_ty_ops, require_ref_for_ty, GenericEnc, HasGenerics, TyOps,
+        get_ty_ops, require_ref_for_ty, GenericEnc, TyOps,
     },
     util::{extract_type_params, MostGenericTy},
 };
@@ -342,8 +334,15 @@ struct PredicateEncValues<'vir, 'tcx> {
 
 impl<'vir, 'tcx> From<&PredicateEncValues<'vir, 'tcx>> for TyOps<'vir> {
     fn from(pred: &PredicateEncValues<'vir, 'tcx>) -> Self {
+        let ty_params = pred
+            .generics
+            .iter()
+            .map(|g| (*g).into())
+            .collect::<Vec<_>>();
+
+        let ty_params = pred.vcx.alloc_slice(&ty_params);
         TyOps {
-            generics: pred.generics,
+            ty_params,
             ref_to_pred: pred.ref_to_pred,
             ref_to_snap: pred.ref_to_snap,
             snapshot: pred.snap_inst,
@@ -547,15 +546,12 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             .enumerate()
             .map(|(idx, f)| {
                 let self_field = field_fns[idx].apply(self.vcx, [self.self_ex]);
-                let mut args = vec![self_field];
-                for g in f.generics.iter() {
-                    args.push(self.vcx.mk_local_ex(g.name, g.ty));
-                }
+                let args = f.ref_to_args(self.vcx, self_field);
                 FieldApp {
                     self_field_pred: self
                         .vcx
-                        .mk_predicate_app_expr(f.ref_to_pred.apply(self.vcx, &args, None)),
-                    self_field_snap: f.ref_to_snap.apply(self.vcx, &args),
+                        .mk_predicate_app_expr(f.ref_to_pred.apply(self.vcx, args, None)),
+                    self_field_snap: f.ref_to_snap.apply(self.vcx, args),
                 }
             })
             .collect()
@@ -836,7 +832,7 @@ pub fn mk_method_assign<'vir, 'tcx>(
     let self_pred_app = vcx.mk_predicate_app_expr(ops.ref_to_pred.apply(vcx, ref_to_args, None));
 
     let mut assign_args = vec![self_local];
-    assign_args.extend_from_slice(ops.generics);
+    assign_args.extend(ops.generics());
     assign_args.push(self_new_local);
     let assign_args = vcx.alloc_slice(&assign_args);
 

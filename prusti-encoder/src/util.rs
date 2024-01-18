@@ -4,7 +4,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use crate::encoders::{domain::DomainEnc, GenericEnc};
+use crate::encoders::{domain::DomainEnc, GenericEnc, TyParam};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
@@ -54,12 +54,9 @@ pub fn get_viper_type_value<'vir, 'tcx>(
     vcx: &'vir vir::VirCtxt<'tcx>,
     deps: &mut TaskEncoderDependencies<'vir>,
     ty: ty::Ty<'tcx>,
-) -> vir::Expr<'vir> {
+) -> TyParam<'vir> {
     if let TyKind::Param(p) = ty.kind() {
-        vcx.mk_local_ex(
-            vcx.alloc(p.name.to_string()),
-            deps.require_ref::<GenericEnc>(()).unwrap().domain_type_name.apply(vcx, [])
-        )
+        TyParam::from_param(vcx, p)
     } else {
         let (generic_ty, args) = extract_type_params(vcx.tcx, ty);
         let type_function = deps
@@ -68,9 +65,9 @@ pub fn get_viper_type_value<'vir, 'tcx>(
             .type_function;
         let args = args
             .into_iter()
-            .map(|ty| get_viper_type_value(vcx, deps, ty))
+            .map(|ty| get_viper_type_value(vcx, deps, ty).expr(vcx))
             .collect::<Vec<_>>();
-        type_function.apply(vcx, &args)
+        type_function.apply(vcx, &args).into()
     }
 }
 

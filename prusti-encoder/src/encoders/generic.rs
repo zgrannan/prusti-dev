@@ -26,7 +26,7 @@ impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 impl<'vir> From<&GenericEncOutputRef<'vir>> for TyOps<'vir> {
     fn from(output_ref: &GenericEncOutputRef<'vir>) -> Self {
         TyOps {
-            generics: &[],
+            ty_params: &[],
             ref_to_pred: output_ref.ref_to_pred.as_unknown_arity(),
             ref_to_snap: output_ref.ref_to_snap.as_unknown_arity(),
             snapshot: &SNAPSHOT_PARAM_DOMAIN,
@@ -110,7 +110,7 @@ impl TaskEncoder for GenericEnc {
 
         vir::with_vcx(|vcx| {
             let ty_ops: TyOps<'vir> = TyOps {
-                generics: vcx.alloc_slice(&[vcx.mk_local_decl("t", &TYP_DOMAIN)]),
+                ty_params: vcx.alloc_slice(&[vcx.mk_local_decl("t", &TYP_DOMAIN).into()]),
                 ref_to_pred: ref_to_pred.as_unknown_arity(),
                 ref_to_snap: ref_to_snap.as_unknown_arity(),
                 snapshot: &SNAPSHOT_PARAM_DOMAIN,

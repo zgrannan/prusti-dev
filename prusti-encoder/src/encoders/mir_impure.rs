@@ -38,7 +38,7 @@ use crate::{
     util::{extract_type_params, get_viper_type_value},
 };
 
-use super::{get_ty_ops, HasGenerics};
+use super::{get_ty_ops};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -340,8 +340,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     let ref_to_pred = place_ty_out.expect_pred_variant_opt(place_ty.variant_index);
 
                     let ref_p = self.encode_place(place);
-                    let args = place_ty_out.ref_to_args(self.vcx, ref_p);
-                    let predicate = ref_to_pred.apply(self.vcx, args, None);
+                    let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);
+                    let predicate = ref_to_pred.apply(self.vcx, &args, None);
                     if matches!(
                         repack_op,
                         mir_state_analysis::free_pcs::RepackOp::Expand(..)
@@ -947,11 +947,11 @@ fn ref_to_args<'vir, 'tcx>(
         // include the relevant type
         // TODO: Currently we rely on assuming that the value for this
         //       is a parameter in scope...
-        args.push(get_viper_type_value(vcx, deps, ty));
+        args.push(get_viper_type_value(vcx, deps, ty).expr(vcx));
     } else {
         let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
         for arg in arg_tys {
-            args.push(get_viper_type_value(vcx, deps, arg))
+            args.push(get_viper_type_value(vcx, deps, arg).expr(vcx))
         }
     }
     args
