@@ -74,20 +74,6 @@ impl TaskEncoder for SnapshotEnc {
 }
 
 impl SnapshotEnc {
-    pub fn require_ref<'tcx: 'vir, 'vir>(
-        ty: ty::Ty<'tcx>,
-        deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> Result<SnapshotEncOutputRef<'vir>, TaskEncoderError<SnapshotEnc>> {
-        vir::with_vcx( |vcx| {
-        let (ty, args) = extract_type_params(vcx.tcx, ty);
-        for arg in args {
-            Self::require_ref(arg, deps)?;
-        }
-        deps.require_ref::<Self>(ty)
-            }
-        )
-    }
-
     pub fn require_local<'tcx: 'vir, 'vir>(
         ty: ty::Ty<'tcx>,
         deps: &mut TaskEncoderDependencies<'vir>,
@@ -95,6 +81,9 @@ impl SnapshotEnc {
         vir::with_vcx( |vcx| {
         let (ty, args) = extract_type_params(vcx.tcx, ty);
         for arg in args {
+            if matches!(arg.kind(), TyKind::Param(_)) {
+                continue;
+            }
             Self::require_local(arg, deps)?;
         }
         deps.require_local::<Self>(ty)

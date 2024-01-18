@@ -2,6 +2,9 @@ use prusti_rustc_interface::{
     middle::ty::{self, TyKind},
     span::symbol,
 };
+use task_encoder::TaskEncoderDependencies;
+
+use crate::encoders::{domain::DomainEnc, GenericEnc};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
@@ -47,8 +50,35 @@ pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty
     }))
 }
 
-pub fn extract_type_params<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> (MostGenericTy<'tcx>, Vec<ty::Ty<'tcx>>) {
-    let (generic_ty, arg_tys) = match *ty.kind() {
+pub fn get_viper_type_value<'vir, 'tcx>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    deps: &mut TaskEncoderDependencies<'vir>,
+    ty: ty::Ty<'tcx>,
+) -> vir::Expr<'vir> {
+    if let TyKind::Param(p) = ty.kind() {
+        vcx.mk_local_ex(
+            vcx.alloc(p.name.to_string()),
+            deps.require_ref::<GenericEnc>(()).unwrap().domain_type_name.apply(vcx, [])
+        )
+    } else {
+        let (generic_ty, args) = extract_type_params(vcx.tcx, ty);
+        let type_function = deps
+            .require_ref::<DomainEnc>(generic_ty)
+            .unwrap()
+            .type_function;
+        let args = args
+            .into_iter()
+            .map(|ty| get_viper_type_value(vcx, deps, ty))
+            .collect::<Vec<_>>();
+        type_function.apply(vcx, &args)
+    }
+}
+
+pub fn extract_type_params<'tcx>(
+    tcx: ty::TyCtxt<'tcx>,
+    ty: ty::Ty<'tcx>,
+) -> (MostGenericTy<'tcx>, Vec<ty::Ty<'tcx>>) {
+    match *ty.kind() {
         TyKind::Adt(adt, args) => {
             let id = ty::List::identity_for_item(tcx, adt.did()).iter();
             let id = tcx.mk_args_from_iter(id);
@@ -81,7 +111,5 @@ pub fn extract_type_params<'tcx>(tcx: ty::TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> (Mo
             (MostGenericTy(ty), vec![orig])
         }
         _ => (MostGenericTy(ty), Vec::new()),
-    };
-    let arg_tys = arg_tys.into_iter().filter(|ty| !matches!(ty.kind(), ty::Param(_))).collect();
-    (generic_ty, arg_tys)
+    }
 }

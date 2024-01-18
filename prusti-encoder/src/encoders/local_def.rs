@@ -10,7 +10,7 @@ use vir::{FunctionIdent, UnknownArity, PredicateIdent, MethodIdent, BinaryArity,
 
 use crate::encoders::{PredicateEncOutputRef, PredicateEnc};
 
-use super::{GenericEnc, generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN}};
+use super::{GenericEnc, generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN}, require_ref_for_ty};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -167,7 +167,7 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(vcx: &'vir vir::VirCtxt<'tcx>, ty: ty::Ty<'t
             method_assign: generic_ref.method_assign
         };
     } else {
-        let predicate_ref = PredicateEnc::require_ref(ty, deps).unwrap();
+        let predicate_ref = require_ref_for_ty::<PredicateEnc>(vcx, ty, deps).unwrap();
         (&predicate_ref).into()
     }
 }

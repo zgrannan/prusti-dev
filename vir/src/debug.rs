@@ -295,7 +295,11 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
                 }
                 Ok(())
             }
-            Self::PureAssign(data) => write!(f, "{:?} := {:?}", data.lhs, data.rhs),
+            Self::PureAssign(data) => write!(f, "{:?} := {:?} /*\n {}\n */",
+                data.lhs,
+                data.rhs,
+                data.rhs.debug_info.to_debug_string()
+            ),
             Self::Inhale(data) => write!(f, "inhale {:?}", data),
             Self::Exhale(data) => write!(f, "exhale {:?}", data),
             Self::Unfold(data) => write!(f, "unfold {:?}", data),

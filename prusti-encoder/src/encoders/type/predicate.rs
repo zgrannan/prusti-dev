@@ -7,26 +7,11 @@ use vir::{
     BinaryArity, CallableIdent, FunctionIdent, MethodIdent, NullaryArity, PredicateIdent,
     UnaryArity, UnknownArity, VirCtxt, TypeData,
 };
+use vir::add_debug_note;
 
 /// Takes a Rust `Ty` and returns various Viper predicates and functions for
 /// working with the type.
 pub struct PredicateEnc;
-
-impl PredicateEnc {
-    pub fn require_ref<'tcx: 'vir, 'vir>(
-        ty: ty::Ty<'tcx>,
-        deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> Result<PredicateEncOutputRef<'vir>, TaskEncoderError<PredicateEnc>> {
-        vir::with_vcx(|vcx| {
-            assert!(!matches!(ty.kind(), TyKind::Param(_)));
-            let (ty, args) = extract_type_params(vcx.tcx, ty);
-            for arg in args {
-                Self::require_ref(arg, deps)?;
-            }
-            deps.require_ref::<Self>(ty)
-        })
-    }
-}
 
 #[derive(Clone, Debug)]
 pub enum PredicateEncError {
@@ -181,7 +166,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::{
     encoders::{
         generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
-        get_ty_ops, GenericEnc, TyOps, HasGenerics,
+        get_ty_ops, GenericEnc, TyOps, HasGenerics, require_ref_for_ty,
     },
     util::{extract_type_params, MostGenericTy},
 };
@@ -315,8 +300,10 @@ impl TaskEncoder for PredicateEnc {
                     enc.output_ref(PredicateEncData::Ref(specifics)),
                 );
 
-                let inner = PredicateEnc::require_ref(inner, deps).unwrap();
-                Ok((enc.mk_ref(deps, task_key, inner, specifics), ()))
+                vir::with_vcx(|vcx| {
+                    let inner = require_ref_for_ty::<PredicateEnc>(vcx, inner, deps).unwrap();
+                    Ok((enc.mk_ref(deps, task_key, inner, specifics), ()))
+                })
             }
             unsupported_type => todo!("type not supported: {unsupported_type:?}"),
         }
@@ -368,12 +355,12 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         generics: &'vir [&'vir str],
     ) -> Self {
         let self_ex: vir::Expr<'vir> = vcx.mk_local_ex("self", &vir::TypeData::Ref);
-        let generics: Vec<_> = generics
+        let generic_decls: Vec<_> = generics
             .iter()
             .map(|g| vcx.mk_local_decl(g, &TYP_DOMAIN))
             .collect();
         let mut ref_to_pred_args = vec![self_ex];
-        for g in generics.iter() {
+        for g in generic_decls.iter() {
             ref_to_pred_args.push(vcx.mk_local_ex(g.name, g.ty));
         }
         let ref_to_pred_arg_types: Vec<_> = ref_to_pred_args.iter().map(|e| e.kind.ty()).collect();
@@ -385,6 +372,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             ref_to_args,
             snap_inst,
         );
+        add_debug_note!(ref_to_snap.debug_info(), format!("At this time generics were {generics:?}"));
         let unreachable_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
             NullaryArity::new(vcx.alloc_array(&[])),
@@ -402,7 +390,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl("self", &vir::TypeData::Ref)]);
         Self {
             vcx,
-            generics: vcx.alloc_slice(&generics),
+            generics: vcx.alloc_slice(&generic_decls),
             snap_inst,
             ref_to_pred,
             ref_to_snap,

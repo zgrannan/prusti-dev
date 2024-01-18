@@ -1,6 +1,6 @@
 use crate::{
     DomainParamData, ExprGen, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData,
-    TySubsts, Type, TypeData, VirCtxt,
+    TySubsts, Type, TypeData, VirCtxt, debug_info::DebugInfo,
 };
 use sealed::sealed;
 use std::collections::HashMap;
@@ -10,15 +10,6 @@ use std::{
     sync::{atomic::{AtomicUsize, Ordering}, Mutex},
     backtrace::Backtrace
 };
-
-#[cfg(debug_assertions)]
-use lazy_static::lazy_static;
-
-#[cfg(debug_assertions)]
-lazy_static! {
-    static ref BACKTRACES: Mutex<HashMap<usize, Backtrace>> = Mutex::new(HashMap::new());
-    static ref COUNTER: AtomicUsize = AtomicUsize::new(0);
-}
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
@@ -48,27 +39,14 @@ impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, R
 {
 }
 
-#[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy)]
-pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, usize); // includes counter
+pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo);
 
-#[cfg(not(debug_assertions))]
-#[derive(Debug, Clone, Copy)]
-pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
-    #[cfg(not(debug_assertions))]
-    fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
-        Self(name, args, result_ty)
-    }
 
-    #[cfg(debug_assertions)]
     fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
-        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let backtrace = Backtrace::capture();
-        BACKTRACES.lock().unwrap().insert(id, backtrace);
-        Self(name, args, result_ty, id)
+        Self(name, args, result_ty, DebugInfo::new())
     }
-
 
     fn name(&self) -> &'vir str {
         self.0
@@ -76,6 +54,7 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<
     fn arity(&self) -> &A {
         &self.1
     }
+
     fn result_ty(&self) -> Type<'vir> {
         self.2
     }
@@ -83,19 +62,17 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<
 
 impl <'vir, A: Arity<'vir, Arg=Type<'vir>>> FunctionIdent<'vir, A> {
 
-    #[cfg(debug_assertions)]
-    fn id(&self) -> usize {
+    pub fn debug_info(&self) -> DebugInfo {
         self.3
     }
 
-    #[cfg(debug_assertions)]
     pub fn as_unknown_arity(self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
-        FunctionIdent(self.name(), UnknownArity::new(self.1.args()), self.result_ty(), self.id())
-    }
-
-    #[cfg(not(debug_assertions))]
-    pub fn as_unknown_arity(self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
-        FunctionIdent(self.name(), UnknownArity::new(self.1.args()), self.result_ty())
+        FunctionIdent(
+            self.name(),
+            UnknownArity::new(self.1.args()),
+            self.result_ty(),
+            self.debug_info()
+        )
     }
 }
 
@@ -184,7 +161,7 @@ impl<'vir> DomainIdentUnknownArity<'vir> {
 pub trait Arity<'vir>: Copy {
     type Arg;
     fn args(&self) -> &'vir [Self::Arg];
-    fn check_len_matches(&self, name: &str, len: usize);
+    fn check_len_matches(&self, name: &str, len: usize) -> bool;
 }
 #[sealed]
 impl<'vir, T, const N: usize> Arity<'vir> for KnownArityAny<'vir, T, N> {
@@ -192,7 +169,9 @@ impl<'vir, T, const N: usize> Arity<'vir> for KnownArityAny<'vir, T, N> {
     fn args(&self) -> &'vir [T] {
         &self.0
     }
-    fn check_len_matches(&self, _name: &str, _len: usize) {}
+    fn check_len_matches(&self, _name: &str, _len: usize) -> bool {
+        true
+    }
 }
 #[sealed]
 impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
@@ -200,13 +179,16 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
     fn args(&self) -> &'vir [T] {
         &self.0
     }
-    fn check_len_matches(&self, name: &str, len: usize) {
-        assert_eq!(
-            self.0.len(),
-            len,
-            "{name} called with {len} args (expected {})",
-            self.0.len()
-        );
+    fn check_len_matches(&self, name: &str, len: usize) -> bool {
+        if self.0.len() != len {
+            eprintln!(
+                "{name} called with {len} args (expected {})",
+                self.0.len()
+            );
+            false
+        } else {
+            true
+        }
     }
 }
 
@@ -248,7 +230,9 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
         name: &str,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> Option<TySubsts<'vir>> {
-        self.check_len_matches(name, args.len());
+        if !self.check_len_matches(name, args.len()) {
+            return None
+        }
         let mut substs = TySubsts::new();
         for (arg, expected) in args.iter().zip(self.args().into_iter()) {
             let actual = arg.ty();
@@ -311,13 +295,10 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
             let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
             vcx.mk_func_app(self.name(), &args, result_ty)
         } else {
-            #[cfg(not(debug_assertions))]
-            panic!("Function could not be applied");
-
-            #[cfg(debug_assertions)]
             panic!(
-                "Function created at {} could not be applied",
-                BACKTRACES.lock().unwrap().get(&self.id()).unwrap()
+                "Function {} could not be applied, debug info: {}",
+                self.name(),
+                self.debug_info().to_debug_string()
             );
         }
     }
@@ -371,14 +352,11 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
             vcx.mk_func_app(self.name(), args, result_ty)
         } else {
-            #[cfg(debug_assertions)]
             panic!(
-                "Function created at {} could not be applied",
-                BACKTRACES.lock().unwrap().get(&self.id()).unwrap()
+                "Function {} could not be applied, debug info: {}",
+                self.name(),
+                self.debug_info().to_debug_string()
             );
-
-            #[cfg(not(debug_assertions))]
-            panic!("Function could not be applied");
         }
     }
 }

@@ -12,6 +12,8 @@ use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::{encoders::{ViperTupleEnc, PredicateEnc, SnapshotEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::MostGenericTy};
 
+use super::require_ref_for_ty;
+
 pub struct MirPureEnc;
 
 #[derive(Clone, Debug)]
@@ -216,7 +218,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 name: "closure",
             })
         } else {
-            SnapshotEnc::require_ref(ty, self.deps).unwrap().snapshot
+            require_ref_for_ty::<SnapshotEnc>(self.vcx, ty, self.deps).unwrap().snapshot
         }
     }
 
@@ -575,7 +577,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     tuple_ref.mk_cons(self.vcx, &fields)
                 }
                 mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple => {
-                    let e_rvalue_ty = PredicateEnc::require_ref(rvalue_ty, self.deps).unwrap();
+                    let e_rvalue_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                     let sl = match kind {
                         mir::AggregateKind::Adt(_, vidx, _, _, _) =>
                             e_rvalue_ty.get_variant_any(*vidx),
@@ -676,7 +678,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                        (tuple_ref.mk_elem(self.vcx, expr, field_idx), place_ref)
                     }
                     _ => {
-                        let e_ty = PredicateEnc::require_ref(place_ty.ty, self.deps).unwrap();
+                        let e_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
                         let struct_like = e_ty.expect_variant_opt(place_ty.variant_index);
                         let proj = struct_like.snap_data.field_access[field_idx].read;
                         let place_ref = place_ref.map(|pr|
@@ -755,7 +757,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 let qvars = self.vcx.alloc_slice(&qvar_tys.iter()
                     .enumerate()
                     .map(|(idx, qvar_ty)| {
-                        let ty_out = SnapshotEnc::require_ref(qvar_ty, self.deps).unwrap();
+                        let ty_out = require_ref_for_ty::<SnapshotEnc>(self.vcx, qvar_ty, self.deps).unwrap();
                         self.vcx.mk_local_decl(
                             vir::vir_format!(self.vcx, "qvar_{}_{idx}", self.encoding_depth),
                             ty_out.snapshot,
