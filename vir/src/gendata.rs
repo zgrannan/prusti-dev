@@ -110,7 +110,8 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     Old(ExprGen<'vir, Curr, Next>),
     //LabelledOld(Expr<'vir>, &'vir str),
     Const(Const<'vir>),
-    Result,
+    /// Result of a pure function
+    Result(Type<'vir>),
     // magic wand
     AccField(AccFieldGen<'vir, Curr, Next>),
     Unfolding(UnfoldingGen<'vir, Curr, Next>),
@@ -140,10 +141,10 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::Field(_, f) => f.ty,
             ExprKindGenData::Old(e) => e.ty(),
             ExprKindGenData::Const(c) => c.ty(),
-            ExprKindGenData::Result => &TypeData::Ref, // For now this always seems to be the case
+            ExprKindGenData::Result(ty) => ty,
             ExprKindGenData::AccField(_) => &TypeData::Bool,
             ExprKindGenData::Unfolding(f) => f.expr.ty(),
-            ExprKindGenData::UnOp(u) => u.expr.ty(), // For now this always seems to be the case
+            ExprKindGenData::UnOp(u) => u.expr.ty(),
             ExprKindGenData::BinOp(b) => b.ty(),
             ExprKindGenData::Ternary(t) => t.then.ty(),
             ExprKindGenData::Forall(_) => &TypeData::Bool,

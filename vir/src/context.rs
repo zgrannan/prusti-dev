@@ -257,8 +257,8 @@ impl<'tcx> VirCtxt<'tcx> {
     pub const fn mk_null<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
         &ExprGenData { kind : &ExprKindGenData::Const(&ConstData::Null) }
     }
-    pub const fn mk_result<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
-        &ExprGenData { kind : &ExprKindGenData::Result }
+    pub fn mk_result<'vir, Curr, Next>(&'vir self, ty: Type<'vir>) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData { kind : self.alloc(ExprKindGenData::Result(ty)) })
     }
 
     pub fn apply_ty_substs<'vir>(&'vir self, ty: Type<'vir>, substs: &TySubsts<'vir>) -> Type<'vir> {
