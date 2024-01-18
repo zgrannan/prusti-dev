@@ -18,8 +18,6 @@ pub enum MirFunctionEncError {
 #[derive(Clone, Debug)]
 pub struct MirFunctionEncOutputRef<'vir> {
     pub function_ref: FunctionIdent<'vir, UnknownArity<'vir>>,
-    /// Always `TypeData::Domain`.
-    pub return_type: &'vir PredicateEncOutputRef<'vir>,
 }
 impl<'vir> task_encoder::OutputRefAny for MirFunctionEncOutputRef<'vir> {}
 
@@ -81,7 +79,7 @@ impl TaskEncoder for MirFunctionEnc {
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let return_type = local_defs.locals[mir::RETURN_PLACE].ty;
             let function_ref = FunctionIdent::new(function_name, args, return_type.snapshot);
-            deps.emit_output_ref::<Self>(*task_key, MirFunctionEncOutputRef { function_ref, return_type });
+            deps.emit_output_ref::<Self>(*task_key, MirFunctionEncOutputRef { function_ref });
 
             let spec = deps.require_local::<MirSpecEnc>(
                 (def_id, substs, Some(caller_def_id), true)
