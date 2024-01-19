@@ -378,7 +378,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         );
         add_debug_note!(
             ref_to_snap.debug_info(),
-            format!("At this time generics were {generics:?}")
+            "At this time generics were {generics:?}"
         );
         let unreachable_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),

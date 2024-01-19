@@ -98,19 +98,20 @@ impl DebugInfo {
 
 #[cfg(not(feature="vir_debug"))]
 #[macro_export]
-macro_rules! add_debug_info {
-    ($debug_info:expr, $msg: expr) => {
+macro_rules! add_debug_note {
+    ($debug_info:expr, $($arg:tt)*) => {{
         ()
-    };
+    }};
 }
 
 #[cfg(feature="vir_debug")]
 #[macro_export]
 macro_rules! add_debug_note {
-    ($debug_info:expr, $msg: expr) => {
-        $debug_info.add_debug_note($msg)
-    };
+    ($debug_info:expr, $($arg:tt)*) => {{
+        $debug_info.add_debug_note_never_call_this_function_directly(format!($($arg)*))
+    }};
 }
+
 
 impl std::fmt::Display for DebugInfo {
     #[cfg(feature="vir_debug")]
