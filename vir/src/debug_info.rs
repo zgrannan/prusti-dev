@@ -108,7 +108,7 @@ macro_rules! add_debug_note {
 #[macro_export]
 macro_rules! add_debug_note {
     ($debug_info:expr, $($arg:tt)*) => {{
-        $debug_info.add_debug_note(format!($($arg)*))
+        $debug_info.add_debug_note_never_call_this_function_directly(format!($($arg)*))
     }};
 }
 
