@@ -292,7 +292,7 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
             panic!(
                 "Function {} could not be applied, debug info: {}",
                 self.name(),
-                self.debug_info().to_debug_string()
+                self.debug_info()
             );
         }
     }
@@ -349,7 +349,7 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             panic!(
                 "Function {} could not be applied, debug info: {}",
                 self.name(),
-                self.debug_info().to_debug_string()
+                self.debug_info()
             );
         }
     }
