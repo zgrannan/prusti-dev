@@ -199,10 +199,14 @@ impl TaskEncoder for DomainEnc {
                 Ok((enc.finalize(), specifics))
             }
             &TyKind::Ref(_, inner, m) => {
-                let base_name = format!("Ref_{m:?}");
+                let base_name = if (m.is_mut()) {
+                    "Ref_mutable"
+                } else {
+                    "Ref_immutable"
+                };
                 let (mut enc, mut ty_params) =
                     DomainEncData::new(vcx, &base_name, [inner].into_iter());
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
+                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                 if m.is_mut() {
                     ty_params.push(&vir::TypeData::Ref);
                 }
@@ -258,39 +262,25 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         params: impl Iterator<Item = ty::Ty<'tcx>>,
     ) -> (Self, Vec<vir::Type<'vir>>) {
         eprintln!("Base name: {}", base_name);
-        let domain_params: Vec<_> = params
-            // The `task_to_key` translation should ensure that only `Param`s are allowed here.
-            .map(DomainEnc::expect_param)
-            .map(|param| vir::DomainParamData {
-                name: vir::vir_format!(vcx, "{}", param.name.as_str()),
-            })
-            .collect();
         let domain = vir::DomainIdent::nullary(
             vir::vir_format!(vcx, "s_{base_name}")
         );
 
-        let ty_params: Vec<_> = domain_params
-            .iter()
-            .map(|t| vcx.alloc(vir::TypeData::DomainTypeParam(*t)))
-            .collect();
+        let num_params = params.count();
+
+        let ty_params: Vec<_> = vec![&SNAPSHOT_PARAM_DOMAIN; num_params];
 
         let self_ty = domain.apply(vcx, []);
-        let type_function_args = vcx.alloc_slice(
-                    &domain_params
-                        .iter()
-                        .map(|_| &TYP_DOMAIN)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                );
+        let type_function_args = vcx.alloc_slice(&vec![&TYP_DOMAIN; num_params]);
         let type_function_ident = FunctionIdent::new(
             vir::vir_format!(vcx, "s_{base_name}_type"),
-            UnknownArity::new(type_function_args),
+            UnknownArity::new(&type_function_args),
             &TYP_DOMAIN
         );
         let type_function = vcx.mk_domain_function(
             false,
             type_function_ident.name(),
-            type_function_args,
+            &type_function_args,
             &TYP_DOMAIN
         );
         let self_local = vcx.mk_local("self", self_ty);

@@ -20,4 +20,5 @@ sealed = "0.5"
 rustc_private = true
 
 [features]
+default = ["vir_debug"]
 vir_debug = []
