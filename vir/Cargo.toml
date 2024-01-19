@@ -18,3 +18,6 @@ sealed = "0.5"
 [package.metadata.rust-analyzer]
 # This crate uses #[feature(rustc_private)]
 rustc_private = true
+
+[features]
+vir_debug = []
