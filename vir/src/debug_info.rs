@@ -79,7 +79,7 @@ impl DebugInfo {
     }
 
     #[cfg(not(feature="vir_debug"))]
-    pub fn new() -> DebugInfo<'vir> {
+    pub fn new() -> DebugInfo {
         DebugInfo(())
     }
 
