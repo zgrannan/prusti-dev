@@ -436,7 +436,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
                     let in_null = self.vcx.mk_eq_expr(self.self_ex, self.vcx.mk_null());
                     let out_null = self
                         .vcx
-                        .mk_eq_expr(self.vcx.mk_result(), self.vcx.mk_null());
+                        .mk_eq_expr(self.vcx.mk_result(&TypeData::Ref), self.vcx.mk_null());
                     self.vcx
                         .alloc_slice(&[self.vcx.mk_eq_expr(in_null, out_null)])
                 });

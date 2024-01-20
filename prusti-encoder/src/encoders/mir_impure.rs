@@ -843,15 +843,15 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         args.iter().map(|op| self.encode_operand_snap(op)).collect();
                     let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
-                    let method_assign = self.deps.require_ref::<PredicateEnc>(
+                    let method_assign = require_ref_for_ty::<PredicateEnc>(
+                        self.vcx,
                         return_ty,
+                        self.deps
                     ).unwrap().method_assign;
 
                     self.stmt(
                         self.vcx.alloc(
-                            pure_func
-                                .return_type
-                                .method_assign
+                            method_assign
                                 .apply(self.vcx, [dest, pure_func_app]),
                         ),
                     );

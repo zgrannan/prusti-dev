@@ -152,10 +152,10 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::Field(_, f) => f.ty,
             ExprKindGenData::Old(e) => e.ty(),
             ExprKindGenData::Const(c) => c.ty(),
-            ExprKindGenData::Result => &TypeData::Ref, // For now this always seems to be the case
+            ExprKindGenData::Result(ty) => ty,
             ExprKindGenData::AccField(_) => &TypeData::Bool,
             ExprKindGenData::Unfolding(f) => f.expr.ty(),
-            ExprKindGenData::UnOp(u) => u.expr.ty(), // For now this always seems to be the case
+            ExprKindGenData::UnOp(u) => u.expr.ty(),
             ExprKindGenData::BinOp(b) => b.ty(),
             ExprKindGenData::Ternary(t) => t.then.ty(),
             ExprKindGenData::Forall(_) => &TypeData::Bool,

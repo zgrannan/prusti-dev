@@ -145,12 +145,6 @@ impl<'vir> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>> {
 pub type DomainIdentUnknownArity<'vir> =
     DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
 
-impl<'vir> DomainIdentUnknownArity<'vir> {
-    pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
-        Self(name, args)
-    }
-}
-
 impl <'vir> DomainIdentUnknownArity<'vir> {
     pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
         Self(name, args)
