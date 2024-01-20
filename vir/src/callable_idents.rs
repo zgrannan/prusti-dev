@@ -151,6 +151,12 @@ impl<'vir> DomainIdentUnknownArity<'vir> {
     }
 }
 
+impl <'vir> DomainIdentUnknownArity<'vir> {
+    pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
+        Self(name, args)
+    }
+}
+
 #[sealed]
 pub trait Arity<'vir>: Copy {
     type Arg;
