@@ -68,7 +68,7 @@ pub struct PredicateEncOutputRef<'vir> {
     pub unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
     /// Ref as first argument, snapshot as second. Ensures predicate
     /// access to ref with snapshot value.
-    pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
+    pub method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
     /// Always `TypeData::Domain`.
     pub snapshot: vir::Type<'vir>,
     //pub method_refold: &'vir str,
@@ -213,7 +213,7 @@ impl TaskEncoder for PredicateEnc {
                         ref_to_pred: out.ref_to_pred.as_unknown_arity(),
                         ref_to_snap: out.ref_to_snap.as_unknown_arity(),
                         unreachable_to_snap: out.unreachable_to_snap,
-                        method_assign: out.method_assign,
+                        method_assign: out.method_assign.as_unknown_arity(),
                         snapshot: out.param_snapshot,
                         specifics: PredicateEncData::Param,
                         generics: &[],
@@ -342,7 +342,7 @@ struct PredicateEncValues<'vir, 'tcx> {
     generics: &'vir [vir::LocalDecl<'vir>],
     ref_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
     unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
-    method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
+    method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
     method_upcast: MethodIdent<'vir, UnaryArity<'vir>>,
 
     /// self: Ref
@@ -413,9 +413,14 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             NullaryArity::new(&[]),
             snap_inst,
         );
+        let mut method_assign_arg_tys = vec![&vir::TypeData::Ref];
+        method_assign_arg_tys.extend(generic_decls.iter().map(|d| d.ty));
+        method_assign_arg_tys.push(snap_inst);
         let method_assign = MethodIdent::new(
             vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
-            BinaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref, snap_inst])),
+            UnknownArity::new(
+                vcx.alloc_slice(&method_assign_arg_tys),
+            ),
         );
         let method_upcast = MethodIdent::new(
             vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
@@ -556,7 +561,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             ref_to_pred: self.ref_to_pred,
             ref_to_snap: self.ref_to_snap,
             unreachable_to_snap: self.unreachable_to_snap,
-            method_assign: self.method_assign,
+            method_assign: self.method_assign.as_unknown_arity(),
             snapshot: self.snap_inst,
             specifics,
             generics: self.generics,

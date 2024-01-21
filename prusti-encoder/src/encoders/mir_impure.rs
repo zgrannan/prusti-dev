@@ -445,7 +445,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let tmp_exp = self.new_tmp(&vir::TypeData::Ref).1;
         self.stmt(
             self.vcx
-                .alloc(ty_out.method_assign.apply(self.vcx, [tmp_exp, snap_val])),
+                .alloc(ty_out.method_assign.apply(self.vcx, &[tmp_exp, snap_val])),
         );
         tmp_exp
     }
@@ -708,8 +708,13 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 let dest_ty = dest.ty(self.local_decls, self.vcx.tcx);
                 assert!(dest_ty.variant_index.is_none());
                 let dest_ty_out = get_ty_ops(self.vcx, dest_ty.ty, self.deps);
+                let method_assign_app = dest_ty_out.apply_method_assign(
+                    self.vcx,
+                    proj_ref,
+                    expr
+                );
 
-                self.stmt(self.vcx.alloc(dest_ty_out.method_assign.apply(self.vcx, [proj_ref, expr])));
+                self.stmt(method_assign_app);
             }
 
             // no-ops ?
@@ -856,7 +861,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                     self.stmt(
                         self.vcx
-                            .alloc(method_assign.apply(self.vcx, [dest, pure_func_app])),
+                            .alloc(method_assign.apply(self.vcx, &[dest, pure_func_app])),
                     );
                 } else {
                     let func_out = self

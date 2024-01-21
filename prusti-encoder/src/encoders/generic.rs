@@ -1,7 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
     BinaryArity, CallableIdent, DomainIdent, DomainParamData, ExprData, FunctionIdent,
-    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent,
+    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent, TernaryArity,
 };
 
 use super::{TyOps, predicate::mk_method_assign};
@@ -24,7 +24,7 @@ pub struct GenericEncOutputRef<'vir> {
     pub unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
     pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
     pub domain_param_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
-    pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
+    pub method_assign: MethodIdent<'vir, TernaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 
@@ -35,7 +35,7 @@ impl<'vir> From<&GenericEncOutputRef<'vir>> for TyOps<'vir> {
             ref_to_pred: output_ref.ref_to_pred.as_unknown_arity(),
             ref_to_snap: output_ref.ref_to_snap.as_unknown_arity(),
             snapshot: &SNAPSHOT_PARAM_DOMAIN,
-            method_assign: output_ref.method_assign,
+            method_assign: output_ref.method_assign.as_unknown_arity(),
         }
     }
 }
@@ -92,7 +92,7 @@ impl TaskEncoder for GenericEnc {
         );
         let method_assign = MethodIdent::new(
             "assign_p_Param",
-            BinaryArity::new(&[&TypeData::Ref, &SNAPSHOT_PARAM_DOMAIN]),
+            TernaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN, &SNAPSHOT_PARAM_DOMAIN]),
         );
         let unreachable_to_snap = FunctionIdent::new(
             "p_Param_unreachable",
@@ -137,7 +137,7 @@ impl TaskEncoder for GenericEnc {
                 ref_to_pred: ref_to_pred.as_unknown_arity(),
                 ref_to_snap: ref_to_snap.as_unknown_arity(),
                 snapshot: &SNAPSHOT_PARAM_DOMAIN,
-                method_assign: method_assign,
+                method_assign: method_assign.as_unknown_arity(),
             };
             let method_assign = mk_method_assign(vcx, &ty_ops);
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);

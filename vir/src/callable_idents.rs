@@ -91,6 +91,15 @@ impl<'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
     }
 }
 
+impl<'vir, A: Arity<'vir, Arg=Type<'vir>>> MethodIdent<'vir, A> {
+    pub fn as_unknown_arity(self) -> MethodIdent<'vir, UnknownArity<'vir>> {
+        MethodIdent(
+            self.name(),
+            UnknownArity::new(self.1.args())
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
@@ -255,6 +264,7 @@ pub type KnownArity<'vir, const N: usize> = KnownArityAny<'vir, Type<'vir>, N>;
 pub type NullaryArity<'vir> = KnownArity<'vir, 0>;
 pub type UnaryArity<'vir> = KnownArity<'vir, 1>;
 pub type BinaryArity<'vir> = KnownArity<'vir, 2>;
+pub type TernaryArity<'vir> = KnownArity<'vir, 3>;
 
 #[derive(Debug)]
 pub struct UnknownArityAny<'vir, T>(&'vir [T]);
@@ -420,7 +430,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> StmtGenData<'vir, Curr, Next> {
-        self.1.check_types(self.name(), args);
+        self.1.check_types(self.name(), args).unwrap();
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
             method: self.name(),

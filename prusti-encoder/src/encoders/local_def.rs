@@ -61,7 +61,7 @@ pub struct TyOps<'vir> {
     pub ref_to_pred: PredicateIdent<'vir, UnknownArity<'vir>>,
     pub ref_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
     pub snapshot: vir::Type<'vir>,
-    pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
+    pub method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
 }
 
 impl<'vir> TyOps<'vir> {
@@ -90,6 +90,30 @@ impl<'vir> TyOps<'vir> {
         assert!(self_ref.ty() == &TypeData::Ref);
         let mut args = vec![self_ref];
         args.extend(self.ty_param_args(vcx));
+        vcx.alloc_slice(&args)
+    }
+
+    pub fn apply_method_assign<'tcx>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        self_ref: vir::Expr<'vir>,
+        self_new_snap: vir::Expr<'vir>,
+    ) -> vir::Stmt<'vir> {
+        let args = self.method_assign_args(vcx, self_ref, self_new_snap);
+        vcx.alloc(self.method_assign.apply(vcx, args))
+    }
+
+    pub fn method_assign_args<'tcx>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        self_ref: vir::Expr<'vir>,
+        self_new_snap: vir::Expr<'vir>,
+    ) -> &'vir [vir::Expr<'vir>] {
+        assert!(self_ref.ty() == &TypeData::Ref);
+        assert!(self_new_snap.ty() == self.snapshot);
+        let mut args = vec![self_ref];
+        args.extend(self.ty_param_args(vcx));
+        args.push(self_new_snap);
         vcx.alloc_slice(&args)
     }
 }
@@ -218,7 +242,7 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(
             ref_to_pred: generic_ref.ref_to_pred.as_unknown_arity(),
             ref_to_snap: generic_ref.ref_to_snap.as_unknown_arity(),
             snapshot: &SNAPSHOT_PARAM_DOMAIN,
-            method_assign: generic_ref.method_assign,
+            method_assign: generic_ref.method_assign.as_unknown_arity(),
         };
     } else {
         let predicate_ref = require_ref_for_ty::<PredicateEnc>(vcx, ty, deps).unwrap();
