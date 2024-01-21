@@ -1,6 +1,6 @@
 use crate::{
-    DomainParamData, ExprGen, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData,
-    TySubsts, Type, TypeData, VirCtxt, debug_info::DebugInfo,
+    debug_info::DebugInfo, DomainParamData, ExprGen, MethodCallGenData, PredicateAppGen,
+    PredicateAppGenData, StmtGenData, TySubsts, Type, TypeData, VirCtxt,
 };
 use sealed::sealed;
 use std::collections::HashMap;
@@ -37,7 +37,6 @@ impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, R
 pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo);
 
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
-
     fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
         Self(name, args, result_ty, DebugInfo::new())
     }
@@ -54,8 +53,7 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<
     }
 }
 
-impl <'vir, A: Arity<'vir, Arg=Type<'vir>>> FunctionIdent<'vir, A> {
-
+impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> FunctionIdent<'vir, A> {
     pub fn debug_info(&self) -> DebugInfo {
         self.3
     }
@@ -65,7 +63,7 @@ impl <'vir, A: Arity<'vir, Arg=Type<'vir>>> FunctionIdent<'vir, A> {
             self.name(),
             UnknownArity::new(self.1.args()),
             self.result_ty(),
-            self.debug_info()
+            self.debug_info(),
         )
     }
 }
@@ -110,7 +108,7 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A
     }
 }
 
-impl<'vir, A: Arity<'vir, Arg=Type<'vir>>> PredicateIdent<'vir, A> {
+impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
         Self(name, args)
     }
@@ -145,7 +143,7 @@ impl<'vir> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>> {
 pub type DomainIdentUnknownArity<'vir> =
     DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
 
-impl <'vir> DomainIdentUnknownArity<'vir> {
+impl<'vir> DomainIdentUnknownArity<'vir> {
     pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
         Self(name, args)
     }
@@ -175,10 +173,7 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
     }
     fn check_len_matches(&self, name: &str, len: usize) -> bool {
         if self.0.len() != len {
-            eprintln!(
-                "{name} called with {len} args (expected {})",
-                self.0.len()
-            );
+            eprintln!("{name} called with {len} args (expected {})", self.0.len());
             false
         } else {
             true
@@ -225,7 +220,7 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> Option<TySubsts<'vir>> {
         if !self.check_len_matches(name, args.len()) {
-            return None
+            return None;
         }
         let mut substs = TySubsts::new();
         for (arg, expected) in args.iter().zip(self.args().into_iter()) {
@@ -334,9 +329,58 @@ impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData
     }
 }
 
+pub trait Caster<'vir> {
+    fn is_generic(&self, ty: Type<'vir>) -> bool;
+    fn upcast<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir VirCtxt<'_>,
+        expr: ExprGen<'vir, Curr, Next>) -> ExprGen<'vir, Curr, Next>;
+    fn downcast<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir VirCtxt<'_>,
+        expr: ExprGen<'vir, Curr, Next>
+    ) -> ExprGen<'vir, Curr, Next>;
+}
+
 // Func arity checked at runtime
 
 impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
+    pub fn apply_with_casts<'tcx, Curr: 'vir, Next: 'vir, C: Caster<'vir>>(
+        &self,
+        vcx: &'vir VirCtxt<'tcx>,
+        args: &[ExprGen<'vir, Curr, Next>],
+        caster: C,
+    ) -> ExprGen<'vir, Curr, Next> {
+        let args = args
+            .iter()
+            .zip(self.arity().args().iter())
+            .map(|(a, expected)| {
+                let arg_generic = caster.is_generic(a.ty());
+                let expected_generic = caster.is_generic(expected);
+                if arg_generic && !expected_generic {
+                    eprintln!("upcasting");
+                    caster.downcast(vcx, a)
+                } else if !arg_generic && expected_generic {
+                    eprintln!("downcasting");
+                    caster.upcast(vcx, a)
+                } else {
+                    eprintln!("no cast");
+                    a
+                }
+            })
+            .collect::<Vec<_>>();
+        let args = vcx.alloc_slice(&args);
+        if let Some(substs) = self.1.check_types(self.name(), args) {
+            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
+            vcx.mk_func_app(self.name(), args, result_ty)
+        } else {
+            panic!(
+                "Function {} could not be applied, debug info: {}",
+                self.name(),
+                self.debug_info()
+            );
+        }
+    }
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt<'tcx>,

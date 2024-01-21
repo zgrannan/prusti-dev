@@ -35,10 +35,10 @@ use crate::{
         domain::DomainEnc, generic::TYP_DOMAIN, require_ref_for_ty, ConstEnc, MirBuiltinEnc,
         MirFunctionEnc, MirLocalDefEnc, MirSpecEnc, PredicateEnc,
     },
-    util::{extract_type_params, get_viper_type_value},
+    util::{extract_type_params, get_viper_type_value, TyMapCaster},
 };
 
-use super::{get_ty_ops};
+use super::get_ty_ops;
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -411,7 +411,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             }
             &mir::Operand::Copy(source) => {
                 let ty_out = get_ty_ops(self.vcx, ty, self.deps);
-                let viper_ref =  self.encode_place(Place::from(source));
+                let viper_ref = self.encode_place(Place::from(source));
                 let args = ref_to_args(self.vcx, viper_ref, ty, self.deps);
                 ty_out.ref_to_snap.apply(self.vcx, &args)
             }
@@ -669,7 +669,13 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                             _ => e_rvalue_ty.expect_structlike()
                         };
                         let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
-                        sl.snap_data.field_snaps_to_snap.apply(self.vcx, &cons_args)
+                        let field_tys = fields.iter().map(|field| field.ty(self.local_decls, self.vcx.tcx));
+                        let caster = TyMapCaster::new(
+                            self.vcx,
+                            field_tys.zip(cons_args.iter().map(|a| a.ty())).collect::<Vec<_>>(),
+                            self.deps
+                        );
+                        sl.snap_data.field_snaps_to_snap.apply_with_casts(self.vcx, &cons_args, caster)
                     }
                     mir::Rvalue::Discriminant(place) => {
                         let e_rvalue_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
@@ -843,17 +849,14 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         args.iter().map(|op| self.encode_operand_snap(op)).collect();
                     let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
-                    let method_assign = require_ref_for_ty::<PredicateEnc>(
-                        self.vcx,
-                        return_ty,
-                        self.deps
-                    ).unwrap().method_assign;
+                    let method_assign =
+                        require_ref_for_ty::<PredicateEnc>(self.vcx, return_ty, self.deps)
+                            .unwrap()
+                            .method_assign;
 
                     self.stmt(
-                        self.vcx.alloc(
-                            method_assign
-                                .apply(self.vcx, [dest, pure_func_app]),
-                        ),
+                        self.vcx
+                            .alloc(method_assign.apply(self.vcx, [dest, pure_func_app])),
                     );
                 } else {
                     let func_out = self

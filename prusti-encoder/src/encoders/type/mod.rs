@@ -21,13 +21,9 @@ pub fn require_ref_for_ty<
 ) -> Result<E::OutputRef<'vir>, TaskEncoderError<E>>
     where E: 'vir
 {
-    assert!(!matches!(ty.kind(), TyKind::Param(_)));
-
     let (ty, args) = extract_type_params(vcx.tcx, ty);
     for arg in args {
-        if !matches!(arg.kind(), TyKind::Param(_)) {
-            require_ref_for_ty(vcx, arg, deps)?;
-        }
+        require_ref_for_ty(vcx, arg, deps)?;
     }
     deps.require_ref::<E>(ty)
 }

@@ -15,10 +15,15 @@ pub enum GenericEncError {
 
 #[derive(Clone, Debug)]
 pub struct GenericEncOutputRef<'vir> {
-    pub snapshot_param_name: &'vir str,
+    pub base_name: String,
+    pub type_snapshot: vir::Type<'vir>,
+    pub param_snapshot: vir::Type<'vir>,
+    pub param_type_function: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
     pub ref_to_pred: PredicateIdent<'vir, BinaryArity<'vir>>,
     pub ref_to_snap: FunctionIdent<'vir, BinaryArity<'vir>>,
+    pub unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
     pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
+    pub domain_param_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
     pub method_assign: MethodIdent<'vir, BinaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
@@ -37,10 +42,11 @@ impl<'vir> From<&GenericEncOutputRef<'vir>> for TyOps<'vir> {
 
 #[derive(Clone, Debug)]
 pub struct GenericEncOutput<'vir> {
-    pub snapshot_param: vir::Domain<'vir>,
+    pub type_snapshot: vir::Domain<'vir>,
     pub ref_to_pred: vir::Predicate<'vir>,
-    pub domain_type: vir::Domain<'vir>,
+    pub param_snapshot: vir::Domain<'vir>,
     pub ref_to_snap: vir::Function<'vir>,
+    pub unreachable_to_snap: vir::Function<'vir>,
     pub method_assign: vir::Method<'vir>,
 }
 
@@ -78,6 +84,7 @@ impl TaskEncoder for GenericEnc {
         let ref_to_pred =
             PredicateIdent::new("p_Param", BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]));
         let type_domain_ident = DomainIdent::nullary("Type");
+        let param_domain_ident = DomainIdent::nullary("s_Param");
         let ref_to_snap = FunctionIdent::new(
             "p_Param_snap",
             BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]),
@@ -87,14 +94,30 @@ impl TaskEncoder for GenericEnc {
             "assign_p_Param",
             BinaryArity::new(&[&TypeData::Ref, &SNAPSHOT_PARAM_DOMAIN]),
         );
+        let unreachable_to_snap = FunctionIdent::new(
+            "p_Param_unreachable",
+            NullaryArity::new(&[]),
+            &SNAPSHOT_PARAM_DOMAIN,
+        );
+
+        let param_type_function = FunctionIdent::new(
+            "typ",
+            UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]),
+            &TYP_DOMAIN,
+        );
 
 
         let output_ref = GenericEncOutputRef {
-            snapshot_param_name: "s_Param",
+            base_name: String::from("Param"),
+            type_snapshot: &TYP_DOMAIN,
+            param_snapshot: &SNAPSHOT_PARAM_DOMAIN,
             ref_to_pred,
             domain_type_name: type_domain_ident,
+            domain_param_name: param_domain_ident,
             ref_to_snap,
-            method_assign
+            method_assign,
+            unreachable_to_snap,
+            param_type_function,
         };
         deps.emit_output_ref::<Self>(
             *task_key,
@@ -134,16 +157,24 @@ impl TaskEncoder for GenericEnc {
                 )]),
                 None,
             );
+
+            // unreachable_to_snap
+            let name = unreachable_to_snap.name();
+            let false_ = vcx.alloc_slice(&[vcx.mk_bool::<false>()]);
+            let unreachable_to_snap =
+                vcx
+                    .mk_function(name, &[], &SNAPSHOT_PARAM_DOMAIN, false_, false_, None);
             Ok((
                 GenericEncOutput {
                     method_assign,
-                    snapshot_param: vir::vir_domain! { vcx; domain s_Param {
+                    param_snapshot: vir::vir_domain! { vcx; domain s_Param {
                             function typ(s_Param): Type;
                         }
                     },
                     ref_to_pred: vir::vir_predicate! { vcx; predicate p_Param(self_p: Ref, t: Type) },
-                    domain_type: vir::vir_domain! { vcx; domain Type { } },
+                    type_snapshot: vir::vir_domain! { vcx; domain Type { } },
                     ref_to_snap,
+                    unreachable_to_snap
                 },
                 (),
             ))

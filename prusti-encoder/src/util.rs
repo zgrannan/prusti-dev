@@ -1,10 +1,15 @@
+use std::collections::BTreeMap;
+
 use prusti_rustc_interface::{
     middle::ty::{self, TyKind},
     span::symbol,
 };
 use task_encoder::TaskEncoderDependencies;
+use vir::{Caster, UnaryArity, VirCtxt};
 
-use crate::encoders::{domain::DomainEnc, GenericEnc, TyParam};
+use crate::encoders::{
+    domain::DomainEnc, require_ref_for_ty, GenericEnc, PredicateEnc, SnapshotEnc, TyParam,
+};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
@@ -12,6 +17,15 @@ pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 impl<'tcx> MostGenericTy<'tcx> {
     pub fn kind(&self) -> &TyKind<'tcx> {
         self.0.kind()
+    }
+
+    pub fn with_normalized_param_name(&self, tcx: ty::TyCtxt<'tcx>) -> MostGenericTy<'tcx> {
+        match *self.kind() {
+            TyKind::Param(_) => {
+                MostGenericTy(to_placeholder(tcx, None))
+            }
+            _ => *self,
+        }
     }
 
     pub fn ty(&self) -> ty::Ty<'tcx> {
@@ -108,5 +122,81 @@ pub fn extract_type_params<'tcx>(
             (MostGenericTy(ty), vec![orig])
         }
         _ => (MostGenericTy(ty), Vec::new()),
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct CastFunctions<'vir> {
+    pub upcast: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+    pub downcast: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+}
+
+pub struct TyMapCaster<'vir> {
+    generic_ty: vir::Type<'vir>,
+    cast_functions: BTreeMap<vir::Type<'vir>, CastFunctions<'vir>>,
+}
+
+impl<'vir> TyMapCaster<'vir> {
+    pub fn new<'tcx: 'vir>(
+        vcx: &'vir VirCtxt<'tcx>,
+        tys: Vec<(ty::Ty<'tcx>, vir::Type<'vir>)>,
+        deps: &mut TaskEncoderDependencies<'vir>,
+    ) -> Self {
+        let generic_ty = deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot;
+        let cast_functions = tys
+            .iter()
+            .filter_map(|(ty, vir_ty)| {
+                let enc = require_ref_for_ty::<SnapshotEnc>(vcx, *ty, deps).unwrap();
+                enc.cast_functions
+                    .map(|cast_functions| (*vir_ty, cast_functions))
+            })
+            .collect();
+        Self {
+            generic_ty,
+            cast_functions,
+        }
+    }
+
+    pub fn singleton(
+        generic_ty: vir::Type<'vir>,
+        ty: vir::Type<'vir>,
+        cast_functions: CastFunctions<'vir>,
+    ) -> Self {
+        let mut map = BTreeMap::new();
+        map.insert(ty, cast_functions);
+        Self {
+            generic_ty,
+            cast_functions: map,
+        }
+    }
+}
+
+impl<'vir> Caster<'vir> for TyMapCaster<'vir> {
+    fn is_generic(&self, ty: vir::Type<'vir>) -> bool {
+        ty == self.generic_ty
+    }
+
+    fn upcast<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'_>,
+        expr: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        self.cast_functions
+            .get(&expr.ty())
+            .unwrap()
+            .upcast
+            .apply(vcx, [expr])
+    }
+
+    fn downcast<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'_>,
+        expr: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        self.cast_functions
+            .get(&expr.ty())
+            .unwrap()
+            .downcast
+            .apply(vcx, [expr])
     }
 }

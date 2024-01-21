@@ -101,7 +101,7 @@ impl ConstData {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
 pub enum TypeData<'vir> {
     Int,
     Bool,
@@ -114,14 +114,14 @@ pub enum TypeData<'vir> {
     Unsupported(UnsupportedType<'vir>)
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct UnsupportedType<'vir> {
     pub name: &'vir str,
 }
 
 pub type TySubsts<'vir> = HashMap<&'vir str, Type<'vir>>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct DomainParamData<'vir> {
     pub name: &'vir str, // TODO: identifiers
 }

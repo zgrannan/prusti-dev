@@ -54,6 +54,7 @@ pub enum PredicateEncData<'vir> {
     StructLike(PredicateEncDataStruct<'vir>),
     EnumLike(Option<PredicateEncDataEnum<'vir>>),
     Ref(PredicateEncDataRef<'vir>),
+    Param,
 }
 
 // TODO: should output refs actually be references to structs...?
@@ -155,7 +156,7 @@ pub struct PredicateEncOutput<'vir> {
     pub function_snap: vir::Function<'vir>,
     pub ref_to_field_refs: Vec<vir::Function<'vir>>,
     pub method_assign: vir::Method<'vir>,
-    pub method_upcast: vir::Method<'vir>,
+    pub method_upcast: Option<vir::Method<'vir>>,
 }
 
 use crate::{
@@ -183,7 +184,7 @@ impl TaskEncoder for PredicateEnc {
     type EncodingError = PredicateEncError;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        task.with_normalized_param_name(vir::with_vcx(|vcx| vcx.tcx))
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(
@@ -199,12 +200,39 @@ impl TaskEncoder for PredicateEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        assert!(!matches!(task_key.kind(), TyKind::Param(_)));
         let snap = deps.require_local::<SnapshotEnc>(*task_key).unwrap();
         let mut enc = vir::with_vcx(|vcx| {
             PredicateEncValues::new(vcx, &snap.base_name, snap.snapshot, snap.generics)
         });
         match task_key.kind() {
+            TyKind::Param(_) => {
+                let out = deps.require_ref::<GenericEnc>(()).unwrap();
+                deps.emit_output_ref::<Self>(
+                    *task_key,
+                    PredicateEncOutputRef {
+                        ref_to_pred: out.ref_to_pred.as_unknown_arity(),
+                        ref_to_snap: out.ref_to_snap.as_unknown_arity(),
+                        unreachable_to_snap: out.unreachable_to_snap,
+                        method_assign: out.method_assign,
+                        snapshot: out.param_snapshot,
+                        specifics: PredicateEncData::Param,
+                        generics: &[],
+                    },
+                );
+                let dep = deps.require_local::<GenericEnc>(()).unwrap();
+                Ok((
+                    PredicateEncOutput {
+                        fields: vec![],
+                        predicates: vec![dep.ref_to_pred],
+                        unreachable_to_snap: dep.unreachable_to_snap,
+                        function_snap: dep.ref_to_snap,
+                        ref_to_field_refs: vec![],
+                        method_assign: dep.method_assign,
+                        method_upcast: None,
+                    },
+                    (),
+                ))
+            }
             TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) => {
                 let specifics = PredicateEncData::Primitive(snap.specifics.expect_primitive());
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(specifics));
@@ -382,7 +410,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         );
         let unreachable_to_snap = FunctionIdent::new(
             vir::vir_format!(vcx, "{}_unreachable", ref_to_pred.name()),
-            NullaryArity::new(vcx.alloc_array(&[])),
+            NullaryArity::new(&[]),
             snap_inst,
         );
         let method_assign = MethodIdent::new(
@@ -815,7 +843,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             unreachable_to_snap,
             ref_to_field_refs: self.ref_to_field_refs,
             method_assign,
-            method_upcast,
+            method_upcast: Some(method_upcast),
         }
     }
 }

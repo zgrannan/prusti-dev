@@ -80,11 +80,7 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "generics");
     for output in crate::encoders::GenericEnc::all_outputs() {
-        viper_code.push_str(&format!("{:?}\n", output.method_assign));
-        viper_code.push_str(&format!("{:?}\n", output.snapshot_param));
-        viper_code.push_str(&format!("{:?}\n", output.ref_to_pred));
-        viper_code.push_str(&format!("{:?}\n", output.domain_type));
-        viper_code.push_str(&format!("{:?}\n", output.ref_to_snap));
+        viper_code.push_str(&format!("{:?}\n", output.type_snapshot));
     }
 
     header(&mut viper_code, "snapshots");

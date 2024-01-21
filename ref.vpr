@@ -1,4 +1,3 @@
-
 domain Type {
     function i32(): Type
     function implements_clone(Type): Bool
