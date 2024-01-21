@@ -355,6 +355,8 @@ struct PredicateEncValues<'vir, 'tcx> {
     /// i.e. self_decl + generics
     ref_to_decls: &'vir [vir::LocalDecl<'vir>],
 
+    ref_to_decl_args: &'vir [vir::Expr<'vir>],
+
     fields: Vec<vir::Field<'vir>>,
     predicates: Vec<vir::Predicate<'vir>>,
     ref_to_field_refs: Vec<vir::Function<'vir>>,
@@ -418,19 +420,17 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         method_assign_arg_tys.push(snap_inst);
         let method_assign = MethodIdent::new(
             vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
-            UnknownArity::new(
-                vcx.alloc_slice(&method_assign_arg_tys),
-            ),
+            UnknownArity::new(vcx.alloc_slice(&method_assign_arg_tys)),
         );
         let method_upcast = MethodIdent::new(
             vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
             UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
         );
-        let ref_to_args = ref_to_decls
+        let ref_to_decl_args = ref_to_decls
             .iter()
             .map(|d| vcx.mk_local_ex(d.name, d.ty))
             .collect::<Vec<_>>();
-        let self_pred_read = ref_to_pred.apply(vcx, &ref_to_args, Some(vcx.mk_wildcard()));
+        let self_pred_read = ref_to_pred.apply(vcx, &ref_to_decl_args, Some(vcx.mk_wildcard()));
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl("self", &vir::TypeData::Ref)]);
         Self {
             vcx,
@@ -445,6 +445,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self_pred_read,
             self_decl,
             ref_to_decls: vcx.alloc_slice(&ref_to_decls),
+            ref_to_decl_args: vcx.alloc_slice(&ref_to_decl_args),
             fields: Vec::new(),
             predicates: Vec::new(),
             ref_to_field_refs: Vec::new(),
@@ -535,7 +536,9 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
                         vir::vir_format!(self.vcx, "{}_{}", self.ref_to_pred.name(), variant.name);
                     let predicate = vir::PredicateIdent::new(
                         base_name,
-                        vir::UnknownArity::new(&[&vir::TypeData::Ref]),
+                        vir::UnknownArity::new(self.vcx.alloc_slice(
+                            &self.ref_to_decls.iter().map(|d| d.ty).collect::<Vec<_>>(),
+                        )),
                     );
                     let fields = self.mk_struct_ref(Some(base_name), variant.fields);
                     PredicateEncDataVariant {
@@ -599,15 +602,20 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let expr = self.vcx.mk_conj(&fields_pred);
 
         self.predicates.push(self.vcx.mk_predicate(
-            predicate.unwrap_or(self.ref_to_pred).name(),
+            predicate.unwrap_or(self.ref_to_pred),
             self.ref_to_decls,
             Some(expr),
         ));
 
         let args: Vec<_> = fields.iter().map(|f| f.self_field_snap).collect();
         let expr = field_snaps_to_snap.apply(self.vcx, &args);
-        let self_pred =
-            predicate.map(|p| p.apply(self.vcx, &[self.self_ex], Some(self.vcx.mk_wildcard())));
+        let self_pred = predicate.map(|p| {
+            p.apply(
+                self.vcx,
+                self.ref_to_decl_args,
+                Some(self.vcx.mk_wildcard()),
+            )
+        });
         self.vcx
             .mk_unfolding_expr(self_pred.unwrap_or(self.self_pred_read), expr)
     }
@@ -625,7 +633,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         let self_field_acc = self.vcx.mk_acc_field_expr(self.self_ex, field, None);
         self.predicates.push(self.vcx.mk_predicate(
-            self.ref_to_pred.name(),
+            self.ref_to_pred,
             self.self_decl,
             Some(self_field_acc),
         ));
@@ -666,7 +674,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         ));
         let predicate = self.vcx.mk_conj(&[self_field, non_null, inner_pred]);
         self.predicates.push(self.vcx.mk_predicate(
-            self.ref_to_pred.name(),
+            self.ref_to_pred,
             self.self_decl,
             Some(predicate),
         ));
@@ -718,7 +726,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
                     let cond = self.vcx.mk_eq_expr(discr, variant.discr);
                     let pred = self.vcx.mk_predicate_app_expr(variant.predicate.apply(
                         self.vcx,
-                        &[self.self_ex],
+                        self.ref_to_decl_args,
                         None,
                     ));
                     (cond, pred, body)
@@ -753,8 +761,8 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self.vcx.mk_unfolding_expr(self.self_pred_read, body)
         });
         self.predicates.push(self.vcx.mk_predicate(
-            self.ref_to_pred.name(),
-            self.self_decl,
+            self.ref_to_pred,
+            self.ref_to_decls,
             Some(predicate_body),
         ));
         self.finalize(deps, ty, fn_snap_body)

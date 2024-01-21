@@ -1,6 +1,6 @@
 //#[macro_export]
 //macro_rules! vir_expr_nopos {
-//    
+//
 //}
 
 //#[macro_export]
@@ -255,14 +255,14 @@ macro_rules! vir_domain {
 #[macro_export]
 macro_rules! vir_predicate {
     ($vcx:expr; predicate $name:tt ( $( $args:tt )* ) { [$expr:expr] }) => {{
-        $vcx.mk_predicate(
+        $vcx.mk_predicate_unchecked(
             $crate::vir_ident!($vcx; $name),
             $crate::vir_arg_list!($vcx; $($args)*),
             Some($expr)
         )
     }};
     ($vcx:expr; predicate $name:tt ( $( $args:tt )* )) => {{
-        $vcx.mk_predicate(
+        $vcx.mk_predicate_unchecked(
             $crate::vir_ident!($vcx; $name),
             $crate::vir_arg_list!($vcx; $($args)*),
             None

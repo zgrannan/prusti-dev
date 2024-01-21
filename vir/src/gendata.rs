@@ -1,22 +1,26 @@
 use std::fmt::Debug;
 
-use crate::data::*;
-use crate::debug_info::DEBUGINFO_NONE;
-use crate::debug_info::DebugInfo;
-use crate::genrefs::*;
-use crate::refs::*;
+use crate::{
+    data::*,
+    debug_info::{DebugInfo, DEBUGINFO_NONE},
+    genrefs::*,
+    refs::*,
+    UnknownArity,
+};
 
 use vir_proc_macro::*;
 
 #[derive(Reify)]
 pub struct UnOpGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) kind: UnOpKind,
+    #[reify_copy]
+    pub(crate) kind: UnOpKind,
     pub(crate) expr: ExprGen<'vir, Curr, Next>,
 }
 
 #[derive(Reify)]
 pub struct BinOpGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) kind: BinOpKind,
+    #[reify_copy]
+    pub(crate) kind: BinOpKind,
     pub(crate) lhs: ExprGen<'vir, Curr, Next>,
     pub(crate) rhs: ExprGen<'vir, Curr, Next>,
 }
@@ -24,7 +28,7 @@ pub struct BinOpGenData<'vir, Curr, Next> {
 impl<'vir, Curr, Next> BinOpGenData<'vir, Curr, Next> {
     pub fn ty(&self) -> Type<'vir> {
         match self.kind {
-              BinOpKind::CmpEq
+            BinOpKind::CmpEq
             | BinOpKind::CmpNe
             | BinOpKind::CmpGt
             | BinOpKind::CmpLt
@@ -45,21 +49,25 @@ pub struct TernaryGenData<'vir, Curr, Next> {
 
 #[derive(Reify)]
 pub struct ForallGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) qvars: &'vir [LocalDecl<'vir>],
+    #[reify_copy]
+    pub(crate) qvars: &'vir [LocalDecl<'vir>],
     pub(crate) triggers: &'vir [&'vir [ExprGen<'vir, Curr, Next>]],
     pub(crate) body: ExprGen<'vir, Curr, Next>,
 }
 
 #[derive(Reify)]
 pub struct FuncAppGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) target: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) target: &'vir str, // TODO: identifiers
     pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
-    #[reify_copy] pub(crate) result_ty: Type<'vir>,
+    #[reify_copy]
+    pub(crate) result_ty: Type<'vir>,
 }
 
 #[derive(Reify)]
 pub struct PredicateAppGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) target: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) target: &'vir str, // TODO: identifiers
     pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
     pub(crate) perm: Option<ExprGen<'vir, Curr, Next>>,
 }
@@ -73,13 +81,15 @@ pub struct UnfoldingGenData<'vir, Curr, Next> {
 #[derive(Reify)]
 pub struct AccFieldGenData<'vir, Curr, Next> {
     pub(crate) recv: ExprGen<'vir, Curr, Next>,
-    #[reify_copy] pub(crate) field: Field<'vir>, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) field: Field<'vir>, // TODO: identifiers
     pub(crate) perm: Option<ExprGen<'vir, Curr, Next>>,
 }
 
 #[derive(Reify)]
 pub struct LetGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str,
+    #[reify_copy]
+    pub(crate) name: &'vir str,
     pub(crate) val: ExprGen<'vir, Curr, Next>,
     pub(crate) expr: ExprGen<'vir, Curr, Next>,
 }
@@ -101,16 +111,16 @@ impl<A, B: GenRow> GenRow for fn(A) -> B {
 }*/
 
 // TODO add position and other metadata
-pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>{
+pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir> {
     pub kind: ExprKindGen<'vir, Curr, Next>,
-    pub debug_info: DebugInfo
+    pub debug_info: DebugInfo,
 }
 
-impl <'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
+impl<'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
     pub fn new(kind: ExprKindGen<'vir, Curr, Next>) -> Self {
         ExprGenData {
             kind,
-            debug_info: DebugInfo::new()
+            debug_info: DebugInfo::new(),
         }
     }
 }
@@ -139,8 +149,10 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     PredicateApp(PredicateAppGen<'vir, Curr, Next>), // TODO: this should not be used instead of acc?
     // domain func app
     // inhale/exhale
-
-    Lazy(&'vir str, Box<dyn for <'a> Fn(&'vir crate::VirCtxt<'a>, Curr) -> Next + 'vir>),
+    Lazy(
+        &'vir str,
+        Box<dyn for<'a> Fn(&'vir crate::VirCtxt<'a>, Curr) -> Next + 'vir>,
+    ),
 
     Todo(&'vir str),
 }
@@ -163,7 +175,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::FuncApp(a) => a.result_ty,
             ExprKindGenData::PredicateApp(_) => &TypeData::Predicate,
             ExprKindGenData::Lazy(_, _) => panic!("cannot get type of lazy expression"),
-            ExprKindGenData::Todo(msg) => panic!("{msg}")
+            ExprKindGenData::Todo(msg) => panic!("{msg}"),
         }
     }
 }
@@ -182,30 +194,39 @@ impl<'vir, Curr, Next> ExprGenData<'vir, Curr, Next> {
 
 #[derive(Reify)]
 pub struct DomainAxiomGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // ? or comment, then auto-gen the names?
+    #[reify_copy]
+    pub(crate) name: &'vir str, // ? or comment, then auto-gen the names?
     pub(crate) expr: ExprGen<'vir, Curr, Next>,
 }
 
 #[derive(Reify)]
 pub struct DomainGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // TODO: identifiers
-    #[reify_copy] pub(crate) typarams: &'vir [DomainParamData<'vir>],
+    #[reify_copy]
+    pub(crate) name: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) typarams: &'vir [DomainParamData<'vir>],
     pub(crate) axioms: &'vir [DomainAxiomGen<'vir, Curr, Next>],
-    #[reify_copy] pub(crate) functions: &'vir [DomainFunction<'vir>],
+    #[reify_copy]
+    pub(crate) functions: &'vir [DomainFunction<'vir>],
 }
 
 #[derive(Reify)]
 pub struct PredicateGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // TODO: identifiers
-    #[reify_copy] pub(crate) args: &'vir [LocalDecl<'vir>],
+    #[reify_copy]
+    pub(crate) name: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) args: &'vir [LocalDecl<'vir>],
     pub(crate) expr: Option<ExprGen<'vir, Curr, Next>>,
 }
 
 #[derive(Reify)]
 pub struct FunctionGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // TODO: identifiers
-    #[reify_copy] pub(crate) args: &'vir [LocalDecl<'vir>],
-    #[reify_copy] pub(crate) ret: Type<'vir>,
+    #[reify_copy]
+    pub(crate) name: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) args: &'vir [LocalDecl<'vir>],
+    #[reify_copy]
+    pub(crate) ret: Type<'vir>,
     pub(crate) pres: &'vir [ExprGen<'vir, Curr, Next>],
     pub(crate) posts: &'vir [ExprGen<'vir, Curr, Next>],
     pub(crate) expr: Option<ExprGen<'vir, Curr, Next>>,
@@ -222,14 +243,19 @@ pub struct PureAssignGenData<'vir, Curr, Next> {
 
 #[derive(Reify)]
 pub struct MethodCallGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) targets: &'vir [Local<'vir>],
-    #[reify_copy] pub(crate) method: &'vir str,
+    #[reify_copy]
+    pub(crate) targets: &'vir [Local<'vir>],
+    #[reify_copy]
+    pub(crate) method: &'vir str,
     pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
 }
 
 #[derive(Reify)]
 pub enum StmtGenData<'vir, Curr, Next> {
-    LocalDecl(#[reify_copy] LocalDecl<'vir>, Option<ExprGen<'vir, Curr, Next>>),
+    LocalDecl(
+        #[reify_copy] LocalDecl<'vir>,
+        Option<ExprGen<'vir, Curr, Next>>,
+    ),
     PureAssign(PureAssignGen<'vir, Curr, Next>),
     Inhale(ExprGen<'vir, Curr, Next>),
     Exhale(ExprGen<'vir, Curr, Next>),
@@ -248,7 +274,8 @@ pub struct GotoIfGenData<'vir, Curr, Next> {
         CfgBlockLabel<'vir>,
         &'vir [StmtGen<'vir, Curr, Next>],
     )],
-    #[reify_copy] pub(crate) otherwise: CfgBlockLabel<'vir>,
+    #[reify_copy]
+    pub(crate) otherwise: CfgBlockLabel<'vir>,
     pub(crate) otherwise_statements: &'vir [StmtGen<'vir, Curr, Next>],
 }
 
@@ -263,16 +290,20 @@ pub enum TerminatorStmtGenData<'vir, Curr, Next> {
 
 #[derive(Debug, Reify)]
 pub struct CfgBlockGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) label: CfgBlockLabel<'vir>,
+    #[reify_copy]
+    pub(crate) label: CfgBlockLabel<'vir>,
     pub(crate) stmts: &'vir [StmtGen<'vir, Curr, Next>],
     pub(crate) terminator: TerminatorStmtGen<'vir, Curr, Next>,
 }
 
 #[derive(Reify)]
 pub struct MethodGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // TODO: identifiers
-    #[reify_copy] pub(crate) args: &'vir [LocalDecl<'vir>],
-    #[reify_copy] pub(crate) rets: &'vir [LocalDecl<'vir>],
+    #[reify_copy]
+    pub(crate) name: &'vir str, // TODO: identifiers
+    #[reify_copy]
+    pub(crate) args: &'vir [LocalDecl<'vir>],
+    #[reify_copy]
+    pub(crate) rets: &'vir [LocalDecl<'vir>],
     // TODO: pre/post - add a comment variant
     pub(crate) pres: &'vir [ExprGen<'vir, Curr, Next>],
     pub(crate) posts: &'vir [ExprGen<'vir, Curr, Next>],
@@ -281,7 +312,8 @@ pub struct MethodGenData<'vir, Curr, Next> {
 
 #[derive(Debug, Reify)]
 pub struct ProgramGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) fields: &'vir [Field<'vir>],
+    #[reify_copy]
+    pub(crate) fields: &'vir [Field<'vir>],
     pub(crate) domains: &'vir [DomainGen<'vir, Curr, Next>],
     pub(crate) predicates: &'vir [PredicateGen<'vir, Curr, Next>],
     pub(crate) functions: &'vir [FunctionGen<'vir, Curr, Next>],

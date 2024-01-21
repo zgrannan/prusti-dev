@@ -2,7 +2,7 @@ use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}};
+use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, UnknownArity, CallableIdent, CheckTypes, Arity};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -312,7 +312,21 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
-    pub fn mk_predicate<'vir, Curr, Next>(
+    pub fn mk_predicate<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir>>(
+        &'vir self,
+        ident: PredicateIdent<'vir, A>,
+        args: &'vir [LocalDecl<'vir>],
+        expr: Option<ExprGen<'vir, Curr, Next>>
+    ) -> PredicateGen<'vir, Curr, Next> {
+        ident.arity().check_types(ident.name(), args).unwrap();
+        self.mk_predicate_unchecked(
+            ident.name(),
+            args,
+            expr
+        )
+    }
+
+    pub fn mk_predicate_unchecked<'vir, Curr, Next>(
         &'vir self,
         name: &'vir str,
         args: &'vir [LocalDecl<'vir>],

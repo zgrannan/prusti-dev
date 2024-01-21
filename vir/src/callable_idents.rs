@@ -1,6 +1,6 @@
 use crate::{
     debug_info::DebugInfo, DomainParamData, ExprGen, MethodCallGenData, PredicateAppGen,
-    PredicateAppGenData, StmtGenData, TySubsts, Type, TypeData, VirCtxt,
+    PredicateAppGenData, StmtGenData, TySubsts, Type, TypeData, VirCtxt, LocalDecl,
 };
 use sealed::sealed;
 use std::collections::HashMap;
@@ -190,11 +190,27 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
     }
 }
 
-trait CheckTypes<'vir> {
-    fn check_types<Curr: 'vir, Next: 'vir>(
+pub trait HasType<'vir> {
+    fn typ(&self) -> Type<'vir>;
+}
+
+impl <'vir, Curr, Next> HasType<'vir> for ExprGen<'vir, Curr, Next> {
+    fn typ(&self) -> Type<'vir> {
+        self.ty()
+    }
+}
+
+impl <'vir> HasType<'vir> for LocalDecl<'vir> {
+    fn typ(&self) -> Type<'vir> {
+        self.ty
+    }
+}
+
+pub trait CheckTypes<'vir> {
+    fn check_types<T: HasType<'vir>>(
         &self,
         name: &str,
-        args: &[ExprGen<'vir, Curr, Next>],
+        args: &[T],
     ) -> Option<HashMap<&'vir str, Type<'vir>>>;
 }
 
@@ -223,22 +239,22 @@ fn check<'vir>(substs: &mut TySubsts<'vir>, expected: Type<'vir>, actual: Type<'
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
-    fn check_types<Curr: 'vir, Next: 'vir>(
+    fn check_types<T: HasType<'vir>>(
         &self,
         name: &str,
-        args: &[ExprGen<'vir, Curr, Next>],
+        args: &[T],
     ) -> Option<TySubsts<'vir>> {
         if !self.check_len_matches(name, args.len()) {
             return None;
         }
         let mut substs = TySubsts::new();
         for (arg, expected) in args.iter().zip(self.args().into_iter()) {
-            let actual = arg.ty();
+            let actual = arg.typ();
             if !check(&mut substs, expected, actual) {
                 eprintln!(
                     "{name} expected arguments {:?} but got argument types {:?}",
                     self.args(),
-                    args.iter().map(|a| a.ty()).collect::<Vec<_>>()
+                    args.iter().map(|a| a.typ()).collect::<Vec<_>>()
                 );
                 return None;
             }
@@ -365,7 +381,7 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             .iter()
             .zip(self.arity().args().iter())
             .map(|(a, expected)| {
-                let arg_generic = caster.is_generic(a.ty());
+                let arg_generic = caster.is_generic(a.typ());
                 let expected_generic = caster.is_generic(expected);
                 if arg_generic && !expected_generic {
                     eprintln!("upcasting");
@@ -416,7 +432,7 @@ impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>],
         perm: Option<ExprGen<'vir, Curr, Next>>,
     ) -> PredicateAppGen<'vir, Curr, Next> {
-        self.1.check_types(self.name(), args);
+        self.1.check_types(self.name(), args).unwrap();
         vcx.alloc(PredicateAppGenData {
             target: self.name(),
             args: vcx.alloc_slice(args),
