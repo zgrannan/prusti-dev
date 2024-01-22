@@ -148,7 +148,7 @@ impl TaskEncoder for GenericEnc {
                 vcx.alloc_slice(&[vcx.mk_predicate_app_expr(ref_to_pred.apply(
                     vcx,
                     [vcx.mk_local_ex("self", &TypeData::Ref), t],
-                    None,
+                    Some(vcx.mk_wildcard()),
                 ))]),
                 vcx.alloc_slice(&[vcx.mk_bin_op_expr(
                     vir::BinOpKind::CmpEq,
