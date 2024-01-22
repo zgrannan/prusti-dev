@@ -2,9 +2,9 @@ use prusti_rustc_interface::{
     abi,
     middle::ty::{self, TyKind},
 };
-use task_encoder::{TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
+use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    add_debug_note, BinaryArity, CallableIdent, FunctionIdent, MethodIdent, NullaryArity,
+    add_debug_note, CallableIdent, FunctionIdent, MethodIdent, NullaryArity,
     PredicateIdent, TypeData, UnaryArity, UnknownArity, VirCtxt,
 };
 
@@ -156,7 +156,6 @@ pub struct PredicateEncOutput<'vir> {
     pub function_snap: vir::Function<'vir>,
     pub ref_to_field_refs: Vec<vir::Function<'vir>>,
     pub method_assign: vir::Method<'vir>,
-    pub method_upcast: Option<vir::Method<'vir>>,
 }
 
 use crate::{
@@ -227,8 +226,7 @@ impl TaskEncoder for PredicateEnc {
                         unreachable_to_snap: dep.unreachable_to_snap,
                         function_snap: dep.ref_to_snap,
                         ref_to_field_refs: vec![],
-                        method_assign: dep.method_assign,
-                        method_upcast: None,
+                        method_assign: dep.method_assign
                     },
                     (),
                 ))
@@ -343,7 +341,6 @@ struct PredicateEncValues<'vir, 'tcx> {
     ref_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
     unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
     method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
-    method_upcast: MethodIdent<'vir, UnaryArity<'vir>>,
 
     /// self: Ref
     self_ex: vir::Expr<'vir>,
@@ -422,10 +419,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             vir::vir_format!(vcx, "assign_{}", ref_to_pred.name()),
             UnknownArity::new(vcx.alloc_slice(&method_assign_arg_tys)),
         );
-        let method_upcast = MethodIdent::new(
-            vir::vir_format!(vcx, "upcast_{}", ref_to_pred.name()),
-            UnaryArity::new(vcx.alloc_array(&[&vir::TypeData::Ref])),
-        );
         let ref_to_decl_args = ref_to_decls
             .iter()
             .map(|d| vcx.mk_local_ex(d.name, d.ty))
@@ -440,7 +433,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             ref_to_snap,
             unreachable_to_snap,
             method_assign,
-            method_upcast,
             self_ex,
             self_pred_read,
             self_decl,
@@ -804,14 +796,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         // method_assign
         let method_assign = mk_method_assign(self.vcx, &(&self).into());
 
-        // method_upcast
         let param_predicate = deps.require_ref::<GenericEnc>(()).unwrap().ref_to_pred;
-
-        eprintln!(
-            "snap inst for {:?}: {:?}",
-            self.method_upcast.name(),
-            self.snap_inst
-        );
 
         let upcast_ty_params: Vec<_> = self.generics.to_vec();
 
@@ -826,29 +811,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         let type_constructor = deps.require_ref::<DomainEnc>(*ty).unwrap().type_function;
 
-        let typ = type_constructor.apply(
-            self.vcx,
-            upcast_ty_params
-                .iter()
-                .map(|p| self.vcx.mk_local_ex(p.name, &TYP_DOMAIN))
-                .collect::<Vec<_>>()
-                .as_slice(),
-        );
-
-        let method_upcast = self.vcx.mk_method(
-            self.method_upcast.name(),
-            upcast_method_params,
-            &[],
-            self.vcx.alloc_slice(&[self_pred_app]),
-            self.vcx
-                .alloc_slice(&[self.vcx.mk_predicate_app_expr(param_predicate.apply(
-                    self.vcx,
-                    [self.self_ex, typ],
-                    None,
-                ))]),
-            None,
-        );
-
         PredicateEncOutput {
             fields: self.fields,
             predicates: self.predicates,
@@ -856,7 +818,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             unreachable_to_snap,
             ref_to_field_refs: self.ref_to_field_refs,
             method_assign,
-            method_upcast: Some(method_upcast),
         }
     }
 }
