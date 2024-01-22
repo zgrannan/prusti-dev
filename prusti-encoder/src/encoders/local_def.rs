@@ -53,6 +53,13 @@ impl<'vir, 'tcx> TyParam<'vir> {
             TyParam::Instantiated(e) => e,
         }
     }
+
+    pub fn decl(&self) -> Option<vir::LocalDecl<'vir>> {
+        match self {
+            TyParam::Generic(g) => Some(g),
+            TyParam::Instantiated(_) => None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

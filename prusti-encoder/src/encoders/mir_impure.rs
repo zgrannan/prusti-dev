@@ -38,7 +38,7 @@ use crate::{
     util::{extract_type_params, get_viper_type_value, TyMapCaster},
 };
 
-use super::get_ty_ops;
+use super::{get_ty_ops, TyParam};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -107,9 +107,10 @@ impl TaskEncoder for MirImpureEnc {
                 vcx.tcx.item_name(def_id)
             );
             let mut args = vec![&vir::TypeData::Ref; arg_count];
-            for _ in substs.iter() {
-                args.push(&TYP_DOMAIN);
-            }
+            let param_ty_decls = substs.into_type_list(vcx.tcx).iter().flat_map(
+                |ty| get_param_type_decls(vcx, ty, deps).into_iter(),
+            ).collect::<Vec<_>>();
+            args.extend(param_ty_decls.iter().map(|decl| decl.ty));
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let method_ref = MethodIdent::new(method_name, args);
             deps.emit_output_ref::<Self>(*task_key, MirImpureEncOutputRef { method_ref });
@@ -206,9 +207,7 @@ impl TaskEncoder for MirImpureEnc {
                     pres.push(local_defs.locals[arg_idx.into()].impure_pred);
                 }
             }
-            for subst in substs.iter() {
-                args.push(vcx.mk_local_decl(vcx.alloc_str(&format!("{}", subst)), &TYP_DOMAIN));
-            }
+            args.extend(param_ty_decls.iter());
             pres.extend(spec_pres);
 
             let mut posts = Vec::with_capacity(spec_posts.len() + 1);
@@ -218,7 +217,7 @@ impl TaskEncoder for MirImpureEnc {
             Ok((
                 MirImpureEncOutput {
                     method: vcx.mk_method(
-                        method_name,
+                        method_ref,
                         vcx.alloc_slice(&args),
                         &[],
                         vcx.alloc_slice(&pres),
@@ -874,10 +873,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         std::iter::once(dest).chain(method_in).collect::<Vec<_>>();
 
                     for arg in arg_tys {
-                        let domain_ref =
-                            require_ref_for_ty::<DomainEnc>(self.vcx, arg.expect_ty(), self.deps)
-                                .unwrap();
-                        method_args.push(domain_ref.type_function.apply(self.vcx, &[]))
+                        method_args.extend(get_param_type_exprs(self.vcx, arg.expect_ty(), self.deps))
                     }
 
                     eprintln!("arg_tys: {:?}", arg_tys);
@@ -946,6 +942,50 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
     }
 }
 
+fn get_param_typarams<'vir, 'tcx>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    ty: ty::Ty<'tcx>,
+    deps: &mut TaskEncoderDependencies<'vir>,
+) -> Vec<TyParam<'vir>> {
+    let mut args = vec![];
+
+    if matches!(ty.kind(), ty::TyKind::Param(_)) {
+        // This is a type parameter, so the snapshot encoding must
+        // include the relevant type
+        // TODO: Currently we rely on assuming that the value for this
+        //       is a parameter in scope...
+        args.push(get_viper_type_value(vcx, deps, ty));
+    } else {
+        let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
+        for arg in arg_tys {
+            args.push(get_viper_type_value(vcx, deps, arg))
+        }
+    }
+    args
+}
+
+fn get_param_type_decls<'vir, 'tcx>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    ty: ty::Ty<'tcx>,
+    deps: &mut TaskEncoderDependencies<'vir>,
+) -> Vec<vir::LocalDecl<'vir>> {
+    get_param_typarams(vcx, ty, deps)
+        .into_iter()
+        .flat_map(|p| p.decl())
+        .collect()
+}
+
+fn get_param_type_exprs<'vir, 'tcx>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    ty: ty::Ty<'tcx>,
+    deps: &mut TaskEncoderDependencies<'vir>,
+) -> Vec<vir::Expr<'vir>> {
+    get_param_typarams(vcx, ty, deps)
+        .into_iter()
+        .map(|p| p.expr(vcx))
+        .collect()
+}
+
 fn ref_to_args<'vir, 'tcx>(
     vcx: &'vir vir::VirCtxt<'tcx>,
     viper_ref: vir::Expr<'vir>,
@@ -953,18 +993,6 @@ fn ref_to_args<'vir, 'tcx>(
     deps: &mut TaskEncoderDependencies<'vir>,
 ) -> Vec<vir::Expr<'vir>> {
     let mut args = vec![viper_ref];
-
-    if matches!(ty.kind(), ty::TyKind::Param(_)) {
-        // This is a type parameter, so the snapshot encoding must
-        // include the relevant type
-        // TODO: Currently we rely on assuming that the value for this
-        //       is a parameter in scope...
-        args.push(get_viper_type_value(vcx, deps, ty).expr(vcx));
-    } else {
-        let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
-        for arg in arg_tys {
-            args.push(get_viper_type_value(vcx, deps, arg).expr(vcx))
-        }
-    }
+    args.extend(get_param_type_exprs(vcx, ty, deps));
     args
 }

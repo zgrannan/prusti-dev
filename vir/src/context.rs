@@ -2,7 +2,7 @@ use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, UnknownArity, CallableIdent, CheckTypes, Arity};
+use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, UnknownArity, CallableIdent, CheckTypes, Arity, MethodIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -463,7 +463,27 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
-    pub fn mk_method<'vir, Curr, Next>(
+    pub fn mk_method<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir>>(
+        &'vir self,
+        ident: MethodIdent<'vir, A>,
+        args: &'vir [LocalDecl<'vir>],
+        rets: &'vir [LocalDecl<'vir>],
+        pres: &'vir [ExprGen<'vir, Curr, Next>],
+        posts: &'vir [ExprGen<'vir, Curr, Next>],
+        blocks: Option<&'vir [CfgBlockGen<'vir, Curr, Next>]>, // first one is the entrypoint
+    ) -> MethodGen<'vir, Curr, Next> {
+        ident.arity().check_types(ident.name(), args).unwrap();
+        self.mk_method_unchecked(
+            ident.name(),
+            args,
+            rets,
+            pres,
+            posts,
+            blocks
+        )
+    }
+
+    pub fn mk_method_unchecked<'vir, Curr, Next>(
         &'vir self,
         name: &'vir str, // TODO: identifiers
         args: &'vir [LocalDecl<'vir>],

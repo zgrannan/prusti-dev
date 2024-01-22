@@ -846,7 +846,7 @@ pub fn mk_method_assign<'vir, 'tcx>(
         ),
     ]);
     vcx.mk_method(
-        ops.method_assign.name(),
+        ops.method_assign,
         &assign_args,
         &[],
         &[],
