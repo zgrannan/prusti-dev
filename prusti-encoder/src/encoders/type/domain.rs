@@ -274,7 +274,6 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         base_name: &str,
         params: impl Iterator<Item = ty::Ty<'tcx>>,
     ) -> (Self, Vec<vir::Type<'vir>>) {
-        eprintln!("Base name: {}", base_name);
         let domain = vir::DomainIdent::nullary(vir::vir_format!(vcx, "s_{base_name}"));
 
         let num_params = params.count();

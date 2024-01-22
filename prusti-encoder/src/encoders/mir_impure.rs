@@ -876,8 +876,6 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         method_args.extend(get_param_type_exprs(self.vcx, arg.expect_ty(), self.deps))
                     }
 
-                    eprintln!("arg_tys: {:?}", arg_tys);
-
                     self.stmt(
                         self.vcx
                             .alloc(func_out.method_ref.apply(self.vcx, &method_args)),

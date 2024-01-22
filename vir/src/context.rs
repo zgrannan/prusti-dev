@@ -318,7 +318,7 @@ impl<'tcx> VirCtxt<'tcx> {
         args: &'vir [LocalDecl<'vir>],
         expr: Option<ExprGen<'vir, Curr, Next>>
     ) -> PredicateGen<'vir, Curr, Next> {
-        ident.arity().check_types(ident.name(), args).unwrap();
+        assert!(ident.arity().types_match(args));
         self.mk_predicate_unchecked(
             ident.name(),
             args,
@@ -472,7 +472,7 @@ impl<'tcx> VirCtxt<'tcx> {
         posts: &'vir [ExprGen<'vir, Curr, Next>],
         blocks: Option<&'vir [CfgBlockGen<'vir, Curr, Next>]>, // first one is the entrypoint
     ) -> MethodGen<'vir, Curr, Next> {
-        ident.arity().check_types(ident.name(), args).unwrap();
+        assert!(ident.arity().types_match(args));
         self.mk_method_unchecked(
             ident.name(),
             args,

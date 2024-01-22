@@ -162,7 +162,9 @@ impl<'vir> DomainIdentUnknownArity<'vir> {
 pub trait Arity<'vir>: Copy {
     type Arg;
     fn args(&self) -> &'vir [Self::Arg];
-    fn check_len_matches(&self, name: &str, len: usize) -> bool;
+
+    #[must_use]
+    fn len_matches(&self, len: usize) -> bool;
 }
 #[sealed]
 impl<'vir, T, const N: usize> Arity<'vir> for KnownArityAny<'vir, T, N> {
@@ -170,7 +172,7 @@ impl<'vir, T, const N: usize> Arity<'vir> for KnownArityAny<'vir, T, N> {
     fn args(&self) -> &'vir [T] {
         &self.0
     }
-    fn check_len_matches(&self, _name: &str, _len: usize) -> bool {
+    fn len_matches(&self, _len: usize) -> bool {
         true
     }
 }
@@ -180,13 +182,9 @@ impl<'vir, T> Arity<'vir> for UnknownArityAny<'vir, T> {
     fn args(&self) -> &'vir [T] {
         &self.0
     }
-    fn check_len_matches(&self, name: &str, len: usize) -> bool {
-        if self.0.len() != len {
-            eprintln!("{name} called with {len} args (expected {})", self.0.len());
-            false
-        } else {
-            true
-        }
+
+    fn len_matches(&self, len: usize) -> bool {
+        self.0.len() == len
     }
 }
 
@@ -207,59 +205,24 @@ impl <'vir> HasType<'vir> for LocalDecl<'vir> {
 }
 
 pub trait CheckTypes<'vir> {
-    fn check_types<T: HasType<'vir>>(
+    #[must_use]
+    fn types_match<T: HasType<'vir>>(
         &self,
-        name: &str,
         args: &[T],
-    ) -> Option<HashMap<&'vir str, Type<'vir>>>;
-}
-
-fn unify<'vir>(
-    substs: &mut HashMap<&'vir str, Type<'vir>>,
-    param: &'vir str,
-    ty: Type<'vir>,
-) -> bool {
-    match substs.get(param) {
-        Some(s) => s == &ty,
-        None => substs.insert(param, ty) == None,
-    }
-}
-
-fn check<'vir>(substs: &mut TySubsts<'vir>, expected: Type<'vir>, actual: Type<'vir>) -> bool {
-    match (expected, actual) {
-        (e, a) if e == a => true,
-        (TypeData::Domain(n1, a1), TypeData::Domain(n2, a2)) => {
-            n1 == n2
-                && a1.len() == a2.len()
-                && a1.iter().zip(a2.iter()).all(|(e, a)| check(substs, e, a))
-        }
-        (TypeData::DomainTypeParam(p), a) => unify(substs, p.name, a),
-        _ => false,
-    }
+    ) -> bool;
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> CheckTypes<'vir> for A {
-    fn check_types<T: HasType<'vir>>(
+    fn types_match<T: HasType<'vir>>(
         &self,
-        name: &str,
         args: &[T],
-    ) -> Option<TySubsts<'vir>> {
-        if !self.check_len_matches(name, args.len()) {
-            return None;
+    ) -> bool {
+        if !self.len_matches(args.len()) {
+            return false;
         }
-        let mut substs = TySubsts::new();
-        for (arg, expected) in args.iter().zip(self.args().into_iter()) {
-            let actual = arg.typ();
-            if !check(&mut substs, expected, actual) {
-                eprintln!(
-                    "{name} expected arguments {:?} but got argument types {:?}",
-                    self.args(),
-                    args.iter().map(|a| a.typ()).collect::<Vec<_>>()
-                );
-                return None;
-            }
-        }
-        Some(substs)
+        args.iter().zip(self.args().into_iter()).all(|(a, expected)| {
+            a.typ() == *expected
+        })
     }
 }
 
@@ -306,9 +269,8 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: [ExprGen<'vir, Curr, Next>; N],
     ) -> ExprGen<'vir, Curr, Next> {
-        if let Some(substs) = self.1.check_types(self.name(), &args) {
-            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
-            vcx.mk_func_app(self.name(), &args, result_ty)
+        if self.1.types_match(&args) {
+            vcx.mk_func_app(self.name(), &args, self.result_ty())
         } else {
             panic!(
                 "Function {} could not be applied, debug info: {}",
@@ -326,7 +288,7 @@ impl<'vir, const N: usize> PredicateIdent<'vir, KnownArity<'vir, N>> {
         args: [ExprGen<'vir, Curr, Next>; N],
         perm: Option<ExprGen<'vir, Curr, Next>>,
     ) -> PredicateAppGen<'vir, Curr, Next> {
-        self.1.check_types(self.name(), &args);
+        assert!(self.1.types_match(&args));
         vcx.alloc(PredicateAppGenData {
             target: self.name(),
             args: vcx.alloc_slice(&args),
@@ -340,7 +302,7 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: [ExprGen<'vir, Curr, Next>; N],
     ) -> StmtGenData<'vir, Curr, Next> {
-        self.1.check_types(self.name(), &args);
+        assert!(self.1.types_match(&args));
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
             method: self.name(),
@@ -350,7 +312,6 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
 }
 impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, N>> {
     pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: [Type<'vir>; N]) -> Type<'vir> {
-        self.1.check_len_matches(self.name(), args.len());
         vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(&args)))
     }
 }
@@ -396,15 +357,14 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             })
             .collect::<Vec<_>>();
         let args = vcx.alloc_slice(&args);
-        if let Some(substs) = self.1.check_types(self.name(), args) {
-            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
-            vcx.mk_func_app(self.name(), args, result_ty)
+        if self.1.types_match(args) {
+            vcx.mk_func_app(self.name(), args, self.result_ty())
         } else {
             panic!(
                 "Function {} could not be applied, debug info: {}",
                 self.name(),
                 self.debug_info()
-            );
+            )
         }
     }
     pub fn apply<'tcx, Curr: 'vir, Next: 'vir>(
@@ -412,9 +372,8 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> ExprGen<'vir, Curr, Next> {
-        if let Some(substs) = self.1.check_types(self.name(), args) {
-            let result_ty = vcx.apply_ty_substs(self.result_ty(), &substs);
-            vcx.mk_func_app(self.name(), args, result_ty)
+        if self.1.types_match(args) {
+            vcx.mk_func_app(self.name(), args, self.result_ty())
         } else {
             panic!(
                 "Function {} could not be applied, debug info: {}",
@@ -432,7 +391,7 @@ impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>],
         perm: Option<ExprGen<'vir, Curr, Next>>,
     ) -> PredicateAppGen<'vir, Curr, Next> {
-        self.1.check_types(self.name(), args).unwrap();
+        assert!(self.1.types_match(args));
         vcx.alloc(PredicateAppGenData {
             target: self.name(),
             args: vcx.alloc_slice(args),
@@ -446,7 +405,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> StmtGenData<'vir, Curr, Next> {
-        self.1.check_types(self.name(), args).unwrap();
+        assert!(self.1.types_match(args));
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
             method: self.name(),
@@ -456,7 +415,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
 }
 impl<'vir> DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>> {
     pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: &[Type<'vir>]) -> Type<'vir> {
-        self.1.check_len_matches(self.name(), args.len());
+        assert!(self.1.len_matches(args.len()));
         vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(args)))
     }
 }
