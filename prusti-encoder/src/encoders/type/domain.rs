@@ -3,10 +3,10 @@ use prusti_rustc_interface::{
     middle::ty::{self, util::IntTypeExt, IntTy, TyKind, UintTy},
     span::symbol,
 };
-use task_encoder::{TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
+use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    Arity, BinaryArity, CallableIdent, DomainParamData, FunctionIdent, KnownArity, KnownArityAny,
-    NullaryArity, ToKnownArity, UnaryArity, UnknownArity,
+    BinaryArity, CallableIdent, DomainParamData, FunctionIdent, KnownArityAny,
+    ToKnownArity, UnaryArity, UnknownArity,
 };
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
@@ -70,7 +70,7 @@ pub enum DomainEncSpecifics<'vir> {
     // structs, tuples
     StructLike(DomainDataStruct<'vir>),
     EnumLike(Option<DomainDataEnum<'vir>>),
-    Param
+    Param,
 }
 
 #[derive(Clone, Debug)]
@@ -88,10 +88,9 @@ impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::{
     encoders::{
-        generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
         GenericEnc, SnapshotEnc,
     },
-    util::{extract_type_params, to_placeholder, MostGenericTy, CastFunctions},
+    util::{CastFunctions, MostGenericTy},
 };
 
 use super::require_local_for_ty;
@@ -140,7 +139,7 @@ impl TaskEncoder for DomainEnc {
                     _ => todo!(),
                 };
 
-                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter());
+                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter(), deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                 let specifics = enc.mk_prim_specifics(task_key.ty(), prim_type);
                 Ok((enc.finalize(), specifics))
@@ -148,12 +147,12 @@ impl TaskEncoder for DomainEnc {
             TyKind::Adt(adt, params) => {
                 let base_name = vcx.tcx.item_name(adt.did()).to_ident_string();
                 let ty_params = params.iter().flat_map(ty::GenericArg::as_type);
-                let (mut enc, ty_params) = DomainEncData::new(vcx, &base_name, ty_params);
+                let (mut enc, _) = DomainEncData::new(vcx, &base_name, ty_params, deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                 match adt.adt_kind() {
                     ty::AdtKind::Struct => {
                         let variant = adt.non_enum_variant();
-                        let fields = enc.mk_field_tys(deps, variant, &ty_params, params);
+                        let fields = enc.mk_field_tys(deps, variant, params);
                         let specifics = enc.mk_struct_specifics(fields);
                         Ok((enc.finalize(), specifics))
                     }
@@ -162,7 +161,7 @@ impl TaskEncoder for DomainEnc {
                             .discriminants(vcx.tcx)
                             .map(|(v, d)| {
                                 let variant = adt.variant(v);
-                                let field_tys = enc.mk_field_tys(deps, variant, &ty_params, params);
+                                let field_tys = enc.mk_field_tys(deps, variant, params);
                                 (variant.name, v, field_tys, d)
                             })
                             .collect();
@@ -174,7 +173,8 @@ impl TaskEncoder for DomainEnc {
                                 .iter()
                                 .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
                             let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
-                            let discr_ty = require_local_for_ty::<SnapshotEnc>(vcx, discr_ty, deps).unwrap();
+                            let discr_ty =
+                                require_local_for_ty::<SnapshotEnc>(vcx, discr_ty, deps).unwrap();
                             Some(VariantData {
                                 discr_ty: discr_ty.snapshot,
                                 discr_prim: discr_ty.specifics.expect_primitive(),
@@ -190,26 +190,26 @@ impl TaskEncoder for DomainEnc {
             }
             TyKind::Tuple(params) => {
                 let base_name = format!("{}_Tuple", params.len());
-                let (mut enc, ty_params) = DomainEncData::new(vcx, &base_name, params.iter());
+                let (mut enc, ty_params) = DomainEncData::new(vcx, &base_name, params.iter(), deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                 let specifics = enc.mk_struct_specifics(ty_params);
                 Ok((enc.finalize(), specifics))
             }
             TyKind::Never => {
                 let base_name = String::from("Never");
-                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter());
+                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter(), deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                 let specifics = enc.mk_enum_specifics(None);
                 Ok((enc.finalize(), specifics))
             }
             &TyKind::Ref(_, inner, m) => {
-                let base_name = if (m.is_mut()) {
+                let base_name = if m.is_mut() {
                     "Ref_mutable"
                 } else {
                     "Ref_immutable"
                 };
                 let (mut enc, mut ty_params) =
-                    DomainEncData::new(vcx, &base_name, [inner].into_iter());
+                    DomainEncData::new(vcx, &base_name, [inner].into_iter(), deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                 if m.is_mut() {
                     ty_params.push(&vir::TypeData::Ref);
@@ -217,17 +217,23 @@ impl TaskEncoder for DomainEnc {
                 let specifics = enc.mk_struct_specifics(ty_params);
                 Ok((enc.finalize(), specifics))
             }
-            &TyKind::Param(param) => {
+            &TyKind::Param(_) => {
                 let out = deps.require_ref::<GenericEnc>(()).unwrap();
-                deps.emit_output_ref::<Self>(*task_key, DomainEncOutputRef {
-                    base_name: out.base_name,
-                    domain: out.domain_param_name,
-                    type_function: out.param_type_function.as_unknown_arity(),
-                    cast_functions: None
-                });
-                Ok(
-                    (deps.require_local::<GenericEnc>(()).map(|enc| enc.param_snapshot).unwrap(), DomainEncSpecifics::Param)
-                )
+                deps.emit_output_ref::<Self>(
+                    *task_key,
+                    DomainEncOutputRef {
+                        base_name: out.base_name,
+                        domain: out.domain_param_name,
+                        type_function: out.param_type_function.as_unknown_arity(),
+                        cast_functions: None,
+                    },
+                );
+                Ok((
+                    deps.require_local::<GenericEnc>(())
+                        .map(|enc| enc.param_snapshot)
+                        .unwrap(),
+                    DomainEncSpecifics::Param,
+                ))
             }
             kind => todo!("{kind:?}"),
         })
@@ -269,29 +275,30 @@ struct DomainEncData<'vir, 'tcx> {
 }
 impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
     // Creation
-    pub fn new(
+    fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
         base_name: &str,
         params: impl Iterator<Item = ty::Ty<'tcx>>,
+        deps: &mut TaskEncoderDependencies<'vir>,
     ) -> (Self, Vec<vir::Type<'vir>>) {
         let domain = vir::DomainIdent::nullary(vir::vir_format!(vcx, "s_{base_name}"));
-
-        let num_params = params.count();
-
-        let ty_params: Vec<_> = vec![&SNAPSHOT_PARAM_DOMAIN; num_params];
-
         let self_ty = domain.apply(vcx, []);
-        let type_function_args = vcx.alloc_slice(&vec![&TYP_DOMAIN; num_params]);
+
+        let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
+        let num_params = params.count();
+        let param_snaps = vec![generic_ref.param_snapshot; num_params];
+        let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; num_params]);
+
         let type_function_ident = FunctionIdent::new(
             vir::vir_format!(vcx, "s_{base_name}_type"),
             UnknownArity::new(&type_function_args),
-            &TYP_DOMAIN,
+            generic_ref.type_snapshot,
         );
         let type_function = vcx.mk_domain_function(
             false,
             type_function_ident.name(),
             &type_function_args,
-            &TYP_DOMAIN,
+            generic_ref.type_snapshot,
         );
 
         let upcast_arg_tys = vcx.alloc([self_ty]);
@@ -299,17 +306,17 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         let upcast_ident = FunctionIdent::new(
             vir::vir_format!(vcx, "upcast_s_{base_name}"),
             UnaryArity::new(upcast_arg_tys),
-            &SNAPSHOT_PARAM_DOMAIN,
+            generic_ref.param_snapshot,
         );
 
         let upcast_function = vcx.mk_domain_function(
             false,
             upcast_ident.name(),
             upcast_arg_tys,
-            &SNAPSHOT_PARAM_DOMAIN,
+            generic_ref.param_snapshot,
         );
 
-        let downcast_arg_tys = vcx.alloc([&SNAPSHOT_PARAM_DOMAIN]);
+        let downcast_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
 
         let downcast_ident = FunctionIdent::new(
             vir::vir_format!(vcx, "downcast_s_{base_name}"),
@@ -339,7 +346,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                     downcast: downcast_ident,
                 },
             },
-            ty_params,
+            param_snaps,
         )
     }
 
@@ -348,17 +355,17 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         &self,
         deps: &mut TaskEncoderDependencies<'vir>,
         variant: &ty::VariantDef,
-        ty_params: &Vec<vir::Type<'vir>>,
         params: ty::GenericArgsRef<'tcx>,
     ) -> Vec<vir::Type<'vir>> {
         variant
             .fields
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
-            .map(|ty| match *ty.kind() {
-                TyKind::Param(_) => &SNAPSHOT_PARAM_DOMAIN,
-                _ => require_local_for_ty::<SnapshotEnc>(self.vcx, ty, deps).unwrap().snapshot,
-            })
+            .map(|ty|
+                    require_local_for_ty::<SnapshotEnc>(self.vcx, ty, deps)
+                        .unwrap()
+                        .snapshot
+            )
             .collect()
     }
 
@@ -698,7 +705,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             base_name,
             domain: self.domain,
             type_function: self.type_function,
-            cast_functions: Some(self.cast_functions)
+            cast_functions: Some(self.cast_functions),
         }
     }
     fn finalize(self) -> vir::Domain<'vir> {

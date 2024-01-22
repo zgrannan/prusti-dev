@@ -21,9 +21,7 @@ impl<'tcx> MostGenericTy<'tcx> {
 
     pub fn with_normalized_param_name(&self, tcx: ty::TyCtxt<'tcx>) -> MostGenericTy<'tcx> {
         match *self.kind() {
-            TyKind::Param(_) => {
-                MostGenericTy(to_placeholder(tcx, None))
-            }
+            TyKind::Param(_) => MostGenericTy(to_placeholder(tcx, None)),
             _ => *self,
         }
     }
@@ -70,7 +68,11 @@ pub fn get_viper_type_value<'vir, 'tcx>(
     ty: ty::Ty<'tcx>,
 ) -> TyParam<'vir> {
     if let TyKind::Param(p) = ty.kind() {
-        TyParam::from_param(vcx, p)
+        TyParam::from_param(
+            vcx,
+            p,
+            deps.require_ref::<GenericEnc>(()).unwrap().type_snapshot,
+        )
     } else {
         let (generic_ty, args) = extract_type_params(vcx.tcx, ty);
         let type_function = deps
@@ -154,19 +156,6 @@ impl<'vir> TyMapCaster<'vir> {
         Self {
             generic_ty,
             cast_functions,
-        }
-    }
-
-    pub fn singleton(
-        generic_ty: vir::Type<'vir>,
-        ty: vir::Type<'vir>,
-        cast_functions: CastFunctions<'vir>,
-    ) -> Self {
-        let mut map = BTreeMap::new();
-        map.insert(ty, cast_functions);
-        Self {
-            generic_ty,
-            cast_functions: map,
         }
     }
 }

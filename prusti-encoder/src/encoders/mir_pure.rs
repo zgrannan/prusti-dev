@@ -13,7 +13,7 @@ use crate::{
     util::{MostGenericTy, TyMapCaster},
 };
 
-use super::{generic::SNAPSHOT_PARAM_DOMAIN, require_ref_for_ty, require_local_for_ty};
+use super::{require_ref_for_ty, require_local_for_ty};
 
 pub struct MirPureEnc;
 

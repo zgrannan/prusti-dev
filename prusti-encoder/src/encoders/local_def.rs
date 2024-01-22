@@ -4,14 +4,12 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
 };
 
-use rustc_middle::ty::Predicate;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{BinaryArity, FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
+use vir::{FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
 
-use crate::{encoders::{PredicateEnc, PredicateEncOutputRef}, util::{extract_type_params, get_viper_type_value}};
+use crate::{encoders::PredicateEnc, util::{extract_type_params, get_viper_type_value}};
 
 use super::{
-    generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
     require_ref_for_ty, GenericEnc,
 };
 
@@ -43,8 +41,12 @@ impl<'vir> From<vir::Expr<'vir>> for TyParam<'vir> {
 
 impl<'vir, 'tcx> TyParam<'vir> {
 
-    pub fn from_param(vcx: &'vir vir::VirCtxt<'tcx>, param: &'tcx ty::ParamTy) -> Self {
-        TyParam::Generic(vcx.mk_local_decl(param.name.as_str(), &TYP_DOMAIN))
+    pub fn from_param(
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        param: &'tcx ty::ParamTy,
+        generic_ty: vir::Type<'vir>
+    ) -> Self {
+        TyParam::Generic(vcx.mk_local_decl(param.name.as_str(), generic_ty))
     }
 
     pub fn expr(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::Expr<'vir> {
@@ -245,10 +247,10 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(
     if let ty::TyKind::Param(p) = ty.kind() {
         let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
         return TyOps {
-            ty_params: vcx.alloc_slice(&[vcx.mk_local_decl(p.name.as_str(), &TYP_DOMAIN).into()]),
+            ty_params: vcx.alloc_slice(&[vcx.mk_local_decl(p.name.as_str(), generic_ref.type_snapshot).into()]),
             ref_to_pred: generic_ref.ref_to_pred.as_unknown_arity(),
             ref_to_snap: generic_ref.ref_to_snap.as_unknown_arity(),
-            snapshot: &SNAPSHOT_PARAM_DOMAIN,
+            snapshot: generic_ref.param_snapshot,
             method_assign: generic_ref.method_assign.as_unknown_arity(),
         };
     } else {

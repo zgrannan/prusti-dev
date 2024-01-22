@@ -50,8 +50,8 @@ pub struct GenericEncOutput<'vir> {
     pub method_assign: vir::Method<'vir>,
 }
 
-pub const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
-pub const SNAPSHOT_PARAM_DOMAIN: TypeData<'static> = TypeData::Domain("s_Param", &[]);
+const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
+const SNAPSHOT_PARAM_DOMAIN: TypeData<'static> = TypeData::Domain("s_Param", &[]);
 
 impl TaskEncoder for GenericEnc {
     task_encoder::encoder_cache!(GenericEnc);

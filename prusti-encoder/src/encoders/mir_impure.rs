@@ -32,7 +32,7 @@ pub struct MirImpureEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        domain::DomainEnc, generic::TYP_DOMAIN, require_ref_for_ty, ConstEnc, MirBuiltinEnc,
+        require_ref_for_ty, ConstEnc, MirBuiltinEnc,
         MirFunctionEnc, MirLocalDefEnc, MirSpecEnc, PredicateEnc,
     },
     util::{extract_type_params, get_viper_type_value, TyMapCaster},

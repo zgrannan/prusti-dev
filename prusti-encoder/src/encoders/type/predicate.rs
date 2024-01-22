@@ -160,10 +160,9 @@ pub struct PredicateEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        generic::{SNAPSHOT_PARAM_DOMAIN, TYP_DOMAIN},
         get_ty_ops, require_ref_for_ty, GenericEnc, TyOps,
     },
-    util::{extract_type_params, MostGenericTy},
+    util::MostGenericTy,
 };
 
 use super::{
@@ -200,20 +199,20 @@ impl TaskEncoder for PredicateEnc {
         ),
     > {
         let snap = deps.require_local::<SnapshotEnc>(*task_key).unwrap();
+        let generic_output_ref = deps.require_ref::<GenericEnc>(()).unwrap();
         let mut enc = vir::with_vcx(|vcx| {
-            PredicateEncValues::new(vcx, &snap.base_name, snap.snapshot, snap.generics)
+            PredicateEncValues::new(vcx, &snap.base_name, snap.snapshot, snap.generics, generic_output_ref.type_snapshot)
         });
         match task_key.kind() {
             TyKind::Param(_) => {
-                let out = deps.require_ref::<GenericEnc>(()).unwrap();
                 deps.emit_output_ref::<Self>(
                     *task_key,
                     PredicateEncOutputRef {
-                        ref_to_pred: out.ref_to_pred.as_unknown_arity(),
-                        ref_to_snap: out.ref_to_snap.as_unknown_arity(),
-                        unreachable_to_snap: out.unreachable_to_snap,
-                        method_assign: out.method_assign.as_unknown_arity(),
-                        snapshot: out.param_snapshot,
+                        ref_to_pred: generic_output_ref.ref_to_pred.as_unknown_arity(),
+                        ref_to_snap: generic_output_ref.ref_to_snap.as_unknown_arity(),
+                        unreachable_to_snap: generic_output_ref.unreachable_to_snap,
+                        method_assign: generic_output_ref.method_assign.as_unknown_arity(),
+                        snapshot: generic_output_ref.param_snapshot,
                         specifics: PredicateEncData::Param,
                         generics: &[],
                     },
@@ -385,12 +384,14 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         base_name: &str,
         snap_inst: vir::Type<'vir>,
         generics: &'vir [&'vir str],
+        generic_type: vir::Type<'vir>,
     ) -> Self {
         let self_ex: vir::Expr<'vir> = vcx.mk_local_ex("self", &vir::TypeData::Ref);
-        let generic_decls: Vec<_> = generics
-            .iter()
-            .map(|g| vcx.mk_local_decl(g, &TYP_DOMAIN))
-            .collect();
+        let generic_decls: Vec<_> =
+            generics
+                .iter()
+                .map(|g| vcx.mk_local_decl(g, generic_type))
+                .collect();
         let mut ref_to_decls = vec![vcx.mk_local_decl("self", &vir::TypeData::Ref)];
         ref_to_decls.extend(generic_decls.iter());
         let ref_to_arg_tys = vir::UnknownArity::new(
