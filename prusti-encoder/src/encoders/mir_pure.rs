@@ -13,7 +13,7 @@ use crate::{
     util::{MostGenericTy, TyMapCaster},
 };
 
-use super::{generic::SNAPSHOT_PARAM_DOMAIN, require_ref_for_ty};
+use super::{generic::SNAPSHOT_PARAM_DOMAIN, require_ref_for_ty, require_local_for_ty};
 
 pub struct MirPureEnc;
 
@@ -377,7 +377,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                 // encode the discriminant operand
                 let discr_expr = self.encode_operand(&new_curr_ver, discr);
                 let discr_ty = discr.ty(self.body, self.vcx.tcx);
-                let discr_ty_out = SnapshotEnc::require_local(discr_ty, self.deps)
+                let discr_ty_out = require_local_for_ty::<SnapshotEnc>(self.vcx, discr_ty, self.deps)
                     .unwrap()
                     .specifics
                     .expect_primitive();
@@ -542,7 +542,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
             // Repeat
             mir::Rvalue::Ref(_, kind, place) => {
                 let rvalue_snapshot_encoding =
-                    SnapshotEnc::require_local(rvalue_ty, self.deps).unwrap();
+                    require_local_for_ty::<SnapshotEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                 let e_rvalue_ty = rvalue_snapshot_encoding
                     .specifics
                     .expect_structlike()
@@ -645,7 +645,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
             },
             mir::Rvalue::Discriminant(place) => {
                 let place_ty = place.ty(self.body, self.vcx.tcx);
-                let ty = SnapshotEnc::require_local(place_ty.ty, self.deps)
+                let ty = require_local_for_ty::<SnapshotEnc>(self.vcx, place_ty.ty, self.deps)
                     .unwrap()
                     .specifics;
                 match ty
@@ -657,7 +657,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                         .snap_to_discr_snap
                         .apply(self.vcx, [self.encode_place(curr_ver, place)]),
                     None => {
-                        let e_rvalue_ty = SnapshotEnc::require_local(rvalue_ty, self.deps)
+                        let e_rvalue_ty = require_local_for_ty::<SnapshotEnc>(self.vcx, rvalue_ty, self.deps)
                             .unwrap()
                             .specifics
                             .expect_primitive();
@@ -732,7 +732,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
         match elem {
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
-                let e_ty = SnapshotEnc::require_local(place_ty.ty, self.deps).unwrap();
+                let e_ty = require_local_for_ty::<SnapshotEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
                 let place_ref = e_ty
                     .specifics
                     .expect_structlike()
@@ -821,7 +821,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                 let rhs = self.encode_operand(&curr_ver, &args[1]);
                 let eq_expr = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, lhs, rhs);
 
-                let bool_cons = SnapshotEnc::require_local(self.vcx.tcx.types.bool, self.deps)
+                let bool_cons = require_local_for_ty::<SnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
                     .unwrap()
                     .specifics
                     .expect_primitive()
@@ -904,7 +904,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                     .reify(self.vcx, (cl_def_id, self.vcx.alloc_slice(&reify_args)))
                     .lift();
 
-                let bool = SnapshotEnc::require_local(self.vcx.tcx.types.bool, self.deps)
+                let bool = require_local_for_ty::<SnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
                     .unwrap()
                     .specifics;
                 let bool = bool.expect_primitive();

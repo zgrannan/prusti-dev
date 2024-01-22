@@ -2,12 +2,9 @@ use prusti_rustc_interface::{
     middle::{mir, ty},
     span::def_id::DefId,
 };
-use rustc_middle::mir::interpret::{ConstValue, Scalar, GlobalAlloc};
-use task_encoder::{
-    TaskEncoder,
-    TaskEncoderDependencies,
-};
-use vir::{CallableIdent, Arity};
+use rustc_middle::mir::interpret::{ConstValue, GlobalAlloc, Scalar};
+use task_encoder::{TaskEncoder, TaskEncoderDependencies};
+use vir::{Arity, CallableIdent};
 
 pub struct ConstEnc;
 
@@ -18,7 +15,9 @@ pub struct ConstEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for ConstEncOutputRef<'vir> {}
 
-use crate::encoders::{MirPureEnc, mir_pure::PureKind, MirPureEncTask, SnapshotEnc};
+use crate::encoders::{mir_pure::PureKind, MirPureEnc, MirPureEncTask, SnapshotEnc};
+
+use super::require_local_for_ty;
 
 impl TaskEncoder for ConstEnc {
     task_encoder::encoder_cache!(ConstEnc);
@@ -38,18 +37,25 @@ impl TaskEncoder for ConstEnc {
     fn do_encode_full<'tcx: 'vir, 'vir>(
         task_key: &Self::TaskKey<'tcx>,
         deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> Result<(
-        Self::OutputFullLocal<'vir>,
-        Self::OutputFullDependency<'vir>,
-    ), (
-        Self::EncodingError,
-        Option<Self::OutputFullDependency<'vir>>,
-    )> {
+    ) -> Result<
+        (
+            Self::OutputFullLocal<'vir>,
+            Self::OutputFullDependency<'vir>,
+        ),
+        (
+            Self::EncodingError,
+            Option<Self::OutputFullDependency<'vir>>,
+        ),
+    > {
         deps.emit_output_ref::<Self>(*task_key, ());
         let (const_, encoding_depth, def_id) = *task_key;
         let res = match const_ {
             mir::ConstantKind::Val(val, ty) => {
-                let kind = SnapshotEnc::require_local(ty, deps).unwrap().specifics;
+                let kind = vir::with_vcx(|vcx| {
+                    require_local_for_ty::<SnapshotEnc>(vcx, ty, deps)
+                        .unwrap()
+                        .specifics
+                });
                 match val {
                     ConstValue::Scalar(Scalar::Int(int)) => {
                         let prim = kind.expect_primitive();
@@ -86,7 +92,7 @@ impl TaskEncoder for ConstEnc {
                     param_env: vcx.tcx.param_env(uneval.def),
                     substs: ty::List::identity_for_item(vcx.tcx, uneval.def),
                     kind: PureKind::Constant(uneval.promoted.unwrap()),
-                    caller_def_id: def_id
+                    caller_def_id: def_id,
                 };
                 let expr = deps.require_local::<MirPureEnc>(task).unwrap().expr;
                 use vir::Reify;

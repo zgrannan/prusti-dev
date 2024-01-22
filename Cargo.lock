@@ -2350,7 +2350,6 @@ name = "vir"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
- "lazy_static",
  "prusti-interface",
  "prusti-rustc-interface",
  "sealed",

@@ -94,6 +94,8 @@ use crate::{
     util::{extract_type_params, to_placeholder, MostGenericTy, CastFunctions},
 };
 
+use super::require_local_for_ty;
+
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
 }
@@ -172,7 +174,7 @@ impl TaskEncoder for DomainEnc {
                                 .iter()
                                 .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
                             let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
-                            let discr_ty = SnapshotEnc::require_local(discr_ty, deps).unwrap();
+                            let discr_ty = require_local_for_ty::<SnapshotEnc>(vcx, discr_ty, deps).unwrap();
                             Some(VariantData {
                                 discr_ty: discr_ty.snapshot,
                                 discr_prim: discr_ty.specifics.expect_primitive(),
@@ -356,7 +358,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .map(|f| f.ty(self.vcx.tcx, params))
             .map(|ty| match *ty.kind() {
                 TyKind::Param(_) => &SNAPSHOT_PARAM_DOMAIN,
-                _ => SnapshotEnc::require_local(ty, deps).unwrap().snapshot,
+                _ => require_local_for_ty::<SnapshotEnc>(self.vcx, ty, deps).unwrap().snapshot,
             })
             .collect()
     }
