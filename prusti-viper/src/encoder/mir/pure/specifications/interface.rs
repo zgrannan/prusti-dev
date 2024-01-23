@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::encoder::{
+    encoder::perm_amount_from_int,
     errors::{SpannedEncodingError, SpannedEncodingResult, WithSpan},
     mir::{
         places::PlacesEncoderInterface,
@@ -25,7 +26,7 @@ use crate::encoder::{
         },
     },
     mir_encoder::{MirEncoder, PlaceEncoder, PRECONDITION_LABEL},
-    snapshot::interface::SnapshotEncoderInterface, encoder::perm_amount_from_int,
+    snapshot::interface::SnapshotEncoderInterface,
 };
 use prusti_rustc_interface::{
     data_structures::fx::FxHashSet,
@@ -97,7 +98,6 @@ pub(crate) trait SpecificationEncoderInterface<'tcx> {
         is_loop_invariant: bool, // Because this is also used for assert/assume/refute as well
     ) -> SpannedEncodingResult<vir_poly::Expr>;
 }
-
 
 impl<'v, 'tcx: 'v> SpecificationEncoderInterface<'tcx> for crate::encoder::Encoder<'v, 'tcx> {
     fn encode_prusti_operation_high(
@@ -236,7 +236,6 @@ impl<'v, 'tcx: 'v> SpecificationEncoderInterface<'tcx> for crate::encoder::Encod
         Ok(final_invariant)
     }
 
-
     fn encode_prusti_operation(
         &self,
         fn_name: &str,
@@ -263,52 +262,49 @@ impl<'v, 'tcx: 'v> SpecificationEncoderInterface<'tcx> for crate::encoder::Encod
                     let predicate_name = tr.label.split("struct$m_").last().unwrap();
                     let perm_amt = match encoded_args[1].get_type() {
                         vir_poly::Type::Int => perm_amount_from_int(&encoded_args[1]),
-                        other => unimplemented!("Unexpected permission amount type {:?}", other)
+                        other => unimplemented!("Unexpected permission amount type {:?}", other),
                     };
                     let acc_expr = vir_poly::Expr::acc(
                         predicate_name.to_string(),
                         encoded_args[0].clone(),
-                        perm_amt
+                        perm_amt,
                     );
-                    let acc_expr = acc_expr.set_pos(self.error_manager().register_span(
-                        parent_def_id, span
-                    ));
+                    let acc_expr =
+                        acc_expr.set_pos(self.error_manager().register_span(parent_def_id, span));
                     Ok(acc_expr)
                 } else {
                     unreachable!()
                 }
-            },
+            }
             "prusti_contracts::holds" => {
                 if let vir_poly::Type::TypedRef(tr) = encoded_args[0].get_type() {
                     let predicate_name = tr.label.split("struct$m_").last().unwrap();
-                    let perm_expr = vir_poly::Expr::perm(
-                        predicate_name.to_string(),
-                        encoded_args[0].clone(),
-                    );
-                    let perm_expr = perm_expr.set_pos(self.error_manager().register_span(
-                        parent_def_id, span
-                    ));
+                    let perm_expr =
+                        vir_poly::Expr::perm(predicate_name.to_string(), encoded_args[0].clone());
+                    let perm_expr =
+                        perm_expr.set_pos(self.error_manager().register_span(parent_def_id, span));
                     Ok(perm_expr)
                 } else {
                     unreachable!()
                 }
-            },
+            }
             "prusti_contracts::snap" => Ok(vir_poly::Expr::snap_app(encoded_args[0].clone())),
             "prusti_contracts::snapshot_equality" => Ok(vir_poly::Expr::eq_cmp(
                 vir_poly::Expr::snap_app(encoded_args[0].clone()),
                 vir_poly::Expr::snap_app(encoded_args[1].clone()),
             )),
-            "std::convert::From::from" if substs.type_at(0).to_string() == "prusti_contracts::PermAmount" => {
+            "std::convert::From::from"
+                if substs.type_at(0).to_string() == "prusti_contracts::PermAmount" =>
+            {
                 match encoded_args[0].get_type() {
                     vir_poly::Type::Int => Ok(perm_amount_from_int(&encoded_args[0])),
-                    other => unimplemented!("Unexpected permission amount type {:?}", other)
+                    other => unimplemented!("Unexpected permission amount type {:?}", other),
                 }
             }
-            "prusti_contracts::implies" => Ok(
-                vir_poly::Expr::implies(
-                    encoded_args[0].clone(),
-                    encoded_args[1].clone()
-                )),
+            "prusti_contracts::implies" => Ok(vir_poly::Expr::implies(
+                encoded_args[0].clone(),
+                encoded_args[1].clone(),
+            )),
             _ => unimplemented!("Cannot encode prusti operation {fn_name} (substs: {substs:?})"),
         }
     }
@@ -443,45 +439,55 @@ fn ensure_no_old_local_vars(
     args: FxHashSet<String>,
     span: Span,
 ) -> Result<(), SpannedEncodingError> {
-    struct InvalidInOldFinder<'a> {
-        invalid: &'a mut bool,
-        args: &'a FxHashSet<String>,
+    struct OldWalker {
+        invalid: bool,
+        in_old_depth: u8,
+        args: Vec<FxHashSet<String>>,
     }
 
-    impl<'a> vir_poly::ExprWalker for InvalidInOldFinder<'a> {
+    impl<'a> vir_poly::ExprWalker for OldWalker {
         fn walk_local(&mut self, expr: &vir_poly::Local) {
-            if !self.args.contains(&expr.variable.name) {
-                *self.invalid = true;
+            if self.in_old_depth > 0
+                && self
+                    .args
+                    .iter()
+                    .all(|set| !set.contains(&expr.variable.name))
+            {
+                self.invalid = true;
             }
         }
-    }
 
-    struct OldWalker<'a> {
-        invalid: bool,
-        args: &'a FxHashSet<String>,
-    }
-
-    impl<'a> vir_poly::ExprWalker for OldWalker<'a> {
         fn walk_labelled_old(&mut self, expr: &vir_poly::LabelledOld) {
-            let mut invalid_finder = InvalidInOldFinder {
-                invalid: &mut self.invalid,
-                args: self.args,
-            };
             if expr.label == PRECONDITION_LABEL {
-                invalid_finder.walk(&expr.base);
+                self.in_old_depth += 1;
+                self.walk(&expr.base);
+                self.in_old_depth -= 1;
             }
+        }
+
+        fn walk_forall(&mut self, expr: &vir_poly::ForAll) {
+            self.args.push(expr.variables.iter().map(|v| v.name.clone()).collect());
+            self.walk(&expr.body);
+            self.args.pop();
+        }
+
+        fn walk_exists(&mut self, expr: &vir_poly::Exists) {
+            self.args.push(expr.variables.iter().map(|v| v.name.clone()).collect());
+            self.walk(&expr.body);
+            self.args.pop();
         }
     }
 
     let mut walker = OldWalker {
         invalid: false,
-        args: &args,
+        args: vec![args],
+        in_old_depth: 0
     };
 
     walker.walk(expr);
     if walker.invalid {
-        return Err(SpannedEncodingError::incorrect(
-            "old expressions should not contain local variables",
+        return Err(SpannedEncodingError::unsupported(
+            "local variables inside old expressions are not currently supported",
             span,
         ));
     }
