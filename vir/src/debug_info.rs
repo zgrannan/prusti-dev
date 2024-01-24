@@ -25,6 +25,9 @@ struct DebugInfoData {
 
 #[cfg(feature="vir_debug")]
 impl PartialEq for DebugInfo {
+    /// DebugInfo values are always be considered equal; this prevents
+    /// breaking derived `PartialEq` implementations for types that contain
+    /// DebugInfo values.
     fn eq(&self, _other: &Self) -> bool {
         true
     }
