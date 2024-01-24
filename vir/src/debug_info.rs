@@ -14,7 +14,7 @@ pub struct DebugInfo(Option<NonNull<DebugInfoData>>);
 
 #[cfg(not(feature="vir_debug"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DebugInfo(());
+pub struct DebugInfo;
 
 #[cfg(feature="vir_debug")]
 #[derive(Debug)]
@@ -25,6 +25,9 @@ struct DebugInfoData {
 
 #[cfg(feature="vir_debug")]
 impl PartialEq for DebugInfo {
+    /// DebugInfo values are always be considered equal; this prevents
+    /// breaking derived `PartialEq` implementations for types that contain
+    /// DebugInfo values.
     fn eq(&self, _other: &Self) -> bool {
         true
     }
@@ -62,7 +65,7 @@ impl std::fmt::Display for DebugInfoData {
 pub const DEBUGINFO_NONE: DebugInfo = DebugInfo(None);
 
 #[cfg(not(feature="vir_debug"))]
-pub const DEBUGINFO_NONE: DebugInfo = DebugInfo(());
+pub const DEBUGINFO_NONE: DebugInfo = DebugInfo;
 
 impl DebugInfo {
     #[cfg(feature="vir_debug")]
@@ -80,7 +83,7 @@ impl DebugInfo {
 
     #[cfg(not(feature="vir_debug"))]
     pub fn new() -> DebugInfo {
-        DebugInfo(())
+        DebugInfo
     }
 
     #[cfg(feature="vir_debug")]

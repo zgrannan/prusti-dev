@@ -111,16 +111,16 @@ impl<A, B: GenRow> GenRow for fn(A) -> B {
 }*/
 
 // TODO add position and other metadata
-pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir> {
+pub struct ExprGenData<'vir, Curr: 'vir, Next: 'vir>{
     pub kind: ExprKindGen<'vir, Curr, Next>,
-    pub debug_info: DebugInfo,
+    pub debug_info: DebugInfo
 }
 
-impl<'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
+impl <'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
     pub fn new(kind: ExprKindGen<'vir, Curr, Next>) -> Self {
-        ExprGenData {
+        Self {
             kind,
-            debug_info: DebugInfo::new(),
+            debug_info: DebugInfo::new()
         }
     }
 }
