@@ -244,22 +244,16 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(
     ty: ty::Ty<'tcx>,
     deps: &mut TaskEncoderDependencies<'vir>,
 ) -> TyOps<'vir> {
-    if let ty::TyKind::Param(p) = ty.kind() {
-        let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
-        return TyOps {
-            ty_params: vcx.alloc_slice(&[vcx.mk_local_decl(p.name.as_str(), generic_ref.type_snapshot).into()]),
-            ref_to_pred: generic_ref.ref_to_pred.as_unknown_arity(),
-            ref_to_snap: generic_ref.ref_to_snap.as_unknown_arity(),
-            snapshot: generic_ref.param_snapshot,
-            method_assign: generic_ref.method_assign.as_unknown_arity(),
-        };
-    } else {
         let predicate_ref = require_ref_for_ty::<PredicateEnc>(vcx, ty, deps).unwrap();
-        let (_, ty_params) = extract_type_params(vcx.tcx, ty);
-        let ty_params = ty_params
-            .into_iter()
-            .map(|ty| get_viper_type_value(vcx, deps, ty))
-            .collect::<Vec<_>>();
+        let ty_params = if let ty::TyKind::Param(_) = ty.kind() {
+            vec![get_viper_type_value(vcx, deps, ty)]
+        } else {
+            let (_, ty_params) = extract_type_params(vcx.tcx, ty);
+            ty_params
+                .into_iter()
+                .map(|ty| get_viper_type_value(vcx, deps, ty))
+                .collect::<Vec<_>>()
+        };
         return TyOps {
             ty_params: vcx.alloc_slice(&ty_params),
             ref_to_pred: predicate_ref.ref_to_pred,
@@ -267,5 +261,4 @@ pub fn get_ty_ops<'tcx: 'vir, 'vir>(
             snapshot: predicate_ref.snapshot,
             method_assign: predicate_ref.method_assign,
         };
-    }
 }

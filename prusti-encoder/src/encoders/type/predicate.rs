@@ -790,27 +790,8 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self_args.push(self.vcx.mk_local_ex(g.name, g.ty));
         }
 
-        let self_pred_app = self
-            .vcx
-            .mk_predicate_app_expr(self.ref_to_pred.apply(self.vcx, &self_args, None));
-
         // method_assign
         let method_assign = mk_method_assign(self.vcx, &(&self).into());
-
-        let param_predicate = deps.require_ref::<GenericEnc>(()).unwrap().ref_to_pred;
-
-        let upcast_ty_params: Vec<_> = self.generics.to_vec();
-
-        let upcast_method_params = self.vcx.alloc_slice(
-            &[self.self_decl[0]]
-                .iter()
-                .chain(upcast_ty_params.iter())
-                .map(|p| *p)
-                .collect::<Vec<_>>()
-                .as_slice(),
-        );
-
-        let type_constructor = deps.require_ref::<DomainEnc>(*ty).unwrap().type_function;
 
         PredicateEncOutput {
             fields: self.fields,
