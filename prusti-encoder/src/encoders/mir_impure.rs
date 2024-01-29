@@ -35,10 +35,10 @@ use crate::{
         generic_predicate::PredicateEncData, predicate::PredicateEnc, ConstEnc,
         GenericPredicateEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc,
     },
-    util::{extract_type_params, get_viper_type_value, TyMapCaster},
+    util::{extract_type_params, TyMapCaster},
 };
 
-use super::EncodedTyParam;
+use super::ty_param::{EncodedTyParam, TyParamEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -965,11 +965,11 @@ fn get_param_typarams<'vir, 'tcx>(
         // include the relevant type
         // TODO: Currently we rely on assuming that the value for this
         //       is a parameter in scope...
-        args.push(get_viper_type_value(vcx, deps, ty));
+        args.push(deps.require_ref::<TyParamEnc>(ty).unwrap());
     } else {
         let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
         for arg in arg_tys {
-            args.push(get_viper_type_value(vcx, deps, arg))
+            args.push(deps.require_ref::<TyParamEnc>(arg).unwrap())
         }
     }
     args

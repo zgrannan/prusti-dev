@@ -8,11 +8,11 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
 
 use crate::{
-    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, GenericPredicateEnc, GenericPredicateEncOutputRef},
-    util::{extract_type_params, get_viper_type_value},
+    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, ty_param::TyParamEnc, GenericPredicateEnc, GenericPredicateEncOutputRef},
+    util::{extract_type_params},
 };
 
-use super::{GenericEnc};
+use super::{ty_param::EncodedTyParam, GenericEnc};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -45,11 +45,6 @@ impl<'vir> EncodedTyParams<'vir> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum EncodedTyParam<'vir> {
-    Generic(vir::LocalDecl<'vir>),
-    Instantiated(vir::Expr<'vir>),
-}
 
 impl<'vir> From<vir::LocalDecl<'vir>> for EncodedTyParam<'vir> {
     fn from(decl: vir::LocalDecl<'vir>) -> Self {
@@ -63,29 +58,6 @@ impl<'vir> From<vir::Expr<'vir>> for EncodedTyParam<'vir> {
     }
 }
 
-impl<'vir, 'tcx> EncodedTyParam<'vir> {
-    pub fn from_param(
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        param: &'tcx ty::ParamTy,
-        generic_ty: vir::Type<'vir>,
-    ) -> Self {
-        EncodedTyParam::Generic(vcx.mk_local_decl(param.name.as_str(), generic_ty))
-    }
-
-    pub fn expr(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::Expr<'vir> {
-        match self {
-            EncodedTyParam::Generic(g) => vcx.mk_local_ex(g.name, g.ty),
-            EncodedTyParam::Instantiated(e) => e,
-        }
-    }
-
-    pub fn decl(&self) -> Option<vir::LocalDecl<'vir>> {
-        match self {
-            EncodedTyParam::Generic(g) => Some(g),
-            EncodedTyParam::Instantiated(_) => None,
-        }
-    }
-}
 
 #[derive(Clone, Copy)]
 pub struct LocalDef<'vir> {
@@ -205,12 +177,12 @@ pub fn get_ty_params<'tcx: 'vir, 'vir>(
     deps: &mut TaskEncoderDependencies<'vir>,
 ) -> EncodedTyParams<'vir> {
     let ty_params = if let ty::TyKind::Param(_) = ty.kind() {
-        vec![get_viper_type_value(vcx, deps, ty)]
+        vec![deps.require_ref::<TyParamEnc>(ty).unwrap()]
     } else {
         let (_, ty_params) = extract_type_params(vcx.tcx, ty);
         ty_params
             .into_iter()
-            .map(|ty| get_viper_type_value(vcx, deps, ty))
+            .map(|ty| deps.require_ref::<TyParamEnc>(ty).unwrap())
             .collect::<Vec<_>>()
     };
     EncodedTyParams::new(vcx.alloc_slice(&ty_params))

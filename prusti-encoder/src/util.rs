@@ -8,7 +8,7 @@ use task_encoder::TaskEncoderDependencies;
 use vir::{Caster, UnaryArity, VirCtxt};
 
 use crate::encoders::{
-    domain::DomainEnc, snapshot::SnapshotEnc, EncodedTyParam, GenericEnc, GenericPredicateEnc,
+    domain::DomainEnc, snapshot::SnapshotEnc, GenericEnc, GenericPredicateEnc,
     GenericSnapshotEnc,
 };
 
@@ -61,31 +61,6 @@ pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty
         index: idx.unwrap_or_default() as u32,
         name: symbol::Symbol::intern(&name),
     }))
-}
-
-pub fn get_viper_type_value<'vir, 'tcx>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-    ty: ty::Ty<'tcx>,
-) -> EncodedTyParam<'vir> {
-    if let TyKind::Param(p) = ty.kind() {
-        EncodedTyParam::from_param(
-            vcx,
-            p,
-            deps.require_ref::<GenericEnc>(()).unwrap().type_snapshot,
-        )
-    } else {
-        let (generic_ty, args) = extract_type_params(vcx.tcx, ty);
-        let type_function = deps
-            .require_ref::<DomainEnc>(generic_ty)
-            .unwrap()
-            .type_function;
-        let args = args
-            .into_iter()
-            .map(|ty| get_viper_type_value(vcx, deps, ty).expr(vcx))
-            .collect::<Vec<_>>();
-        type_function.apply(vcx, &args).into()
-    }
 }
 
 pub fn extract_type_params<'tcx>(
