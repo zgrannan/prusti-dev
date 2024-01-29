@@ -5,8 +5,8 @@ use prusti_rustc_interface::{
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    BinaryArity, CallableIdent, DomainParamData, FunctionIdent, KnownArityAny,
-    ToKnownArity, UnaryArity, UnknownArity,
+    BinaryArity, CallableIdent, DomainParamData, FunctionIdent, KnownArityAny, ToKnownArity,
+    UnaryArity, UnknownArity,
 };
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
@@ -87,13 +87,11 @@ pub struct DomainEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::{
-    encoders::{
-        GenericEnc, GenericSnapshotEnc,
-    },
+    encoders::GenericEnc,
     util::{CastFunctions, MostGenericTy},
 };
 
-use super::{snapshot::SnapshotEnc};
+use super::snapshot::SnapshotEnc;
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
@@ -173,8 +171,10 @@ impl TaskEncoder for DomainEnc {
                                 .iter()
                                 .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
                             let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
-                            let discr_ty =
-                                deps.require_local::<SnapshotEnc>(discr_ty).unwrap().generic_snapshot;
+                            let discr_ty = deps
+                                .require_local::<SnapshotEnc>(discr_ty)
+                                .unwrap()
+                                .generic_snapshot;
                             Some(VariantData {
                                 discr_ty: discr_ty.snapshot,
                                 discr_prim: discr_ty.specifics.expect_primitive(),
@@ -361,10 +361,12 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .fields
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
-            .map(|ty|
-                    deps.require_local::<SnapshotEnc>(ty).unwrap().generic_snapshot
-                        .snapshot
-            )
+            .map(|ty| {
+                deps.require_local::<SnapshotEnc>(ty)
+                    .unwrap()
+                    .generic_snapshot
+                    .snapshot
+            })
             .collect()
     }
 
@@ -494,7 +496,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         let cons_qvars: Vec<_> = field_tys
             .iter()
             .enumerate()
-            .map(|(idx, ty)| self.vcx.mk_local_decl_local(fnames[idx]))
+            .map(|(idx, _)| self.vcx.mk_local_decl_local(fnames[idx]))
             .collect();
         let cons_qvars = self.vcx.alloc_slice(&cons_qvars);
         let cons_args: Vec<_> = fnames

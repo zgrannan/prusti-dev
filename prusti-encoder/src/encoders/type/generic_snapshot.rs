@@ -1,9 +1,5 @@
-use prusti_rustc_interface::{
-    middle::ty::{self, TyKind},
-    span::symbol,
-};
-use task_encoder::{TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
-use vir::{FunctionIdent, UnaryArity};
+use prusti_rustc_interface::middle::ty::TyKind;
+use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
 /// Takes a Rust `Ty` and returns a Viper `Type`. The returned type is always a
 /// domain type. To get specifics such as constructors for the domain, use the
@@ -26,7 +22,7 @@ pub struct GenericSnapshotEncOutput<'vir> {
     pub cast_functions: Option<CastFunctions<'vir>>,
 }
 
-use crate::util::{extract_type_params, to_placeholder, CastFunctions, MostGenericTy};
+use crate::util::{CastFunctions, MostGenericTy};
 
 use super::domain::{DomainEnc, DomainEncSpecifics};
 

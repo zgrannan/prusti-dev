@@ -1,9 +1,8 @@
 use crate::{
     debug_info::DebugInfo, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen,
-    PredicateAppGenData, StmtGenData, TySubsts, Type, TypeData, VirCtxt,
+    PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt,
 };
 use sealed::sealed;
-use std::collections::HashMap;
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;

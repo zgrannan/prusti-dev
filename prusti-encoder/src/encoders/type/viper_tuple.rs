@@ -1,10 +1,9 @@
-use prusti_rustc_interface::middle::ty;
 use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
 
-use crate::encoders::GenericSnapshotEnc;
+use crate::util::MostGenericTy;
 
 use super::domain::{DomainEnc, DomainDataStruct};
 
@@ -64,15 +63,7 @@ impl TaskEncoder for ViperTupleEnc {
         if *task_key == 1 {
             Ok((ViperTupleEncOutput { tuple: None }, ()))
         } else {
-
-            let tuple = todo!();
-            // let tuple = vir::with_vcx(|vcx| {
-            //     let new_tys = vcx.tcx.mk_type_list_from_iter(0..*task_key).map(|index|
-            //         Ty::new_param(vcx.tcx, format!("T{}", index)
-            //     ));
-            //     vcx.tcx.mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
-            // });
-            let ret = deps.require_dep::<DomainEnc>(tuple).unwrap();
+            let ret = deps.require_dep::<DomainEnc>(MostGenericTy::tuple(*task_key)).unwrap();
             Ok((ViperTupleEncOutput { tuple: Some(ret.expect_structlike()) }, ()))
         }
     }

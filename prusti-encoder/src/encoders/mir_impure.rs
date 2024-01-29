@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 //    SsaAnalysis,
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, Caster, MethodIdent, UnknownArity};
+use vir::{Caster, MethodIdent, UnknownArity};
 
 pub struct MirImpureEnc;
 
@@ -32,13 +32,11 @@ pub struct MirImpureEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        generic_predicate::PredicateEncData, predicate::PredicateEnc, ConstEnc,
-        GenericPredicateEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc,
+        predicate::PredicateEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc,
+        MirSpecEnc,
     },
-    util::{extract_type_params, TyMapCaster},
+    util::TyMapCaster,
 };
-
-use super::lifted::{LiftedTy, LiftedTyEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -110,7 +108,13 @@ impl TaskEncoder for MirImpureEnc {
             let param_ty_decls = substs
                 .into_type_list(vcx.tcx)
                 .iter()
-                .flat_map(|ty| get_param_type_decls(vcx, ty, deps).into_iter())
+                .flat_map(|ty| {
+                    deps.require_ref::<PredicateEnc>(ty)
+                        .unwrap()
+                        .ty
+                        .instantiation_arguments()
+                        .into_iter()
+                })
                 .collect::<Vec<_>>();
             args.extend(param_ty_decls.iter().map(|decl| decl.ty));
             let args = UnknownArity::new(vcx.alloc_slice(&args));
@@ -341,7 +345,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         .expect_pred_variant_opt(place_ty.variant_index);
 
                     let ref_p = self.encode_place(place);
-                    let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);
+                    let args = place_ty_out.ref_to_args(self.vcx, ref_p);
                     let predicate = ref_to_pred.apply(self.vcx, &args, None);
                     if matches!(
                         repack_op,
@@ -880,11 +884,11 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         std::iter::once(dest).chain(method_in).collect::<Vec<_>>();
 
                     for arg in arg_tys {
-                        method_args.extend(get_param_type_exprs(
-                            self.vcx,
-                            arg.expect_ty(),
-                            self.deps,
-                        ))
+                        let arg_ty_enc = self
+                            .deps
+                            .require_ref::<PredicateEnc>(arg.expect_ty())
+                            .unwrap();
+                        method_args.extend(arg_ty_enc.ty.arg_exprs(self.vcx))
                     }
 
                     self.stmt(
@@ -951,59 +955,4 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
         };
         assert!(self.current_terminator.replace(terminator).is_none());
     }
-}
-
-fn get_param_typarams<'vir, 'tcx>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<LiftedTy<'vir>> {
-    let mut args = vec![];
-
-    if matches!(ty.kind(), ty::TyKind::Param(_)) {
-        // This is a type parameter, so the snapshot encoding must
-        // include the relevant type
-        // TODO: Currently we rely on assuming that the value for this
-        //       is a parameter in scope...
-        args.push(deps.require_ref::<LiftedTyEnc>(ty).unwrap());
-    } else {
-        let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
-        for arg in arg_tys {
-            args.push(deps.require_ref::<LiftedTyEnc>(arg).unwrap())
-        }
-    }
-    args
-}
-
-fn get_param_type_decls<'vir, 'tcx>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<vir::LocalDecl<'vir>> {
-    get_param_typarams(vcx, ty, deps)
-        .into_iter()
-        .flat_map(|p| p.decl())
-        .collect()
-}
-
-fn get_param_type_exprs<'vir, 'tcx>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<vir::Expr<'vir>> {
-    get_param_typarams(vcx, ty, deps)
-        .into_iter()
-        .map(|p| p.expr(vcx))
-        .collect()
-}
-
-fn ref_to_args<'vir, 'tcx>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    viper_ref: vir::Expr<'vir>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<vir::Expr<'vir>> {
-    let mut args = vec![viper_ref];
-    args.extend(get_param_type_exprs(vcx, ty, deps));
-    args
 }

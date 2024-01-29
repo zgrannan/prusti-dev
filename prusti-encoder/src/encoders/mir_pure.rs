@@ -11,10 +11,10 @@ use vir::Caster;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::{
     encoders::{
-        ConstEnc, GenericPredicateEnc, GenericSnapshotEnc, MirBuiltinEnc, MirFunctionEnc,
+        ConstEnc, MirBuiltinEnc, MirFunctionEnc,
         ViperTupleEnc,
     },
-    util::{MostGenericTy, TyMapCaster},
+    util::TyMapCaster,
 };
 
 use super::{predicate::PredicateEnc, snapshot::SnapshotEnc};

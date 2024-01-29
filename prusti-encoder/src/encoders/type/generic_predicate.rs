@@ -5,7 +5,7 @@ use prusti_rustc_interface::{
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
     add_debug_note, CallableIdent, FunctionIdent, MethodIdent, NullaryArity, PredicateIdent,
-    TernaryArity, TypeData, UnaryArity, UnknownArity, VirCtxt,
+    TypeData, UnaryArity, UnknownArity, VirCtxt,
 };
 
 /// Takes a Rust `Ty` and returns various Viper predicates and functions for
@@ -173,7 +173,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::{encoders::GenericEnc, util::MostGenericTy};
 
 use super::{
-    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct, DomainEnc},
+    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct},
     generic_snapshot::GenericSnapshotEnc,
     lifted::LiftedTy,
     predicate::{PredicateEnc, PredicateEncOutputRef},
@@ -268,7 +268,7 @@ impl TaskEncoder for GenericPredicateEnc {
             TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) => {
                 let specifics = PredicateEncData::Primitive(snap.specifics.expect_primitive());
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(specifics));
-                Ok((enc.mk_prim(deps, task_key, &snap.base_name), ()))
+                Ok((enc.mk_prim(&snap.base_name), ()))
             }
             TyKind::Tuple(tys) => {
                 let snap_data = snap.specifics.expect_structlike();
@@ -278,15 +278,14 @@ impl TaskEncoder for GenericPredicateEnc {
                     enc.output_ref(PredicateEncData::StructLike(specifics)),
                 );
 
-                let fields: Vec<_> = vir::with_vcx(|vcx| {
-                    tys.iter()
-                        .map(|ty| deps.require_ref::<PredicateEnc>(ty).unwrap())
-                        .collect()
-                });
+                let fields: Vec<_> = tys
+                    .iter()
+                    .map(|ty| deps.require_ref::<PredicateEnc>(ty).unwrap())
+                    .collect();
                 let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
                 let fn_snap_body =
                     enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap);
-                Ok((enc.mk_struct(deps, task_key, fn_snap_body), ()))
+                Ok((enc.mk_struct(fn_snap_body), ()))
             }
             TyKind::Adt(adt, args) => match adt.adt_kind() {
                 ty::AdtKind::Struct => {
@@ -298,20 +297,18 @@ impl TaskEncoder for GenericPredicateEnc {
                     );
 
                     let variant = adt.non_enum_variant();
-                    let fields: Vec<_> = vir::with_vcx(|vcx| {
-                        variant
-                            .fields
-                            .iter()
-                            .map(|f| {
-                                deps.require_ref::<PredicateEnc>(f.ty(enc.tcx(), args))
-                                    .unwrap()
-                            })
-                            .collect()
-                    });
+                    let fields: Vec<_> = variant
+                        .fields
+                        .iter()
+                        .map(|f| {
+                            deps.require_ref::<PredicateEnc>(f.ty(enc.tcx(), args))
+                                .unwrap()
+                        })
+                        .collect();
                     let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
                     let fn_snap_body =
                         enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap);
-                    Ok((enc.mk_struct(deps, task_key, fn_snap_body), ()))
+                    Ok((enc.mk_struct(fn_snap_body), ()))
                 }
                 ty::AdtKind::Enum => {
                     let specifics = enc.mk_enum_ref(snap.specifics.expect_enumlike());
@@ -340,7 +337,7 @@ impl TaskEncoder for GenericPredicateEnc {
                             .collect();
                         (specifics, variants)
                     });
-                    Ok((enc.mk_enum(deps, task_key, specifics), ()))
+                    Ok((enc.mk_enum(specifics), ()))
                 }
                 ty::AdtKind::Union => todo!(),
             },
@@ -352,7 +349,7 @@ impl TaskEncoder for GenericPredicateEnc {
                     enc.output_ref(PredicateEncData::EnumLike(None)),
                 );
 
-                Ok((enc.mk_enum(deps, task_key, None), ()))
+                Ok((enc.mk_enum(None), ()))
             }
             &TyKind::Ref(_, inner, m) => {
                 let snap_data = snap.specifics.expect_structlike();
@@ -366,7 +363,7 @@ impl TaskEncoder for GenericPredicateEnc {
                     .require_ref::<PredicateEnc>(inner)
                     .unwrap()
                     .generic_predicate;
-                Ok((enc.mk_ref(deps, task_key, inner, specifics), ()))
+                Ok((enc.mk_ref(inner, specifics), ()))
             }
             unsupported_type => todo!("type not supported: {unsupported_type:?}"),
         }
@@ -640,8 +637,6 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     // Final results
     pub fn mk_prim(
         mut self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
         base_name: &str,
     ) -> PredicateEncOutput<'vir> {
         let name = vir::vir_format!(self.vcx, "f_{base_name}");
@@ -657,22 +652,18 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
 
         let self_field = self.vcx.mk_field_expr(self.self_ex, field);
         let fn_snap_body = self.vcx.mk_unfolding_expr(self.self_pred_read, self_field);
-        self.finalize(deps, ty, Some(fn_snap_body))
+        self.finalize(Some(fn_snap_body))
     }
 
     pub fn mk_struct(
         self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
         fn_snap_body: vir::Expr<'vir>,
     ) -> PredicateEncOutput<'vir> {
-        self.finalize(deps, ty, Some(fn_snap_body))
+        self.finalize(Some(fn_snap_body))
     }
 
     pub fn mk_ref(
         mut self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
         inner: GenericPredicateEncOutputRef<'vir>,
         data: PredicateEncDataRef<'vir>,
     ) -> PredicateEncOutput<'vir> {
@@ -708,12 +699,10 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
                 .apply(self.vcx, &[inner_snap])
         };
         let fn_snap_body = self.vcx.mk_unfolding_expr(self.self_pred_read, snap);
-        self.finalize(deps, ty, Some(fn_snap_body))
+        self.finalize(Some(fn_snap_body))
     }
     pub fn mk_enum(
         mut self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
         data: Option<(
             PredicateEncDataEnum<'vir>,
             Vec<(abi::VariantIdx, Vec<PredicateEncOutputRef<'vir>>)>,
@@ -782,13 +771,11 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             self.ref_to_decls,
             Some(predicate_body),
         ));
-        self.finalize(deps, ty, fn_snap_body)
+        self.finalize(fn_snap_body)
     }
 
     fn finalize(
         self,
-        deps: &mut TaskEncoderDependencies<'vir>,
-        ty: &MostGenericTy<'tcx>,
         fn_snap_body: Option<vir::Expr<'vir>>,
     ) -> PredicateEncOutput<'vir> {
         let mut ref_to_args = vec![self.self_decl[0]];

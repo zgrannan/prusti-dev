@@ -5,12 +5,9 @@ use prusti_rustc_interface::{
     span::symbol,
 };
 use task_encoder::TaskEncoderDependencies;
-use vir::{Caster, UnaryArity, VirCtxt};
+use vir::{Caster, UnaryArity};
 
-use crate::encoders::{
-    domain::DomainEnc, snapshot::SnapshotEnc, GenericEnc, GenericPredicateEnc,
-    GenericSnapshotEnc,
-};
+use crate::encoders::{snapshot::SnapshotEnc, GenericEnc};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
@@ -18,6 +15,17 @@ pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 impl<'tcx> MostGenericTy<'tcx> {
     pub fn kind(&self) -> &TyKind<'tcx> {
         self.0.kind()
+    }
+
+    pub fn tuple(arity: usize) -> Self {
+        assert!(arity != 1);
+        let tuple = vir::with_vcx(|vcx| {
+            let new_tys = vcx.tcx.mk_type_list_from_iter(
+                (0..arity).map(|index| to_placeholder(vcx.tcx, Some(index))),
+            );
+            vcx.tcx.mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
+        });
+        MostGenericTy(tuple)
     }
 
     pub fn with_normalized_param_name(&self, tcx: ty::TyCtxt<'tcx>) -> MostGenericTy<'tcx> {

@@ -2,7 +2,7 @@ use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, UnknownArity, CallableIdent, CheckTypes, Arity, MethodIdent};
+use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::DEBUGINFO_NONE, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {

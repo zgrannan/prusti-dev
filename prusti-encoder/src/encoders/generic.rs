@@ -1,7 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    BinaryArity, CallableIdent, DomainIdent, DomainParamData, ExprData, FunctionIdent,
-    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent, TernaryArity,
+    BinaryArity, CallableIdent, DomainIdent, DomainParamData, FunctionIdent,
+    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity,
 };
 
 pub struct GenericEnc;

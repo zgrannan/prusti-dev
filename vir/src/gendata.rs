@@ -2,10 +2,9 @@ use std::fmt::Debug;
 
 use crate::{
     data::*,
-    debug_info::{DebugInfo, DEBUGINFO_NONE},
+    debug_info::DebugInfo,
     genrefs::*,
     refs::*,
-    UnknownArity,
 };
 
 use vir_proc_macro::*;

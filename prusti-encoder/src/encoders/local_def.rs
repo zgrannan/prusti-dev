@@ -5,14 +5,11 @@ use prusti_rustc_interface::{
 };
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
 
-use crate::{
-    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, lifted::LiftedTyEnc, GenericPredicateEnc, GenericPredicateEncOutputRef},
-    util::{extract_type_params},
+use crate::encoders::{
+    predicate::{PredicateEnc, PredicateEncOutputRef},
+    GenericPredicateEncOutputRef,
 };
-
-use super::{lifted::LiftedTy, GenericEnc};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -21,12 +18,6 @@ pub struct MirLocalDefEncOutput<'vir> {
     pub arg_count: usize,
 }
 pub type MirLocalDefEncError = ();
-
-impl<'vir> From<vir::LocalDecl<'vir>> for LiftedTy<'vir> {
-    fn from(decl: vir::LocalDecl<'vir>) -> Self {
-        LiftedTy::Generic(decl)
-    }
-}
 
 #[derive(Clone, Copy)]
 pub struct LocalDef<'vir> {
@@ -98,7 +89,9 @@ impl TaskEncoder for MirLocalDefEnc {
                 let locals = IndexVec::from_fn_n(
                     |arg: mir::Local| {
                         let local = vir::vir_format!(vcx, "_{}p", arg.index());
-                        let ty = deps.require_ref::<PredicateEnc>(body.local_decls[arg].ty).unwrap();
+                        let ty = deps
+                            .require_ref::<PredicateEnc>(body.local_decls[arg].ty)
+                            .unwrap();
                         mk_local_def(vcx, local, ty)
                     },
                     body.local_decls.len(),
