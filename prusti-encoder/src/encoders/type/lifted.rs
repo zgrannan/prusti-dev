@@ -1,6 +1,6 @@
 use prusti_rustc_interface::middle::ty::{self, TyKind};
 use task_encoder::{OutputRefAny, TaskEncoder};
-use vir::with_vcx;
+use vir::{with_vcx, FunctionIdent, UnknownArity};
 
 use crate::{encoders::GenericEnc, util::extract_type_params};
 
@@ -9,10 +9,39 @@ use super::domain::DomainEnc;
 #[derive(Clone, Copy, Debug)]
 pub enum LiftedTy<'vir> {
     Generic(vir::LocalDecl<'vir>),
-    Instantiated(vir::Expr<'vir>),
+    Instantiated {
+        ty_constructor: FunctionIdent<'vir, UnknownArity<'vir>>,
+        args: &'vir [LiftedTy<'vir>],
+    },
 }
 
 impl<'vir, 'tcx> LiftedTy<'vir> {
+    pub fn instantiation_arguments(&self) -> Vec<vir::LocalDecl<'vir>> {
+        match self {
+            LiftedTy::Generic(decl) => vec![decl],
+            LiftedTy::Instantiated { args, .. } => {
+                let mut buf = vec![];
+                for arg in args.iter() {
+                    for ia in arg.instantiation_arguments() {
+                        if !buf.contains(&ia) {
+                            buf.push(ia);
+                        }
+                    }
+                }
+                buf
+            }
+        }
+    }
+
+    pub fn arg_exprs(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> Vec<vir::Expr<'vir>> {
+        match self {
+            LiftedTy::Generic(decl) => vec![vcx.mk_local_ex(decl.name, decl.ty)],
+            LiftedTy::Instantiated { args, .. } => {
+                args.iter().map(|a| a.expr(vcx)).collect::<Vec<_>>()
+            }
+        }
+    }
+
     pub fn from_param(
         vcx: &'vir vir::VirCtxt<'tcx>,
         param: &'tcx ty::ParamTy,
@@ -24,14 +53,17 @@ impl<'vir, 'tcx> LiftedTy<'vir> {
     pub fn expr(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::Expr<'vir> {
         match self {
             LiftedTy::Generic(g) => vcx.mk_local_ex(g.name, g.ty),
-            LiftedTy::Instantiated(e) => e,
+            LiftedTy::Instantiated {
+                ty_constructor,
+                args,
+            } => ty_constructor.apply(vcx, &args.iter().map(|a| a.expr(vcx)).collect::<Vec<_>>()),
         }
     }
 
     pub fn decl(&self) -> Option<vir::LocalDecl<'vir>> {
         match self {
             LiftedTy::Generic(g) => Some(g),
-            LiftedTy::Instantiated(_) => None,
+            LiftedTy::Instantiated { .. } => None,
         }
     }
 }
@@ -83,15 +115,18 @@ impl TaskEncoder for LiftedTyEnc {
                 )
             } else {
                 let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
-                let type_function = deps
+                let ty_constructor = deps
                     .require_ref::<DomainEnc>(generic_ty)
                     .unwrap()
                     .type_function;
                 let args = args
                     .into_iter()
-                    .map(|ty| deps.require_ref::<Self>(ty).unwrap().expr(vcx))
+                    .map(|ty| deps.require_ref::<Self>(ty).unwrap())
                     .collect::<Vec<_>>();
-                LiftedTy::Instantiated(type_function.apply(vcx, &args))
+                LiftedTy::Instantiated {
+                    ty_constructor,
+                    args: vcx.alloc_slice(&args),
+                }
             };
             deps.emit_output_ref::<LiftedTyEnc>(*task_key, output_ref);
         });

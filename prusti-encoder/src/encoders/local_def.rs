@@ -22,42 +22,11 @@ pub struct MirLocalDefEncOutput<'vir> {
 }
 pub type MirLocalDefEncError = ();
 
-#[derive(Clone)]
-pub struct EncodedTyParams<'vir>(&'vir [LiftedTy<'vir>]);
-
-impl<'vir> EncodedTyParams<'vir> {
-    pub fn new(ty_params: &'vir [LiftedTy<'vir>]) -> Self {
-        EncodedTyParams(ty_params)
-    }
-
-    pub fn generics<'tcx>(&self) -> Vec<vir::LocalDecl<'vir>> {
-        self.0
-            .iter()
-            .filter_map(|g| match g {
-                LiftedTy::Generic(g) => Some(*g),
-                LiftedTy::Instantiated(_) => None,
-            })
-            .collect::<Vec<_>>()
-    }
-
-    pub fn as_exprs<'tcx>(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> Vec<vir::Expr<'vir>> {
-        self.0.iter().map(|g| g.expr(vcx)).collect::<Vec<_>>()
-    }
-}
-
-
 impl<'vir> From<vir::LocalDecl<'vir>> for LiftedTy<'vir> {
     fn from(decl: vir::LocalDecl<'vir>) -> Self {
         LiftedTy::Generic(decl)
     }
 }
-
-impl<'vir> From<vir::Expr<'vir>> for LiftedTy<'vir> {
-    fn from(expr: vir::Expr<'vir>) -> Self {
-        LiftedTy::Instantiated(expr)
-    }
-}
-
 
 #[derive(Clone, Copy)]
 pub struct LocalDef<'vir> {
@@ -169,21 +138,4 @@ impl TaskEncoder for MirLocalDefEnc {
             Ok((data, ()))
         })
     }
-}
-
-pub fn get_ty_params<'tcx: 'vir, 'vir>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> EncodedTyParams<'vir> {
-    let ty_params = if let ty::TyKind::Param(_) = ty.kind() {
-        vec![deps.require_ref::<LiftedTyEnc>(ty).unwrap()]
-    } else {
-        let (_, ty_params) = extract_type_params(vcx.tcx, ty);
-        ty_params
-            .into_iter()
-            .map(|ty| deps.require_ref::<LiftedTyEnc>(ty).unwrap())
-            .collect::<Vec<_>>()
-    };
-    EncodedTyParams::new(vcx.alloc_slice(&ty_params))
 }

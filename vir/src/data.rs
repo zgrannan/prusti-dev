@@ -10,6 +10,7 @@ pub struct LocalData<'vir> {
     pub ty: Type<'vir>,
 }
 
+#[derive(Eq, PartialEq)]
 pub struct LocalDeclData<'vir> {
     pub name: &'vir str, // TODO: identifiers
     pub ty: Type<'vir>,

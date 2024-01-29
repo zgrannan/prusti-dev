@@ -81,12 +81,12 @@ impl<'vir> GenericPredicateEncOutputRef<'vir> {
     pub fn ref_to_args<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
-        params: &EncodedTyParams<'vir>,
+        instantiated_ty: LiftedTy<'vir>,
         self_ref: vir::Expr<'vir>,
     ) -> &'vir [vir::Expr<'vir>] {
         assert!(self_ref.ty() == &TypeData::Ref);
         let mut args = vec![self_ref];
-        args.extend(params.as_exprs(vcx));
+        args.extend(instantiated_ty.arg_exprs(vcx));
         vcx.alloc_slice(&args)
     }
 
@@ -170,14 +170,12 @@ pub struct PredicateEncOutput<'vir> {
     pub method_assign: vir::Method<'vir>,
 }
 
-use crate::{
-    encoders::{EncodedTyParams, GenericEnc},
-    util::MostGenericTy,
-};
+use crate::{encoders::GenericEnc, util::MostGenericTy};
 
 use super::{
     domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct, DomainEnc},
     generic_snapshot::GenericSnapshotEnc,
+    lifted::LiftedTy,
     predicate::{PredicateEnc, PredicateEncOutputRef},
 };
 

@@ -98,10 +98,10 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> MethodIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A);
+pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
     fn new(name: &'vir str, args: A, _unused: ()) -> Self {
-        Self(name, args)
+        Self(name, args, DebugInfo::new())
     }
     fn name(&self) -> &'vir str {
         self.0
@@ -116,10 +116,13 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
-        Self(name, args)
+        Self(name, args, DebugInfo::new())
+    }
+    pub fn debug_info(&self) -> DebugInfo {
+        self.2
     }
     pub fn as_unknown_arity(self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
-        PredicateIdent(self.0, UnknownArity::new(self.1.args()))
+        PredicateIdent(self.0, UnknownArity::new(self.1.args()), self.debug_info())
     }
 }
 
@@ -373,12 +376,21 @@ impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>],
         perm: Option<ExprGen<'vir, Curr, Next>>,
     ) -> PredicateAppGen<'vir, Curr, Next> {
-        assert!(self.1.types_match(args));
-        vcx.alloc(PredicateAppGenData {
-            target: self.name(),
-            args: vcx.alloc_slice(args),
-            perm,
-        })
+        if self.1.types_match(args) {
+            vcx.alloc(PredicateAppGenData {
+                target: self.name(),
+                args: vcx.alloc_slice(args),
+                perm,
+            })
+        } else {
+            panic!(
+                "Predicate {} could not be applied. Expected arg types: {:?}, Actual arg types: {:?}, Debug info: {}",
+                self.name(),
+                self.arity(),
+                args.iter().map(|a| a.ty()).collect::<Vec<_>>(),
+                self.debug_info()
+            );
+        }
     }
 }
 impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {

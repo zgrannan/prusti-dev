@@ -6,16 +6,18 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{with_vcx, Type, TypeData};
 
 use crate::{
-    encoders::{get_ty_params, EncodedTyParams, GenericPredicateEnc, GenericPredicateEncOutputRef},
+    encoders::{GenericPredicateEnc, GenericPredicateEncOutputRef},
     util::extract_type_params,
 };
+
+use super::lifted::{LiftedTy, LiftedTyEnc};
 
 pub struct PredicateEnc;
 
 #[derive(Clone)]
 pub struct PredicateEncOutputRef<'vir> {
     pub generic_predicate: GenericPredicateEncOutputRef<'vir>,
-    pub ty_params: EncodedTyParams<'vir>,
+    pub ty: LiftedTy<'vir>,
 }
 
 impl<'vir> PredicateEncOutputRef<'vir> {
@@ -29,7 +31,7 @@ impl<'vir> PredicateEncOutputRef<'vir> {
         assert!(self_ref.ty() == &TypeData::Ref);
         assert!(self_new_snap.ty() == self.snapshot());
         let mut args = vec![self_ref];
-        args.extend(self.ty_params.as_exprs(vcx));
+        args.extend(self.ty.arg_exprs(vcx));
         args.push(self_new_snap);
         vcx.alloc_slice(&args)
     }
@@ -92,7 +94,7 @@ impl<'vir> PredicateEncOutputRef<'vir> {
         self_ref: vir::Expr<'vir>,
     ) -> &'vir [vir::Expr<'vir>] {
         self.generic_predicate
-            .ref_to_args(vcx, &self.ty_params, self_ref)
+            .ref_to_args(vcx, self.ty, self_ref)
     }
 }
 
@@ -122,12 +124,12 @@ impl TaskEncoder for PredicateEnc {
         with_vcx(|vcx| {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let generic_predicate = deps.require_ref::<GenericPredicateEnc>(generic_ty).unwrap();
-            let ty_params = get_ty_params(vcx, *task_key, deps);
+            let ty = deps.require_ref::<LiftedTyEnc>(*task_key).unwrap();
             deps.emit_output_ref::<PredicateEnc>(
                 *task_key,
                 PredicateEncOutputRef {
                     generic_predicate,
-                    ty_params,
+                    ty
                 },
             );
             for arg in args {
