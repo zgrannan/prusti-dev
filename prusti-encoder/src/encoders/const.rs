@@ -15,7 +15,7 @@ pub struct ConstEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for ConstEncOutputRef<'vir> {}
 
-use crate::encoders::{mir_pure::PureKind, MirPureEnc, MirPureEncTask, SnapshotEnc};
+use crate::encoders::{mir_pure::PureKind, MirPureEnc, MirPureEncTask, GenericSnapshotEnc};
 
 use super::require_local_for_ty;
 
@@ -52,7 +52,7 @@ impl TaskEncoder for ConstEnc {
         let res = match const_ {
             mir::ConstantKind::Val(val, ty) => {
                 let kind = vir::with_vcx(|vcx| {
-                    require_local_for_ty::<SnapshotEnc>(vcx, ty, deps)
+                    require_local_for_ty::<GenericSnapshotEnc>(vcx, ty, deps)
                         .unwrap()
                         .specifics
                 });

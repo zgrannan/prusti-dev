@@ -345,13 +345,10 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
                 let arg_generic = caster.is_generic(a.typ());
                 let expected_generic = caster.is_generic(expected);
                 if arg_generic && !expected_generic {
-                    eprintln!("upcasting");
                     caster.downcast(vcx, a)
                 } else if !arg_generic && expected_generic {
-                    eprintln!("downcasting");
                     caster.upcast(vcx, a)
                 } else {
-                    eprintln!("no cast");
                     a
                 }
             })

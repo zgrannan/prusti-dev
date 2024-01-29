@@ -335,10 +335,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         return;
                     }
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
-                    let place_ty_out =
-                        require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
-                            .unwrap();
-                    let ref_to_pred = place_ty_out.expect_pred_variant_opt(place_ty.variant_index);
+                    let place_ty_out = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                    let ref_to_pred = place_ty_out.generic_predicate.expect_pred_variant_opt(place_ty.variant_index);
 
                     let ref_p = self.encode_place(place);
                     let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);

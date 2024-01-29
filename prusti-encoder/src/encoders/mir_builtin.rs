@@ -33,7 +33,7 @@ pub struct MirBuiltinEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
-use crate::encoders::{SnapshotEnc, require_local_for_ty};
+use crate::encoders::{GenericSnapshotEnc, require_local_for_ty};
 
 impl TaskEncoder for MirBuiltinEnc {
     task_encoder::encoder_cache!(MirBuiltinEnc);
@@ -97,7 +97,7 @@ impl MirBuiltinEnc {
         op: mir::UnOp,
         ty: ty::Ty<'tcx>
     ) -> vir::Function<'vir> {
-        let e_ty = require_local_for_ty::<SnapshotEnc>(vcx, ty, deps).unwrap();
+        let e_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, ty, deps).unwrap();
 
         let name = vir::vir_format!(vcx, "mir_unop_{op:?}_{}", int_name(ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_ty.snapshot]));
@@ -145,9 +145,9 @@ impl MirBuiltinEnc {
         r_ty: ty::Ty<'tcx>,
     ) -> vir::Function<'vir> {
         use mir::BinOp::*;
-        let e_l_ty = require_local_for_ty::<SnapshotEnc>(vcx, l_ty, deps).unwrap();
-        let e_r_ty = require_local_for_ty::<SnapshotEnc>(vcx, r_ty, deps).unwrap();
-        let e_res_ty = require_local_for_ty::<SnapshotEnc>(vcx, res_ty, deps).unwrap();
+        let e_l_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, l_ty, deps).unwrap();
+        let e_r_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, r_ty, deps).unwrap();
+        let e_res_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, res_ty, deps).unwrap();
         let prim_l_ty = e_l_ty.specifics.expect_primitive();
         let prim_r_ty = e_r_ty.specifics.expect_primitive();
         let prim_res_ty = e_res_ty.specifics.expect_primitive();
@@ -242,27 +242,27 @@ impl MirBuiltinEnc {
     ) -> vir::Function<'vir> {
         // `op` can only be `Add`, `Sub` or `Mul`
         assert!(matches!(op, mir::BinOp::Add | mir::BinOp::Sub | mir::BinOp::Mul));
-        let e_l_ty = require_local_for_ty::<SnapshotEnc>(vcx, l_ty, deps).unwrap();
-        let e_r_ty = require_local_for_ty::<SnapshotEnc>(vcx, r_ty, deps).unwrap();
+        let e_l_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, l_ty, deps).unwrap();
+        let e_r_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, r_ty, deps).unwrap();
 
         let name = vir::vir_format!(vcx, "mir_checkedbinop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
-        let e_res_ty = require_local_for_ty::<SnapshotEnc>(vcx,res_ty, deps).unwrap();
+        let e_res_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx,res_ty, deps).unwrap();
         let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
             function,
         });
 
-        let e_res_ty = require_local_for_ty::<SnapshotEnc>(vcx, res_ty, deps).unwrap();
+        let e_res_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, res_ty, deps).unwrap();
         // The result of a checked add will always be `(T, bool)`, get the `T`
         // type
         let rvalue_pure_ty = res_ty.tuple_fields()[0];
         let bool_ty = res_ty.tuple_fields()[1];
         assert!(bool_ty.is_bool());
 
-        let e_rvalue_pure_ty = require_local_for_ty::<SnapshotEnc>(vcx, rvalue_pure_ty, deps).unwrap();
+        let e_rvalue_pure_ty = require_local_for_ty::<GenericSnapshotEnc>(vcx, rvalue_pure_ty, deps).unwrap();
         let e_rvalue_pure_ty = e_rvalue_pure_ty.specifics.expect_primitive();
-        let e_bool = require_local_for_ty::<SnapshotEnc>(vcx, bool_ty, deps).unwrap();
+        let e_bool = require_local_for_ty::<GenericSnapshotEnc>(vcx, bool_ty, deps).unwrap();
         let bool_cons = e_bool.specifics.expect_primitive().prim_to_snap;
 
         // Unbounded value

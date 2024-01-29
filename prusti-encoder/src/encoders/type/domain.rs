@@ -88,7 +88,7 @@ impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::{
     encoders::{
-        GenericEnc, SnapshotEnc,
+        GenericEnc, GenericSnapshotEnc,
     },
     util::{CastFunctions, MostGenericTy},
 };
@@ -174,7 +174,7 @@ impl TaskEncoder for DomainEnc {
                                 .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
                             let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
                             let discr_ty =
-                                require_local_for_ty::<SnapshotEnc>(vcx, discr_ty, deps).unwrap();
+                                require_local_for_ty::<GenericSnapshotEnc>(vcx, discr_ty, deps).unwrap();
                             Some(VariantData {
                                 discr_ty: discr_ty.snapshot,
                                 discr_prim: discr_ty.specifics.expect_primitive(),
@@ -362,7 +362,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
             .map(|ty|
-                    require_local_for_ty::<SnapshotEnc>(self.vcx, ty, deps)
+                    require_local_for_ty::<GenericSnapshotEnc>(self.vcx, ty, deps)
                         .unwrap()
                         .snapshot
             )

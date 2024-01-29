@@ -8,7 +8,7 @@ use task_encoder::TaskEncoderDependencies;
 use vir::{Caster, UnaryArity, VirCtxt};
 
 use crate::encoders::{
-    domain::DomainEnc, require_ref_for_ty, GenericEnc, GenericPredicateEnc, SnapshotEnc, EncodedTyParam,
+    domain::DomainEnc, require_ref_for_ty, GenericEnc, GenericPredicateEnc, GenericSnapshotEnc, EncodedTyParam,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -148,7 +148,7 @@ impl<'vir> TyMapCaster<'vir> {
         let cast_functions = tys
             .iter()
             .filter_map(|(ty, vir_ty)| {
-                let enc = require_ref_for_ty::<SnapshotEnc>(vcx, *ty, deps).unwrap();
+                let enc = require_ref_for_ty::<GenericSnapshotEnc>(vcx, *ty, deps).unwrap();
                 enc.cast_functions
                     .map(|cast_functions| (*vir_ty, cast_functions))
             })

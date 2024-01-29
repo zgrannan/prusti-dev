@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::{
-    encoders::{ConstEnc, MirBuiltinEnc, MirFunctionEnc, GenericPredicateEnc, SnapshotEnc, ViperTupleEnc},
+    encoders::{ConstEnc, MirBuiltinEnc, MirFunctionEnc, GenericPredicateEnc, GenericSnapshotEnc, ViperTupleEnc},
     util::{MostGenericTy, TyMapCaster},
 };
 
@@ -243,7 +243,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
             // TODO: Support closure types
             &vir::TypeData::Unsupported(vir::UnsupportedType { name: "closure" })
         } else {
-            require_ref_for_ty::<SnapshotEnc>(self.vcx, ty, self.deps)
+            require_ref_for_ty::<GenericSnapshotEnc>(self.vcx, ty, self.deps)
                 .unwrap()
                 .snapshot
         }
@@ -377,7 +377,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                 // encode the discriminant operand
                 let discr_expr = self.encode_operand(&new_curr_ver, discr);
                 let discr_ty = discr.ty(self.body, self.vcx.tcx);
-                let discr_ty_out = require_local_for_ty::<SnapshotEnc>(self.vcx, discr_ty, self.deps)
+                let discr_ty_out = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, discr_ty, self.deps)
                     .unwrap()
                     .specifics
                     .expect_primitive();
@@ -542,7 +542,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
             // Repeat
             mir::Rvalue::Ref(_, kind, place) => {
                 let rvalue_snapshot_encoding =
-                    require_local_for_ty::<SnapshotEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                    require_local_for_ty::<GenericSnapshotEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                 let e_rvalue_ty = rvalue_snapshot_encoding
                     .specifics
                     .expect_structlike()
@@ -645,7 +645,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
             },
             mir::Rvalue::Discriminant(place) => {
                 let place_ty = place.ty(self.body, self.vcx.tcx);
-                let ty = require_local_for_ty::<SnapshotEnc>(self.vcx, place_ty.ty, self.deps)
+                let ty = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, place_ty.ty, self.deps)
                     .unwrap()
                     .specifics;
                 match ty
@@ -657,7 +657,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                         .snap_to_discr_snap
                         .apply(self.vcx, [self.encode_place(curr_ver, place)]),
                     None => {
-                        let e_rvalue_ty = require_local_for_ty::<SnapshotEnc>(self.vcx, rvalue_ty, self.deps)
+                        let e_rvalue_ty = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, rvalue_ty, self.deps)
                             .unwrap()
                             .specifics
                             .expect_primitive();
@@ -732,7 +732,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
         match elem {
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
-                let e_ty = require_local_for_ty::<SnapshotEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
+                let e_ty = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
                 let place_ref = e_ty
                     .specifics
                     .expect_structlike()
@@ -821,7 +821,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                 let rhs = self.encode_operand(&curr_ver, &args[1]);
                 let eq_expr = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, lhs, rhs);
 
-                let bool_cons = require_local_for_ty::<SnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
+                let bool_cons = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
                     .unwrap()
                     .specifics
                     .expect_primitive()
@@ -848,7 +848,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                         .enumerate()
                         .map(|(idx, qvar_ty)| {
                             let ty_out =
-                                require_ref_for_ty::<SnapshotEnc>(self.vcx, qvar_ty, self.deps)
+                                require_ref_for_ty::<GenericSnapshotEnc>(self.vcx, qvar_ty, self.deps)
                                     .unwrap();
                             self.vcx.mk_local_decl(
                                 vir::vir_format!(self.vcx, "qvar_{}_{idx}", self.encoding_depth),
@@ -904,7 +904,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                     .reify(self.vcx, (cl_def_id, self.vcx.alloc_slice(&reify_args)))
                     .lift();
 
-                let bool = require_local_for_ty::<SnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
+                let bool = require_local_for_ty::<GenericSnapshotEnc>(self.vcx, self.vcx.tcx.types.bool, self.deps)
                     .unwrap()
                     .specifics;
                 let bool = bool.expect_primitive();

@@ -30,7 +30,7 @@ pub use spec::{
     SpecEncTask,
 };
 pub(super) use spec::{init_def_spec, with_def_spec, with_proc_spec};
-pub use snapshot::SnapshotEnc;
+pub use generic_snapshot::GenericSnapshotEnc;
 pub use generic_predicate::{
     GenericPredicateEnc,
     GenericPredicateEncOutputRef,

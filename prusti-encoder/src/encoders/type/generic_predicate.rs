@@ -180,7 +180,7 @@ use crate::{
 use super::{
     domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct, DomainEnc},
     predicate::{PredicateEnc, PredicateEncOutputRef},
-    snapshot::SnapshotEnc,
+    generic_snapshot::GenericSnapshotEnc,
 };
 
 impl TaskEncoder for GenericPredicateEnc {
@@ -211,7 +211,7 @@ impl TaskEncoder for GenericPredicateEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        let snap = deps.require_local::<SnapshotEnc>(*task_key).unwrap();
+        let snap = deps.require_local::<GenericSnapshotEnc>(*task_key).unwrap();
         let generic_output_ref = deps.require_ref::<GenericEnc>(()).unwrap();
         let mut enc = vir::with_vcx(|vcx| {
             PredicateEncValues::new(

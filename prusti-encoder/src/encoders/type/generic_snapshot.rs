@@ -8,7 +8,7 @@ use vir::{FunctionIdent, UnaryArity};
 /// Takes a Rust `Ty` and returns a Viper `Type`. The returned type is always a
 /// domain type. To get specifics such as constructors for the domain, use the
 /// full encoding: this is generally the one to use as it also includes the type.
-pub struct SnapshotEnc;
+pub struct GenericSnapshotEnc;
 
 #[derive(Clone, Debug)]
 pub struct SnapshotEncOutputRef<'vir> {
@@ -30,8 +30,8 @@ use crate::util::{extract_type_params, to_placeholder, CastFunctions, MostGeneri
 
 use super::domain::{DomainEnc, DomainEncSpecifics};
 
-impl TaskEncoder for SnapshotEnc {
-    task_encoder::encoder_cache!(SnapshotEnc);
+impl TaskEncoder for GenericSnapshotEnc {
+    task_encoder::encoder_cache!(GenericSnapshotEnc);
 
     type TaskDescription<'tcx> = MostGenericTy<'tcx>;
     type OutputRef<'vir> = SnapshotEncOutputRef<'vir>;

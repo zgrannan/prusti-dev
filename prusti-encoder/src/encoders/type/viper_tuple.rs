@@ -4,7 +4,7 @@ use task_encoder::{
     TaskEncoderDependencies,
 };
 
-use crate::encoders::SnapshotEnc;
+use crate::encoders::GenericSnapshotEnc;
 
 use super::domain::{DomainEnc, DomainDataStruct};
 
