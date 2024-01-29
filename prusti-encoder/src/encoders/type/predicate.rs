@@ -108,9 +108,6 @@ impl TaskEncoder for PredicateEnc {
     > {
         with_vcx(|vcx| {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
-            for arg in args {
-                deps.require_ref::<PredicateEnc>(arg).unwrap();
-            }
             let generic_predicate = deps.require_ref::<GenericPredicateEnc>(generic_ty).unwrap();
             let ty_params = get_ty_params(vcx, *task_key, deps);
             deps.emit_output_ref::<PredicateEnc>(
@@ -120,6 +117,9 @@ impl TaskEncoder for PredicateEnc {
                     ty_params,
                 },
             );
+            for arg in args {
+                deps.require_ref::<PredicateEnc>(arg).unwrap();
+            }
             Ok(((), ()))
         })
     }

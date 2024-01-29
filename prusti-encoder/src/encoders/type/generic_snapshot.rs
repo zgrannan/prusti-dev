@@ -11,11 +11,11 @@ use vir::{FunctionIdent, UnaryArity};
 pub struct GenericSnapshotEnc;
 
 #[derive(Clone, Debug)]
-pub struct SnapshotEncOutputRef<'vir> {
+pub struct GenericSnapshotEncOutputRef<'vir> {
     pub snapshot: vir::Type<'vir>,
     pub cast_functions: Option<CastFunctions<'vir>>,
 }
-impl<'vir> task_encoder::OutputRefAny for SnapshotEncOutputRef<'vir> {}
+impl<'vir> task_encoder::OutputRefAny for GenericSnapshotEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
 pub struct SnapshotEncOutput<'vir> {
@@ -34,7 +34,7 @@ impl TaskEncoder for GenericSnapshotEnc {
     task_encoder::encoder_cache!(GenericSnapshotEnc);
 
     type TaskDescription<'tcx> = MostGenericTy<'tcx>;
-    type OutputRef<'vir> = SnapshotEncOutputRef<'vir>;
+    type OutputRef<'vir> = GenericSnapshotEncOutputRef<'vir>;
     type OutputFullLocal<'vir> = SnapshotEncOutput<'vir>;
     type EncodingError = ();
 
@@ -60,7 +60,7 @@ impl TaskEncoder for GenericSnapshotEnc {
             let snapshot = out.domain.apply(vcx, []);
             deps.emit_output_ref::<Self>(
                 *ty,
-                SnapshotEncOutputRef {
+                GenericSnapshotEncOutputRef {
                     snapshot,
                     cast_functions: out.cast_functions,
                 },
