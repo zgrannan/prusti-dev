@@ -8,11 +8,11 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
 
 use crate::{
-    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, ty_param::TyParamEnc, GenericPredicateEnc, GenericPredicateEncOutputRef},
+    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, lifted::LiftedTyEnc, GenericPredicateEnc, GenericPredicateEncOutputRef},
     util::{extract_type_params},
 };
 
-use super::{ty_param::EncodedTyParam, GenericEnc};
+use super::{lifted::LiftedTy, GenericEnc};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -23,10 +23,10 @@ pub struct MirLocalDefEncOutput<'vir> {
 pub type MirLocalDefEncError = ();
 
 #[derive(Clone)]
-pub struct EncodedTyParams<'vir>(&'vir [EncodedTyParam<'vir>]);
+pub struct EncodedTyParams<'vir>(&'vir [LiftedTy<'vir>]);
 
 impl<'vir> EncodedTyParams<'vir> {
-    pub fn new(ty_params: &'vir [EncodedTyParam<'vir>]) -> Self {
+    pub fn new(ty_params: &'vir [LiftedTy<'vir>]) -> Self {
         EncodedTyParams(ty_params)
     }
 
@@ -34,8 +34,8 @@ impl<'vir> EncodedTyParams<'vir> {
         self.0
             .iter()
             .filter_map(|g| match g {
-                EncodedTyParam::Generic(g) => Some(*g),
-                EncodedTyParam::Instantiated(_) => None,
+                LiftedTy::Generic(g) => Some(*g),
+                LiftedTy::Instantiated(_) => None,
             })
             .collect::<Vec<_>>()
     }
@@ -46,15 +46,15 @@ impl<'vir> EncodedTyParams<'vir> {
 }
 
 
-impl<'vir> From<vir::LocalDecl<'vir>> for EncodedTyParam<'vir> {
+impl<'vir> From<vir::LocalDecl<'vir>> for LiftedTy<'vir> {
     fn from(decl: vir::LocalDecl<'vir>) -> Self {
-        EncodedTyParam::Generic(decl)
+        LiftedTy::Generic(decl)
     }
 }
 
-impl<'vir> From<vir::Expr<'vir>> for EncodedTyParam<'vir> {
+impl<'vir> From<vir::Expr<'vir>> for LiftedTy<'vir> {
     fn from(expr: vir::Expr<'vir>) -> Self {
-        EncodedTyParam::Instantiated(expr)
+        LiftedTy::Instantiated(expr)
     }
 }
 
@@ -177,12 +177,12 @@ pub fn get_ty_params<'tcx: 'vir, 'vir>(
     deps: &mut TaskEncoderDependencies<'vir>,
 ) -> EncodedTyParams<'vir> {
     let ty_params = if let ty::TyKind::Param(_) = ty.kind() {
-        vec![deps.require_ref::<TyParamEnc>(ty).unwrap()]
+        vec![deps.require_ref::<LiftedTyEnc>(ty).unwrap()]
     } else {
         let (_, ty_params) = extract_type_params(vcx.tcx, ty);
         ty_params
             .into_iter()
-            .map(|ty| deps.require_ref::<TyParamEnc>(ty).unwrap())
+            .map(|ty| deps.require_ref::<LiftedTyEnc>(ty).unwrap())
             .collect::<Vec<_>>()
     };
     EncodedTyParams::new(vcx.alloc_slice(&ty_params))

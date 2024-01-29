@@ -38,7 +38,7 @@ use crate::{
     util::{extract_type_params, TyMapCaster},
 };
 
-use super::ty_param::{EncodedTyParam, TyParamEnc};
+use super::lifted::{LiftedTy, LiftedTyEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -957,7 +957,7 @@ fn get_param_typarams<'vir, 'tcx>(
     vcx: &'vir vir::VirCtxt<'tcx>,
     ty: ty::Ty<'tcx>,
     deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<EncodedTyParam<'vir>> {
+) -> Vec<LiftedTy<'vir>> {
     let mut args = vec![];
 
     if matches!(ty.kind(), ty::TyKind::Param(_)) {
@@ -965,11 +965,11 @@ fn get_param_typarams<'vir, 'tcx>(
         // include the relevant type
         // TODO: Currently we rely on assuming that the value for this
         //       is a parameter in scope...
-        args.push(deps.require_ref::<TyParamEnc>(ty).unwrap());
+        args.push(deps.require_ref::<LiftedTyEnc>(ty).unwrap());
     } else {
         let (_, arg_tys) = extract_type_params(vcx.tcx, ty);
         for arg in arg_tys {
-            args.push(deps.require_ref::<TyParamEnc>(arg).unwrap())
+            args.push(deps.require_ref::<LiftedTyEnc>(arg).unwrap())
         }
     }
     args

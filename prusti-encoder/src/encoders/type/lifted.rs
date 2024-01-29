@@ -7,47 +7,47 @@ use crate::{encoders::GenericEnc, util::extract_type_params};
 use super::domain::DomainEnc;
 
 #[derive(Clone, Copy, Debug)]
-pub enum EncodedTyParam<'vir> {
+pub enum LiftedTy<'vir> {
     Generic(vir::LocalDecl<'vir>),
     Instantiated(vir::Expr<'vir>),
 }
 
-impl<'vir, 'tcx> EncodedTyParam<'vir> {
+impl<'vir, 'tcx> LiftedTy<'vir> {
     pub fn from_param(
         vcx: &'vir vir::VirCtxt<'tcx>,
         param: &'tcx ty::ParamTy,
         generic_ty: vir::Type<'vir>,
     ) -> Self {
-        EncodedTyParam::Generic(vcx.mk_local_decl(param.name.as_str(), generic_ty))
+        LiftedTy::Generic(vcx.mk_local_decl(param.name.as_str(), generic_ty))
     }
 
     pub fn expr(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::Expr<'vir> {
         match self {
-            EncodedTyParam::Generic(g) => vcx.mk_local_ex(g.name, g.ty),
-            EncodedTyParam::Instantiated(e) => e,
+            LiftedTy::Generic(g) => vcx.mk_local_ex(g.name, g.ty),
+            LiftedTy::Instantiated(e) => e,
         }
     }
 
     pub fn decl(&self) -> Option<vir::LocalDecl<'vir>> {
         match self {
-            EncodedTyParam::Generic(g) => Some(g),
-            EncodedTyParam::Instantiated(_) => None,
+            LiftedTy::Generic(g) => Some(g),
+            LiftedTy::Instantiated(_) => None,
         }
     }
 }
 
-impl<'vir> OutputRefAny for EncodedTyParam<'vir> {}
+impl<'vir> OutputRefAny for LiftedTy<'vir> {}
 
-pub struct TyParamEnc;
+pub struct LiftedTyEnc;
 
-impl TaskEncoder for TyParamEnc {
-    task_encoder::encoder_cache!(TyParamEnc);
+impl TaskEncoder for LiftedTyEnc {
+    task_encoder::encoder_cache!(LiftedTyEnc);
 
     type TaskDescription<'tcx> = ty::Ty<'tcx>;
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
 
-    type OutputRef<'vir> = EncodedTyParam<'vir>;
+    type OutputRef<'vir> = LiftedTy<'vir>;
 
     type OutputFullLocal<'vir> = ();
 
@@ -75,13 +75,12 @@ impl TaskEncoder for TyParamEnc {
         ),
     > {
         with_vcx(|vcx| {
-            let output_ref =
-            if let TyKind::Param(p) = task_key.kind() {
-                    EncodedTyParam::from_param(
-                        vcx,
-                        p,
-                        deps.require_ref::<GenericEnc>(()).unwrap().type_snapshot,
-                    )
+            let output_ref = if let TyKind::Param(p) = task_key.kind() {
+                LiftedTy::from_param(
+                    vcx,
+                    p,
+                    deps.require_ref::<GenericEnc>(()).unwrap().type_snapshot,
+                )
             } else {
                 let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
                 let type_function = deps
@@ -92,9 +91,9 @@ impl TaskEncoder for TyParamEnc {
                     .into_iter()
                     .map(|ty| deps.require_ref::<Self>(ty).unwrap().expr(vcx))
                     .collect::<Vec<_>>();
-                    EncodedTyParam::Instantiated(type_function.apply(vcx, &args))
+                LiftedTy::Instantiated(type_function.apply(vcx, &args))
             };
-            deps.emit_output_ref::<TyParamEnc>(*task_key, output_ref);
+            deps.emit_output_ref::<LiftedTyEnc>(*task_key, output_ref);
         });
         Ok(((), ()))
     }
