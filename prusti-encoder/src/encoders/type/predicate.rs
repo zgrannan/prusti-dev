@@ -78,6 +78,19 @@ pub struct PredicateEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for PredicateEncOutputRef<'vir> {}
 
 impl<'vir> PredicateEncOutputRef<'vir> {
+
+    pub fn ref_to_args<'tcx>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        params: EncodedTyParams<'vir>,
+        self_ref: vir::Expr<'vir>,
+    ) -> &'vir [vir::Expr<'vir>] {
+        assert!(self_ref.ty() == &TypeData::Ref);
+        let mut args = vec![self_ref];
+        args.extend(params.as_exprs(vcx));
+        vcx.alloc_slice(&args)
+    }
+
     pub fn expect_prim(&self) -> DomainDataPrim<'vir> {
         match self.specifics {
             PredicateEncData::Primitive(prim) => prim,
@@ -160,7 +173,7 @@ pub struct PredicateEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        get_ty_ops, require_ref_for_ty, GenericEnc, TyOps,
+        get_ty_ops, require_ref_for_ty, EncodedTyParams, GenericEnc, TyOps
     },
     util::MostGenericTy,
 };
@@ -568,19 +581,19 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     pub fn mk_field_apps(
         &self,
         field_fns: &[FunctionIdent<'vir, UnaryArity<'vir>>],
-        fields: Vec<TyOps<'vir>>,
+        fields: Vec<(&'vir PredicateEncOutputRef<'vir>, EncodedTyParams<'vir>)>,
     ) -> Vec<FieldApp<'vir>> {
         fields
             .into_iter()
             .enumerate()
-            .map(|(idx, f)| {
+            .map(|(idx, (f_ty, f_params))| {
                 let self_field = field_fns[idx].apply(self.vcx, [self.self_ex]);
-                let args = f.ref_to_args(self.vcx, self_field);
+                let args = f_ty.ref_to_args(self.vcx, f_params, self_field);
                 FieldApp {
                     self_field_pred: self
                         .vcx
-                        .mk_predicate_app_expr(f.ref_to_pred.apply(self.vcx, args, None)),
-                    self_field_snap: f.ref_to_snap.apply(self.vcx, args),
+                        .mk_predicate_app_expr(f_ty.ref_to_pred.apply(self.vcx, args, None)),
+                    self_field_snap: f_ty.ref_to_snap.apply(self.vcx, args),
                 }
             })
             .collect()

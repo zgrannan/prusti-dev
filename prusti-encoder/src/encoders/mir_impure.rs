@@ -38,7 +38,7 @@ use crate::{
     util::{extract_type_params, get_viper_type_value, TyMapCaster},
 };
 
-use super::{get_ty_ops, TyParam};
+use super::{get_ty_ops, EncodedTyParam};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -944,7 +944,7 @@ fn get_param_typarams<'vir, 'tcx>(
     vcx: &'vir vir::VirCtxt<'tcx>,
     ty: ty::Ty<'tcx>,
     deps: &mut TaskEncoderDependencies<'vir>,
-) -> Vec<TyParam<'vir>> {
+) -> Vec<EncodedTyParam<'vir>> {
     let mut args = vec![];
 
     if matches!(ty.kind(), ty::TyKind::Param(_)) {

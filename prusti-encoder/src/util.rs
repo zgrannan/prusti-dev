@@ -8,7 +8,7 @@ use task_encoder::TaskEncoderDependencies;
 use vir::{Caster, UnaryArity, VirCtxt};
 
 use crate::encoders::{
-    domain::DomainEnc, require_ref_for_ty, GenericEnc, PredicateEnc, SnapshotEnc, TyParam,
+    domain::DomainEnc, require_ref_for_ty, GenericEnc, PredicateEnc, SnapshotEnc, EncodedTyParam,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -66,9 +66,9 @@ pub fn get_viper_type_value<'vir, 'tcx>(
     vcx: &'vir vir::VirCtxt<'tcx>,
     deps: &mut TaskEncoderDependencies<'vir>,
     ty: ty::Ty<'tcx>,
-) -> TyParam<'vir> {
+) -> EncodedTyParam<'vir> {
     if let TyKind::Param(p) = ty.kind() {
-        TyParam::from_param(
+        EncodedTyParam::from_param(
             vcx,
             p,
             deps.require_ref::<GenericEnc>(()).unwrap().type_snapshot,
