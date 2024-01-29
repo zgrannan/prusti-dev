@@ -1,4 +1,3 @@
-mod assign;
 mod generic;
 mod mir_builtin;
 mod mir_impure;

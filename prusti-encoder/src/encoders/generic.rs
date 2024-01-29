@@ -4,8 +4,6 @@ use vir::{
     KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent, TernaryArity,
 };
 
-use super::{assign::mk_method_assign};
-
 pub struct GenericEnc;
 
 #[derive(Clone, Debug)]
@@ -24,7 +22,6 @@ pub struct GenericEncOutputRef<'vir> {
     pub unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
     pub domain_type_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
     pub domain_param_name: DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
-    pub method_assign: MethodIdent<'vir, TernaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
 
@@ -35,7 +32,6 @@ pub struct GenericEncOutput<'vir> {
     pub param_snapshot: vir::Domain<'vir>,
     pub ref_to_snap: vir::Function<'vir>,
     pub unreachable_to_snap: vir::Function<'vir>,
-    pub method_assign: vir::Method<'vir>,
 }
 
 const TYP_DOMAIN: TypeData<'static> = TypeData::Domain("Type", &[]);
@@ -78,10 +74,6 @@ impl TaskEncoder for GenericEnc {
             BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]),
             &SNAPSHOT_PARAM_DOMAIN,
         );
-        let method_assign = MethodIdent::new(
-            "assign_p_Param",
-            TernaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN, &SNAPSHOT_PARAM_DOMAIN]),
-        );
         let unreachable_to_snap = FunctionIdent::new(
             "p_Param_unreachable",
             NullaryArity::new(&[]),
@@ -103,7 +95,6 @@ impl TaskEncoder for GenericEnc {
             domain_type_name: type_domain_ident,
             domain_param_name: param_domain_ident,
             ref_to_snap,
-            method_assign,
             unreachable_to_snap,
             param_type_function,
         };
@@ -120,14 +111,6 @@ impl TaskEncoder for GenericEnc {
 
 
         vir::with_vcx(|vcx| {
-            let method_assign = mk_method_assign(
-                vcx,
-                method_assign.as_unknown_arity(),
-                vec![vcx.mk_local_decl("t", &TYP_DOMAIN)],
-                &SNAPSHOT_PARAM_DOMAIN,
-                ref_to_pred.as_unknown_arity(),
-                ref_to_snap.as_unknown_arity(),
-            );
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
             let ref_to_snap = vcx.mk_function(
                 "p_Param_snap",
@@ -154,7 +137,6 @@ impl TaskEncoder for GenericEnc {
                     .mk_function(name, &[], &SNAPSHOT_PARAM_DOMAIN, false_, false_, None);
             Ok((
                 GenericEncOutput {
-                    method_assign,
                     param_snapshot: vir::vir_domain! { vcx; domain s_Param {
                             function typ(s_Param): Type;
                         }
