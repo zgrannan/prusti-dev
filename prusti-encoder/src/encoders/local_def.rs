@@ -12,7 +12,7 @@ use crate::{
     util::{extract_type_params, get_viper_type_value},
 };
 
-use super::{require_ref_for_ty, GenericEnc};
+use super::{GenericEnc};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]

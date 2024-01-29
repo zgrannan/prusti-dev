@@ -171,16 +171,14 @@ pub struct PredicateEncOutput<'vir> {
 }
 
 use crate::{
-    encoders::{
-        assign::mk_method_assign, require_ref_for_ty, EncodedTyParams, GenericEnc,
-    },
+    encoders::{assign::mk_method_assign, EncodedTyParams, GenericEnc},
     util::MostGenericTy,
 };
 
 use super::{
     domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct, DomainEnc},
-    predicate::{PredicateEnc, PredicateEncOutputRef},
     generic_snapshot::GenericSnapshotEnc,
+    predicate::{PredicateEnc, PredicateEncOutputRef},
 };
 
 impl TaskEncoder for GenericPredicateEnc {
@@ -346,11 +344,11 @@ impl TaskEncoder for GenericPredicateEnc {
                     enc.output_ref(PredicateEncData::Ref(specifics)),
                 );
 
-                vir::with_vcx(|vcx| {
-                    let inner =
-                        require_ref_for_ty::<GenericPredicateEnc>(vcx, inner, deps).unwrap();
-                    Ok((enc.mk_ref(deps, task_key, inner, specifics), ()))
-                })
+                let inner = deps
+                    .require_ref::<PredicateEnc>(inner)
+                    .unwrap()
+                    .generic_predicate;
+                Ok((enc.mk_ref(deps, task_key, inner, specifics), ()))
             }
             unsupported_type => todo!("type not supported: {unsupported_type:?}"),
         }
@@ -797,10 +795,13 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let method_assign = mk_method_assign(
             self.vcx,
             self.method_assign,
-            self.generics.iter().map(|g| (*g).into()).collect::<Vec<_>>(),
+            self.generics
+                .iter()
+                .map(|g| (*g).into())
+                .collect::<Vec<_>>(),
             self.snap_inst,
             self.ref_to_pred,
-            self.ref_to_snap
+            self.ref_to_snap,
         );
 
         PredicateEncOutput {

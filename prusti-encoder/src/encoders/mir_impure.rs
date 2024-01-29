@@ -32,8 +32,8 @@ pub struct MirImpureEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        predicate::PredicateEnc, require_ref_for_ty, ConstEnc, GenericPredicateEnc, MirBuiltinEnc,
-        MirFunctionEnc, MirLocalDefEnc, MirSpecEnc,
+        generic_predicate::PredicateEncData, predicate::PredicateEnc, ConstEnc,
+        GenericPredicateEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc,
     },
     util::{extract_type_params, get_viper_type_value, TyMapCaster},
 };
@@ -336,7 +336,9 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     }
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
                     let place_ty_out = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
-                    let ref_to_pred = place_ty_out.generic_predicate.expect_pred_variant_opt(place_ty.variant_index);
+                    let ref_to_pred = place_ty_out
+                        .generic_predicate
+                        .expect_pred_variant_opt(place_ty.variant_index);
 
                     let ref_p = self.encode_place(place);
                     let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);
@@ -425,16 +427,13 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let (snap_val, ty_out) = match operand {
             &mir::Operand::Move(source) => return self.encode_place(Place::from(source)),
             &mir::Operand::Copy(source) => {
-                let ty_out =
-                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, ty, self.deps).unwrap();
-                let source = ty_out
-                    .ref_to_snap
-                    .apply(self.vcx, &[self.encode_place(Place::from(source))]);
+                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
+                let source: vir::Expr<'vir> =
+                    ty_out.ref_to_snap(self.vcx, &[self.encode_place(Place::from(source))]);
                 (source, ty_out)
             }
             mir::Operand::Constant(box constant) => {
-                let ty_out =
-                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, ty, self.deps).unwrap();
+                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
                 let constant = self
                     .deps
                     .require_local::<ConstEnc>((constant.literal, 0, self.def_id))
@@ -442,10 +441,14 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 (constant, ty_out)
             }
         };
-        let tmp_exp = self.new_tmp(&vir::TypeData::Ref).1;
+        let tmp_exp: vir::Expr<'vir> = self.new_tmp(&vir::TypeData::Ref).1;
         self.stmt(
-            self.vcx
-                .alloc(ty_out.method_assign.apply(self.vcx, &[tmp_exp, snap_val])),
+            self.vcx.alloc(
+                ty_out
+                    .generic_predicate
+                    .method_assign
+                    .apply(self.vcx, &[tmp_exp, snap_val]),
+            ),
         );
         tmp_exp
     }
@@ -469,10 +472,9 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     ) -> vir::Expr<'vir> {
         match elem {
             mir::ProjectionElem::Field(field_idx, _) => {
-                let e_ty =
-                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
-                        .unwrap();
+                let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
                 let field_access = e_ty
+                    .generic_predicate
                     .expect_variant_opt(place_ty.variant_index)
                     .ref_to_field_refs;
                 let projection_p = field_access[field_idx.as_usize()];
@@ -482,10 +484,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             mir::ProjectionElem::Downcast(..) => expr,
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
-                let e_ty =
-                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
-                        .unwrap();
-                let ref_field = e_ty.expect_ref().ref_field;
+                let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                let ref_field = e_ty.generic_predicate.expect_ref().ref_field;
                 self.vcx.mk_field_expr(expr, ref_field)
             }
             _ => todo!("Unsupported ProjectionElem {:?}", elem),
@@ -664,11 +664,11 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         box kind @ (mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple),
                         fields,
                     ) => {
-                        let e_rvalue_ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                        let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(rvalue_ty).unwrap();
                         let sl = match kind {
                             mir::AggregateKind::Adt(_, vidx, _, _, _) =>
-                                e_rvalue_ty.get_variant_any(*vidx),
-                            _ => e_rvalue_ty.expect_structlike()
+                                e_rvalue_ty.generic_predicate.get_variant_any(*vidx),
+                            _ => e_rvalue_ty.generic_predicate.expect_structlike()
                         };
                         let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
                         let field_tys = fields.iter().map(|field| field.ty(self.local_decls, self.vcx.tcx));
@@ -680,20 +680,20 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         sl.snap_data.field_snaps_to_snap.apply_with_casts(self.vcx, &cons_args, caster)
                     }
                     mir::Rvalue::Discriminant(place) => {
-                        let e_rvalue_ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                        let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(rvalue_ty).unwrap();
                         let place_ty = place.ty(self.local_decls, self.vcx.tcx);
-                        let ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
+                        let ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
                         let place_expr = self.encode_place(Place::from(*place));
 
-                        match ty.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
+                        match ty.generic_predicate.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
                             Some(el) => {
                                 let discr_expr = self.vcx.mk_field_expr(place_expr, el.as_ref().unwrap().discr);
-                                self.vcx.mk_unfolding_expr(ty.ref_to_pred.apply(self.vcx, &[place_expr], Some(self.vcx.mk_wildcard())), discr_expr)
+                                self.vcx.mk_unfolding_expr(ty.ref_to_pred_app(self.vcx, &[place_expr], Some(self.vcx.mk_wildcard())), discr_expr)
                             }
                             None => {
                                 // mir::Rvalue::Discriminant documents "Returns zero for types without discriminant"
                                 let zero = self.vcx.mk_uint::<0>();
-                                e_rvalue_ty.expect_prim().prim_to_snap.apply(self.vcx, [zero])
+                                e_rvalue_ty.generic_predicate.expect_prim().prim_to_snap.apply(self.vcx, [zero])
                             }
                         }
                     }
@@ -774,10 +774,12 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 //let discr_version = self.ssa_analysis.version.get(&(location, discr.local)).unwrap();
                 //let discr_name = vir::vir_format!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
                 let discr_ty_rs = discr.ty(self.local_decls, self.vcx.tcx);
-                let discr_ty =
-                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, discr_ty_rs, self.deps)
-                        .unwrap()
-                        .expect_prim();
+                let discr_ty = self
+                    .deps
+                    .require_ref::<PredicateEnc>(discr_ty_rs)
+                    .unwrap()
+                    .generic_predicate
+                    .expect_prim();
 
                 let goto_targets = self.vcx.alloc_slice(
                     &targets
@@ -857,10 +859,12 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         args.iter().map(|op| self.encode_operand_snap(op)).collect();
                     let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
-                    let method_assign =
-                        require_ref_for_ty::<GenericPredicateEnc>(self.vcx, return_ty, self.deps)
-                            .unwrap()
-                            .method_assign;
+                    let method_assign = self
+                        .deps
+                        .require_ref::<PredicateEnc>(return_ty)
+                        .unwrap()
+                        .generic_predicate
+                        .method_assign;
 
                     self.stmt(
                         self.vcx
@@ -906,14 +910,16 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 unwind,
                 ..
             } => {
-                let e_bool = require_ref_for_ty::<GenericPredicateEnc>(
-                    self.vcx,
-                    self.vcx.tcx.types.bool,
-                    self.deps,
-                )
-                .unwrap();
+                let e_bool = self
+                    .deps
+                    .require_ref::<PredicateEnc>(self.vcx.tcx.types.bool)
+                    .unwrap();
                 let enc = self.encode_operand_snap(cond);
-                let enc = e_bool.expect_prim().snap_to_prim.apply(self.vcx, [enc]);
+                let enc = e_bool
+                    .generic_predicate
+                    .expect_prim()
+                    .snap_to_prim
+                    .apply(self.vcx, [enc]);
                 let expected = self.vcx.mk_const_expr(vir::ConstData::Bool(*expected));
                 let assert = self
                     .vcx

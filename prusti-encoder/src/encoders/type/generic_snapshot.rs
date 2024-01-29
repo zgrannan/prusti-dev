@@ -18,7 +18,7 @@ pub struct GenericSnapshotEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for GenericSnapshotEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
-pub struct SnapshotEncOutput<'vir> {
+pub struct GenericSnapshotEncOutput<'vir> {
     pub base_name: String,
     pub snapshot: vir::Type<'vir>,
     pub generics: &'vir [&'vir str],
@@ -35,7 +35,7 @@ impl TaskEncoder for GenericSnapshotEnc {
 
     type TaskDescription<'tcx> = MostGenericTy<'tcx>;
     type OutputRef<'vir> = GenericSnapshotEncOutputRef<'vir>;
-    type OutputFullLocal<'vir> = SnapshotEncOutput<'vir>;
+    type OutputFullLocal<'vir> = GenericSnapshotEncOutput<'vir>;
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
@@ -77,7 +77,7 @@ impl TaskEncoder for GenericSnapshotEnc {
                     .as_slice(),
             );
             Ok((
-                SnapshotEncOutput {
+                GenericSnapshotEncOutput {
                     base_name: out.base_name,
                     snapshot,
                     specifics,

@@ -8,7 +8,7 @@ use task_encoder::TaskEncoderDependencies;
 use vir::{Caster, UnaryArity, VirCtxt};
 
 use crate::encoders::{
-    domain::DomainEnc, require_ref_for_ty, snapshot::SnapshotEnc, EncodedTyParam, GenericEnc,
+    domain::DomainEnc, snapshot::SnapshotEnc, EncodedTyParam, GenericEnc,
     GenericPredicateEnc, GenericSnapshotEnc,
 };
 

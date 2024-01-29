@@ -53,7 +53,7 @@ impl<'vir> PredicateEncOutputRef<'vir> {
     pub fn ref_to_pred<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
-        args: &'vir [vir::Expr<'vir>],
+        args: &[vir::Expr<'vir>],
         perm: Option<vir::Expr<'vir>>,
     ) -> vir::Expr<'vir> {
         vcx.mk_predicate_app_expr(
@@ -65,10 +65,23 @@ impl<'vir> PredicateEncOutputRef<'vir> {
         )
     }
 
+    pub fn ref_to_pred_app<'tcx>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        args: &[vir::Expr<'vir>],
+        perm: Option<vir::Expr<'vir>>,
+    ) -> vir::PredicateApp<'vir> {
+        self.generic_predicate.ref_to_pred.apply(
+            vcx,
+            args,
+            perm
+        )
+    }
+
     pub fn ref_to_snap<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
-        args: &'vir [vir::Expr<'vir>],
+        args: &[vir::Expr<'vir>],
     ) -> vir::Expr<'vir> {
         self.generic_predicate.ref_to_snap.apply(vcx, args)
     }
