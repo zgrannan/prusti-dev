@@ -8,8 +8,8 @@ use task_encoder::TaskEncoderDependencies;
 use vir::{Caster, UnaryArity, VirCtxt};
 
 use crate::encoders::{
-    domain::DomainEnc, snapshot::SnapshotEnc, EncodedTyParam, GenericEnc,
-    GenericPredicateEnc, GenericSnapshotEnc,
+    domain::DomainEnc, snapshot::SnapshotEnc, EncodedTyParam, GenericEnc, GenericPredicateEnc,
+    GenericSnapshotEnc,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -141,18 +141,17 @@ pub struct TyMapCaster<'vir> {
 
 impl<'vir> TyMapCaster<'vir> {
     pub fn new<'tcx: 'vir>(
-        vcx: &'vir VirCtxt<'tcx>,
-        tys: Vec<(ty::Ty<'tcx>, vir::Type<'vir>)>,
+        tys: Vec<ty::Ty<'tcx>>,
         deps: &mut TaskEncoderDependencies<'vir>,
     ) -> Self {
         let generic_ty = deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot;
         let cast_functions = tys
             .iter()
-            .filter_map(|(ty, vir_ty)| {
+            .filter_map(|ty| {
                 let enc = deps.require_ref::<SnapshotEnc>(*ty).unwrap();
                 enc.generic_snapshot
                     .cast_functions
-                    .map(|cast_functions| (*vir_ty, cast_functions))
+                    .map(|cast_functions| (enc.generic_snapshot.snapshot, cast_functions))
             })
             .collect();
         Self {

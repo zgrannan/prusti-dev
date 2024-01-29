@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 //    SsaAnalysis,
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, MethodIdent, UnknownArity};
+use vir::{CallableIdent, Caster, MethodIdent, UnknownArity};
 
 pub struct MirImpureEnc;
 
@@ -673,11 +673,10 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
                         let field_tys = fields.iter().map(|field| field.ty(self.local_decls, self.vcx.tcx));
                         let caster = TyMapCaster::new(
-                            self.vcx,
-                            field_tys.zip(cons_args.iter().map(|a| a.ty())).collect::<Vec<_>>(),
+                            field_tys.collect::<Vec<_>>(),
                             self.deps
                         );
-                        sl.snap_data.field_snaps_to_snap.apply_with_casts(self.vcx, &cons_args, caster)
+                        caster.apply_function_with_casts(self.vcx, sl.snap_data.field_snaps_to_snap, &cons_args)
                     }
                     mir::Rvalue::Discriminant(place) => {
                         let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(rvalue_ty).unwrap();
