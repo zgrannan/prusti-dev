@@ -4,7 +4,7 @@ use vir::{
     KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, MethodIdent, TernaryArity,
 };
 
-use super::{TyOps, predicate::mk_method_assign};
+use super::{assign::mk_method_assign};
 
 pub struct GenericEnc;
 
@@ -27,18 +27,6 @@ pub struct GenericEncOutputRef<'vir> {
     pub method_assign: MethodIdent<'vir, TernaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for GenericEncOutputRef<'vir> {}
-
-impl<'vir> From<&GenericEncOutputRef<'vir>> for TyOps<'vir> {
-    fn from(output_ref: &GenericEncOutputRef<'vir>) -> Self {
-        TyOps {
-            ty_params: &[],
-            ref_to_pred: output_ref.ref_to_pred.as_unknown_arity(),
-            ref_to_snap: output_ref.ref_to_snap.as_unknown_arity(),
-            snapshot: &SNAPSHOT_PARAM_DOMAIN,
-            method_assign: output_ref.method_assign.as_unknown_arity(),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct GenericEncOutput<'vir> {
@@ -132,14 +120,14 @@ impl TaskEncoder for GenericEnc {
 
 
         vir::with_vcx(|vcx| {
-            let ty_ops: TyOps<'vir> = TyOps {
-                ty_params: vcx.alloc_slice(&[vcx.mk_local_decl("t", &TYP_DOMAIN).into()]),
-                ref_to_pred: ref_to_pred.as_unknown_arity(),
-                ref_to_snap: ref_to_snap.as_unknown_arity(),
-                snapshot: &SNAPSHOT_PARAM_DOMAIN,
-                method_assign: method_assign.as_unknown_arity(),
-            };
-            let method_assign = mk_method_assign(vcx, &ty_ops);
+            let method_assign = mk_method_assign(
+                vcx,
+                method_assign.as_unknown_arity(),
+                vec![vcx.mk_local_decl("t", &TYP_DOMAIN)],
+                &SNAPSHOT_PARAM_DOMAIN,
+                ref_to_pred.as_unknown_arity(),
+                ref_to_snap.as_unknown_arity(),
+            );
             let t = vcx.mk_local_ex("t", &TYP_DOMAIN);
             let ref_to_snap = vcx.mk_function(
                 "p_Param_snap",

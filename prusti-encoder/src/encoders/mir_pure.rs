@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::{
-    encoders::{ConstEnc, MirBuiltinEnc, MirFunctionEnc, PredicateEnc, SnapshotEnc, ViperTupleEnc},
+    encoders::{ConstEnc, MirBuiltinEnc, MirFunctionEnc, GenericPredicateEnc, SnapshotEnc, ViperTupleEnc},
     util::{MostGenericTy, TyMapCaster},
 };
 
@@ -628,7 +628,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                 }
                 mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple => {
                     let e_rvalue_ty =
-                        require_ref_for_ty::<PredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                        require_ref_for_ty::<GenericPredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                     let sl = match kind {
                         mir::AggregateKind::Adt(_, vidx, _, _, _) => {
                             e_rvalue_ty.get_variant_any(*vidx)
@@ -759,7 +759,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc> {
                     }
                     _ => {
                         let e_ty =
-                            require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps)
+                            require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
                                 .unwrap();
                         let struct_like = e_ty.expect_variant_opt(place_ty.variant_index);
                         let proj = struct_like.snap_data.field_access[field_idx].read;

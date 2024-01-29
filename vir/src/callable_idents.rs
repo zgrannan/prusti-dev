@@ -33,7 +33,7 @@ impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, R
 {
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo);
 
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
@@ -100,7 +100,7 @@ impl<'vir, A: Arity<'vir, Arg=Type<'vir>>> MethodIdent<'vir, A> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
     fn new(name: &'vir str, args: A, _unused: ()) -> Self {

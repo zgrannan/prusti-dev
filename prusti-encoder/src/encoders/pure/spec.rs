@@ -77,7 +77,7 @@ impl TaskEncoder for MirSpecEnc {
                 all_args
             };
 
-            let to_bool = deps.require_ref::<crate::encoders::PredicateEnc>(
+            let to_bool = deps.require_ref::<crate::encoders::GenericPredicateEnc>(
                 MostGenericTy::bool(vcx.tcx)
             ).unwrap().expect_prim().snap_to_prim;
 

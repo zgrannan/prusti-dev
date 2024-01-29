@@ -8,7 +8,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{FunctionIdent, MethodIdent, PredicateIdent, TypeData, UnknownArity};
 
 use crate::{
-    encoders::{PredicateEnc, PredicateEncOutputRef},
+    encoders::{predicate::{PredicateEnc, PredicateEncOutputRef}, GenericPredicateEnc, GenericPredicateEncOutputRef},
     util::{extract_type_params, get_viper_type_value},
 };
 
@@ -22,6 +22,7 @@ pub struct MirLocalDefEncOutput<'vir> {
 }
 pub type MirLocalDefEncError = ();
 
+#[derive(Clone)]
 pub struct EncodedTyParams<'vir>(&'vir [EncodedTyParam<'vir>]);
 
 impl<'vir> EncodedTyParams<'vir> {
@@ -86,76 +87,13 @@ impl<'vir, 'tcx> EncodedTyParam<'vir> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct TyOps<'vir> {
-    pub ty_params: &'vir [EncodedTyParam<'vir>],
-    pub ref_to_pred: PredicateIdent<'vir, UnknownArity<'vir>>,
-    pub ref_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
-    pub snapshot: vir::Type<'vir>,
-    pub method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
-}
-
-impl<'vir> TyOps<'vir> {
-    pub fn generics<'tcx>(&self) -> Vec<vir::LocalDecl<'vir>> {
-        self.ty_params
-            .iter()
-            .filter_map(|g| match g {
-                EncodedTyParam::Generic(g) => Some(*g),
-                EncodedTyParam::Instantiated(_) => None,
-            })
-            .collect::<Vec<_>>()
-    }
-
-    fn ty_param_args<'tcx>(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> Vec<vir::Expr<'vir>> {
-        self.ty_params
-            .iter()
-            .map(|g| g.expr(vcx))
-            .collect::<Vec<_>>()
-    }
-
-    pub fn ref_to_args<'tcx>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        self_ref: vir::Expr<'vir>,
-    ) -> &'vir [vir::Expr<'vir>] {
-        assert!(self_ref.ty() == &TypeData::Ref);
-        let mut args = vec![self_ref];
-        args.extend(self.ty_param_args(vcx));
-        vcx.alloc_slice(&args)
-    }
-
-    pub fn apply_method_assign<'tcx>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        self_ref: vir::Expr<'vir>,
-        self_new_snap: vir::Expr<'vir>,
-    ) -> vir::Stmt<'vir> {
-        let args = self.method_assign_args(vcx, self_ref, self_new_snap);
-        vcx.alloc(self.method_assign.apply(vcx, args))
-    }
-
-    pub fn method_assign_args<'tcx>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        self_ref: vir::Expr<'vir>,
-        self_new_snap: vir::Expr<'vir>,
-    ) -> &'vir [vir::Expr<'vir>] {
-        assert!(self_ref.ty() == &TypeData::Ref);
-        assert!(self_new_snap.ty() == self.snapshot);
-        let mut args = vec![self_ref];
-        args.extend(self.ty_param_args(vcx));
-        args.push(self_new_snap);
-        vcx.alloc_slice(&args)
-    }
-}
-
 #[derive(Clone, Copy)]
 pub struct LocalDef<'vir> {
     pub local: vir::Local<'vir>,
     pub local_ex: vir::Expr<'vir>,
     pub impure_snap: vir::Expr<'vir>,
     pub impure_pred: vir::Expr<'vir>,
-    pub ty: &'vir PredicateEncOutputRef<'vir>,
+    pub ty: &'vir GenericPredicateEncOutputRef<'vir>,
 }
 
 impl TaskEncoder for MirLocalDefEnc {
@@ -194,20 +132,19 @@ impl TaskEncoder for MirLocalDefEnc {
         fn mk_local_def<'vir, 'tcx>(
             vcx: &'vir vir::VirCtxt<'tcx>,
             name: &'vir str,
-            ty: &'vir PredicateEncOutputRef<'vir>,
-            params: EncodedTyParams<'vir>,
+            ty: PredicateEncOutputRef<'vir>,
         ) -> LocalDef<'vir> {
             let local = vcx.mk_local(name, &vir::TypeData::Ref);
             let local_ex = vcx.mk_local_ex_local(local);
-            let args = ty.ref_to_args(vcx, params, local_ex);
-            let impure_snap = ty.ref_to_snap.apply(vcx, args);
-            let impure_pred = vcx.mk_predicate_app_expr(ty.ref_to_pred.apply(vcx, args, None));
+            let args = ty.ref_to_args(vcx, local_ex);
+            let impure_snap = ty.ref_to_snap(vcx, args);
+            let impure_pred = ty.ref_to_pred(vcx, args, None);
             LocalDef {
                 local,
                 local_ex,
                 impure_snap,
                 impure_pred,
-                ty,
+                ty: vcx.alloc(ty.generic_predicate),
             }
         }
 
@@ -220,8 +157,8 @@ impl TaskEncoder for MirLocalDefEnc {
                 let locals = IndexVec::from_fn_n(
                     |arg: mir::Local| {
                         let local = vir::vir_format!(vcx, "_{}p", arg.index());
-                        let (ty, params) = get_predicate_ref_and_ty_substs(vcx, body.local_decls[arg].ty, deps);
-                        mk_local_def(vcx, local, ty, params)
+                        let ty = deps.require_ref::<PredicateEnc>(body.local_decls[arg].ty).unwrap();
+                        mk_local_def(vcx, local, ty)
                     },
                     body.local_decls.len(),
                 );
@@ -246,8 +183,8 @@ impl TaskEncoder for MirLocalDefEnc {
                         } else {
                             sig.inputs()[arg.index() - 1]
                         };
-                        let (ty, params) = get_predicate_ref_and_ty_substs(vcx, ty, deps);
-                        mk_local_def(vcx, local, ty, params)
+                        let ty = deps.require_ref::<PredicateEnc>(ty).unwrap();
+                        mk_local_def(vcx, local, ty)
                     },
                     sig.inputs_and_output.len(),
                 );
@@ -260,16 +197,6 @@ impl TaskEncoder for MirLocalDefEnc {
             Ok((data, ()))
         })
     }
-}
-
-pub fn get_predicate_ref_and_ty_substs<'tcx: 'vir, 'vir>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> (&'vir PredicateEncOutputRef<'vir>, EncodedTyParams<'vir>) {
-    let predicate_ref = require_ref_for_ty::<PredicateEnc>(vcx, ty, deps).unwrap();
-    let ty_params = get_ty_params(vcx, ty, deps);
-    (vcx.alloc(predicate_ref), ty_params)
 }
 
 pub fn get_ty_params<'tcx: 'vir, 'vir>(
@@ -287,28 +214,4 @@ pub fn get_ty_params<'tcx: 'vir, 'vir>(
             .collect::<Vec<_>>()
     };
     EncodedTyParams::new(vcx.alloc_slice(&ty_params))
-}
-
-pub fn get_ty_ops<'tcx: 'vir, 'vir>(
-    vcx: &'vir vir::VirCtxt<'tcx>,
-    ty: ty::Ty<'tcx>,
-    deps: &mut TaskEncoderDependencies<'vir>,
-) -> TyOps<'vir> {
-    let predicate_ref = require_ref_for_ty::<PredicateEnc>(vcx, ty, deps).unwrap();
-    let ty_params = if let ty::TyKind::Param(_) = ty.kind() {
-        vec![get_viper_type_value(vcx, deps, ty)]
-    } else {
-        let (_, ty_params) = extract_type_params(vcx.tcx, ty);
-        ty_params
-            .into_iter()
-            .map(|ty| get_viper_type_value(vcx, deps, ty))
-            .collect::<Vec<_>>()
-    };
-    return TyOps {
-        ty_params: vcx.alloc_slice(&ty_params),
-        ref_to_pred: predicate_ref.ref_to_pred,
-        ref_to_snap: predicate_ref.ref_to_snap,
-        snapshot: predicate_ref.snapshot,
-        method_assign: predicate_ref.method_assign,
-    };
 }

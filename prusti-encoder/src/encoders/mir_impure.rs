@@ -32,13 +32,13 @@ pub struct MirImpureEncOutput<'vir> {
 
 use crate::{
     encoders::{
-        require_ref_for_ty, ConstEnc, MirBuiltinEnc,
-        MirFunctionEnc, MirLocalDefEnc, MirSpecEnc, PredicateEnc,
+        predicate::PredicateEnc, require_ref_for_ty, ConstEnc, GenericPredicateEnc, MirBuiltinEnc,
+        MirFunctionEnc, MirLocalDefEnc, MirSpecEnc,
     },
     util::{extract_type_params, get_viper_type_value, TyMapCaster},
 };
 
-use super::{get_ty_ops, EncodedTyParam};
+use super::EncodedTyParam;
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -107,9 +107,11 @@ impl TaskEncoder for MirImpureEnc {
                 vcx.tcx.item_name(def_id)
             );
             let mut args = vec![&vir::TypeData::Ref; arg_count];
-            let param_ty_decls = substs.into_type_list(vcx.tcx).iter().flat_map(
-                |ty| get_param_type_decls(vcx, ty, deps).into_iter(),
-            ).collect::<Vec<_>>();
+            let param_ty_decls = substs
+                .into_type_list(vcx.tcx)
+                .iter()
+                .flat_map(|ty| get_param_type_decls(vcx, ty, deps).into_iter())
+                .collect::<Vec<_>>();
             args.extend(param_ty_decls.iter().map(|decl| decl.ty));
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let method_ref = MethodIdent::new(method_name, args);
@@ -334,7 +336,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     }
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
                     let place_ty_out =
-                        require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps)
+                        require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
                             .unwrap();
                     let ref_to_pred = place_ty_out.expect_pred_variant_opt(place_ty.variant_index);
 
@@ -354,13 +356,14 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
                     assert!(place_ty.variant_index.is_none());
 
-                    let place_ty_out = get_ty_ops(self.vcx, place_ty.ty, self.deps);
+                    let place_ty_out = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
 
                     let ref_p = self.encode_place(place);
-                    let args = ref_to_args(self.vcx, ref_p, place_ty.ty, self.deps);
-                    self.stmt(self.vcx.mk_exhale_stmt(self.vcx.mk_predicate_app_expr(
-                        place_ty_out.ref_to_pred.apply(self.vcx, &args, None),
-                    )));
+                    let args = place_ty_out.ref_to_args(self.vcx, ref_p);
+                    self.stmt(
+                        self.vcx
+                            .mk_exhale_stmt(place_ty_out.ref_to_pred(self.vcx, &args, None)),
+                    );
                 }
                 unsupported_op => panic!("unsupported repack op: {unsupported_op:?}"),
             }
@@ -393,26 +396,24 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let ty = operand.ty(self.local_decls, self.vcx.tcx);
         match operand {
             &mir::Operand::Move(source) => {
-                let ty_out = get_ty_ops(self.vcx, ty, self.deps);
+                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
                 let place_exp = self.encode_place(Place::from(source));
-                let args = ref_to_args(self.vcx, place_exp, ty, self.deps);
-                let snap_val = ty_out.ref_to_snap.apply(self.vcx, &args);
+                let args = ty_out.ref_to_args(self.vcx, place_exp);
+                let snap_val = ty_out.ref_to_snap(self.vcx, &args);
 
-                let tmp_exp = self.new_tmp(ty_out.snapshot).1;
+                let tmp_exp = self.new_tmp(ty_out.snapshot()).1;
                 self.stmt(self.vcx.mk_pure_assign_stmt(tmp_exp, snap_val));
                 self.stmt(
                     self.vcx
-                        .mk_exhale_stmt(self.vcx.mk_predicate_app_expr(
-                            ty_out.ref_to_pred.apply(self.vcx, &args, None),
-                        )),
+                        .mk_exhale_stmt(ty_out.ref_to_pred(self.vcx, &args, None)),
                 );
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
-                let ty_out = get_ty_ops(self.vcx, ty, self.deps);
+                let ty_out = self.deps.require_ref::<PredicateEnc>(ty).unwrap();
                 let viper_ref = self.encode_place(Place::from(source));
-                let args = ref_to_args(self.vcx, viper_ref, ty, self.deps);
-                ty_out.ref_to_snap.apply(self.vcx, &args)
+                let args = ty_out.ref_to_args(self.vcx, viper_ref);
+                ty_out.ref_to_snap(self.vcx, &args)
             }
             mir::Operand::Constant(box constant) => self
                 .deps
@@ -426,14 +427,16 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         let (snap_val, ty_out) = match operand {
             &mir::Operand::Move(source) => return self.encode_place(Place::from(source)),
             &mir::Operand::Copy(source) => {
-                let ty_out = require_ref_for_ty::<PredicateEnc>(self.vcx, ty, self.deps).unwrap();
+                let ty_out =
+                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, ty, self.deps).unwrap();
                 let source = ty_out
                     .ref_to_snap
                     .apply(self.vcx, &[self.encode_place(Place::from(source))]);
                 (source, ty_out)
             }
             mir::Operand::Constant(box constant) => {
-                let ty_out = require_ref_for_ty::<PredicateEnc>(self.vcx, ty, self.deps).unwrap();
+                let ty_out =
+                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, ty, self.deps).unwrap();
                 let constant = self
                     .deps
                     .require_local::<ConstEnc>((constant.literal, 0, self.def_id))
@@ -469,7 +472,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         match elem {
             mir::ProjectionElem::Field(field_idx, _) => {
                 let e_ty =
-                    require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
+                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
+                        .unwrap();
                 let field_access = e_ty
                     .expect_variant_opt(place_ty.variant_index)
                     .ref_to_field_refs;
@@ -481,7 +485,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             mir::ProjectionElem::Deref => {
                 assert!(place_ty.variant_index.is_none());
                 let e_ty =
-                    require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
+                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps)
+                        .unwrap();
                 let ref_field = e_ty.expect_ref().ref_field;
                 self.vcx.mk_field_expr(expr, ref_field)
             }
@@ -661,7 +666,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         box kind @ (mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple),
                         fields,
                     ) => {
-                        let e_rvalue_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                        let e_rvalue_ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                         let sl = match kind {
                             mir::AggregateKind::Adt(_, vidx, _, _, _) =>
                                 e_rvalue_ty.get_variant_any(*vidx),
@@ -677,9 +682,9 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         sl.snap_data.field_snaps_to_snap.apply_with_casts(self.vcx, &cons_args, caster)
                     }
                     mir::Rvalue::Discriminant(place) => {
-                        let e_rvalue_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
+                        let e_rvalue_ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, rvalue_ty, self.deps).unwrap();
                         let place_ty = place.ty(self.local_decls, self.vcx.tcx);
-                        let ty = require_ref_for_ty::<PredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
+                        let ty = require_ref_for_ty::<GenericPredicateEnc>(self.vcx, place_ty.ty, self.deps).unwrap();
                         let place_expr = self.encode_place(Place::from(*place));
 
                         match ty.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
@@ -706,7 +711,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                 let dest_ty = dest.ty(self.local_decls, self.vcx.tcx);
                 assert!(dest_ty.variant_index.is_none());
-                let dest_ty_out = get_ty_ops(self.vcx, dest_ty.ty, self.deps);
+                let dest_ty_out = self.deps.require_ref::<PredicateEnc>(dest_ty.ty).unwrap();
                 let method_assign_app = dest_ty_out.apply_method_assign(
                     self.vcx,
                     proj_ref,
@@ -771,9 +776,10 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 //let discr_version = self.ssa_analysis.version.get(&(location, discr.local)).unwrap();
                 //let discr_name = vir::vir_format!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
                 let discr_ty_rs = discr.ty(self.local_decls, self.vcx.tcx);
-                let discr_ty = require_ref_for_ty::<PredicateEnc>(self.vcx, discr_ty_rs, self.deps)
-                    .unwrap()
-                    .expect_prim();
+                let discr_ty =
+                    require_ref_for_ty::<GenericPredicateEnc>(self.vcx, discr_ty_rs, self.deps)
+                        .unwrap()
+                        .expect_prim();
 
                 let goto_targets = self.vcx.alloc_slice(
                     &targets
@@ -854,7 +860,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
                     let method_assign =
-                        require_ref_for_ty::<PredicateEnc>(self.vcx, return_ty, self.deps)
+                        require_ref_for_ty::<GenericPredicateEnc>(self.vcx, return_ty, self.deps)
                             .unwrap()
                             .method_assign;
 
@@ -873,7 +879,11 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         std::iter::once(dest).chain(method_in).collect::<Vec<_>>();
 
                     for arg in arg_tys {
-                        method_args.extend(get_param_type_exprs(self.vcx, arg.expect_ty(), self.deps))
+                        method_args.extend(get_param_type_exprs(
+                            self.vcx,
+                            arg.expect_ty(),
+                            self.deps,
+                        ))
                     }
 
                     self.stmt(
@@ -898,7 +908,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 unwind,
                 ..
             } => {
-                let e_bool = require_ref_for_ty::<PredicateEnc>(
+                let e_bool = require_ref_for_ty::<GenericPredicateEnc>(
                     self.vcx,
                     self.vcx.tcx.types.bool,
                     self.deps,
