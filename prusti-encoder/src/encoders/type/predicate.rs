@@ -4,8 +4,8 @@ use prusti_rustc_interface::{
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
-    add_debug_note, CallableIdent, FunctionIdent, MethodIdent, NullaryArity,
-    PredicateIdent, TypeData, UnaryArity, UnknownArity, VirCtxt,
+    add_debug_note, CallableIdent, FunctionIdent, MethodIdent, NullaryArity, PredicateIdent,
+    TypeData, UnaryArity, UnknownArity, VirCtxt,
 };
 
 /// Takes a Rust `Ty` and returns various Viper predicates and functions for
@@ -78,7 +78,6 @@ pub struct PredicateEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for PredicateEncOutputRef<'vir> {}
 
 impl<'vir> PredicateEncOutputRef<'vir> {
-
     pub fn ref_to_args<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
@@ -172,9 +171,7 @@ pub struct PredicateEncOutput<'vir> {
 }
 
 use crate::{
-    encoders::{
-        get_ty_ops, require_ref_for_ty, EncodedTyParams, GenericEnc, TyOps
-    },
+    encoders::{get_predicate_ref_and_ty_substs, get_ty_ops, require_ref_for_ty, EncodedTyParams, GenericEnc, TyOps},
     util::MostGenericTy,
 };
 
@@ -214,7 +211,13 @@ impl TaskEncoder for PredicateEnc {
         let snap = deps.require_local::<SnapshotEnc>(*task_key).unwrap();
         let generic_output_ref = deps.require_ref::<GenericEnc>(()).unwrap();
         let mut enc = vir::with_vcx(|vcx| {
-            PredicateEncValues::new(vcx, &snap.base_name, snap.snapshot, snap.generics, generic_output_ref.type_snapshot)
+            PredicateEncValues::new(
+                vcx,
+                &snap.base_name,
+                snap.snapshot,
+                snap.generics,
+                generic_output_ref.type_snapshot,
+            )
         });
         match task_key.kind() {
             TyKind::Param(_) => {
@@ -238,7 +241,7 @@ impl TaskEncoder for PredicateEnc {
                         unreachable_to_snap: dep.unreachable_to_snap,
                         function_snap: dep.ref_to_snap,
                         ref_to_field_refs: vec![],
-                        method_assign: dep.method_assign
+                        method_assign: dep.method_assign,
                     },
                     (),
                 ))
@@ -257,7 +260,7 @@ impl TaskEncoder for PredicateEnc {
                 );
 
                 let fields: Vec<_> =
-                    vir::with_vcx(|vcx| tys.iter().map(|ty| get_ty_ops(vcx, ty, deps)).collect());
+                    vir::with_vcx(|vcx| tys.iter().map(|ty| get_predicate_ref_and_ty_substs(vcx, ty, deps)).collect());
                 let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
                 let fn_snap_body =
                     enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap);
@@ -277,7 +280,7 @@ impl TaskEncoder for PredicateEnc {
                         variant
                             .fields
                             .iter()
-                            .map(|f| get_ty_ops(vcx, f.ty(enc.tcx(), args), deps))
+                            .map(|f| get_predicate_ref_and_ty_substs(vcx, f.ty(enc.tcx(), args), deps))
                             .collect()
                     });
                     let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
@@ -303,7 +306,7 @@ impl TaskEncoder for PredicateEnc {
                                         adt.variant(data.vid)
                                             .fields
                                             .iter()
-                                            .map(|f| get_ty_ops(vcx, f.ty(enc.tcx(), args), deps))
+                                            .map(|f| get_predicate_ref_and_ty_substs(vcx, f.ty(enc.tcx(), args), deps))
                                             .collect(),
                                     )
                                 })
@@ -400,11 +403,10 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         generic_type: vir::Type<'vir>,
     ) -> Self {
         let self_ex: vir::Expr<'vir> = vcx.mk_local_ex("self", &vir::TypeData::Ref);
-        let generic_decls: Vec<_> =
-            generics
-                .iter()
-                .map(|g| vcx.mk_local_decl(g, generic_type))
-                .collect();
+        let generic_decls: Vec<_> = generics
+            .iter()
+            .map(|g| vcx.mk_local_decl(g, generic_type))
+            .collect();
         let mut ref_to_decls = vec![vcx.mk_local_decl("self", &vir::TypeData::Ref)];
         ref_to_decls.extend(generic_decls.iter());
         let ref_to_arg_tys = vir::UnknownArity::new(
@@ -705,7 +707,10 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         ty: &MostGenericTy<'tcx>,
         data: Option<(
             PredicateEncDataEnum<'vir>,
-            Vec<(abi::VariantIdx, Vec<TyOps<'vir>>)>,
+            Vec<(
+                abi::VariantIdx,
+                Vec<(&'vir PredicateEncOutputRef<'vir>, EncodedTyParams<'vir>)>,
+            )>,
         )>,
     ) -> PredicateEncOutput<'vir> {
         let mut predicate_body = self.vcx.mk_bool::<false>();
@@ -840,14 +845,7 @@ pub fn mk_method_assign<'vir, 'tcx>(
             vcx.mk_local_ex(self_new_local.name, ops.snapshot),
         ),
     ]);
-    vcx.mk_method(
-        ops.method_assign,
-        &assign_args,
-        &[],
-        &[],
-        posts,
-        None,
-    )
+    vcx.mk_method(ops.method_assign, &assign_args, &[], &[], posts, None)
 }
 
 struct FieldApp<'vir> {
