@@ -7,6 +7,7 @@ extern crate rustc_serialize;
 extern crate rustc_type_ir;
 
 mod encoders;
+mod util;
 
 use prusti_interface::{environment::EnvBody, specs::typed::SpecificationItem};
 use prusti_rustc_interface::{
@@ -79,9 +80,7 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "generics");
     for output in crate::encoders::GenericEnc::all_outputs() {
-        viper_code.push_str(&format!("{:?}\n", output.snapshot_param));
-        viper_code.push_str(&format!("{:?}\n", output.predicate_param));
-        viper_code.push_str(&format!("{:?}\n", output.domain_type));
+        viper_code.push_str(&format!("{:?}\n", output.type_snapshot));
     }
 
     header(&mut viper_code, "snapshots");
@@ -90,7 +89,7 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "types");
-    for output in crate::encoders::PredicateEnc::all_outputs() {
+    for output in crate::encoders::GenericPredicateEnc::all_outputs() {
         for field in output.fields {
             viper_code.push_str(&format!("{:?}", field));
         }

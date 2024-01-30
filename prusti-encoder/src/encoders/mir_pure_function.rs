@@ -7,7 +7,6 @@ use crate::encoders::{
     MirPureEnc, MirPureEncTask, mir_pure::PureKind, MirSpecEnc, MirLocalDefEnc,
 };
 
-use super::PredicateEncOutputRef;
 pub struct MirFunctionEnc;
 
 #[derive(Clone, Debug)]

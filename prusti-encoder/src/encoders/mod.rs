@@ -29,10 +29,10 @@ pub use spec::{
     SpecEncTask,
 };
 pub(super) use spec::{init_def_spec, with_def_spec, with_proc_spec};
-pub use snapshot::SnapshotEnc;
-pub use predicate::{
-    PredicateEnc,
-    PredicateEncOutputRef,
+pub use generic_snapshot::GenericSnapshotEnc;
+pub use generic_predicate::{
+    GenericPredicateEnc,
+    GenericPredicateEncOutputRef,
     PredicateEncOutput,
 };
 pub use domain::all_outputs as DomainEnc_all_outputs;

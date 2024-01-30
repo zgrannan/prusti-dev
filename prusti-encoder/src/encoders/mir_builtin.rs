@@ -33,7 +33,7 @@ pub struct MirBuiltinEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
-use crate::encoders::SnapshotEnc;
+use super::snapshot::SnapshotEnc;
 
 impl TaskEncoder for MirBuiltinEnc {
     task_encoder::encoder_cache!(MirBuiltinEnc);
@@ -95,9 +95,12 @@ impl MirBuiltinEnc {
         deps: &mut TaskEncoderDependencies<'vir>,
         key: <Self as TaskEncoder>::TaskKey<'tcx>,
         op: mir::UnOp,
-        ty: ty::Ty<'tcx>
+        ty: ty::Ty<'tcx>,
     ) -> vir::Function<'vir> {
-        let e_ty = deps.require_local::<SnapshotEnc>(ty).unwrap();
+        let e_ty = deps
+            .require_local::<SnapshotEnc>(ty)
+            .unwrap()
+            .generic_snapshot;
 
         let name = vir::vir_format!(vcx, "mir_unop_{op:?}_{}", int_name(ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_ty.snapshot]));
@@ -145,9 +148,18 @@ impl MirBuiltinEnc {
         r_ty: ty::Ty<'tcx>,
     ) -> vir::Function<'vir> {
         use mir::BinOp::*;
-        let e_l_ty = deps.require_local::<SnapshotEnc>(l_ty).unwrap();
-        let e_r_ty = deps.require_local::<SnapshotEnc>(r_ty).unwrap();
-        let e_res_ty = deps.require_local::<SnapshotEnc>(res_ty).unwrap();
+        let e_l_ty = deps
+            .require_local::<SnapshotEnc>(l_ty)
+            .unwrap()
+            .generic_snapshot;
+        let e_r_ty = deps
+            .require_local::<SnapshotEnc>(r_ty)
+            .unwrap()
+            .generic_snapshot;
+        let e_res_ty = deps
+            .require_local::<SnapshotEnc>(res_ty)
+            .unwrap()
+            .generic_snapshot;
         let prim_l_ty = e_l_ty.specifics.expect_primitive();
         let prim_r_ty = e_r_ty.specifics.expect_primitive();
         let prim_res_ty = e_res_ty.specifics.expect_primitive();
@@ -216,10 +228,10 @@ impl MirBuiltinEnc {
                 (pres, val)
             }
             // Cannot overflow and no undefined behavior
-            BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset =>
-                (Vec::new(), val),
+            BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset => (Vec::new(), val),
         };
-        vcx.mk_function(name,
+        vcx.mk_function(
+            name,
             vcx.alloc_slice(&[
                 vcx.mk_local_decl("arg1", e_l_ty.snapshot),
                 vcx.mk_local_decl("arg2", e_r_ty.snapshot),
@@ -227,7 +239,7 @@ impl MirBuiltinEnc {
             e_res_ty.snapshot,
             vcx.alloc_slice(&pres),
             &[],
-            Some(val)
+            Some(val),
         )
     }
 
@@ -241,27 +253,52 @@ impl MirBuiltinEnc {
         r_ty: ty::Ty<'tcx>,
     ) -> vir::Function<'vir> {
         // `op` can only be `Add`, `Sub` or `Mul`
-        assert!(matches!(op, mir::BinOp::Add | mir::BinOp::Sub | mir::BinOp::Mul));
-        let e_l_ty = deps.require_local::<SnapshotEnc>(l_ty).unwrap();
-        let e_r_ty = deps.require_local::<SnapshotEnc>(r_ty).unwrap();
+        assert!(matches!(
+            op,
+            mir::BinOp::Add | mir::BinOp::Sub | mir::BinOp::Mul
+        ));
+        let e_l_ty = deps
+            .require_local::<SnapshotEnc>(l_ty)
+            .unwrap()
+            .generic_snapshot;
+        let e_r_ty = deps
+            .require_local::<SnapshotEnc>(r_ty)
+            .unwrap()
+            .generic_snapshot;
 
-        let name = vir::vir_format!(vcx, "mir_checkedbinop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
+        let name = vir::vir_format!(
+            vcx,
+            "mir_checkedbinop_{op:?}_{}_{}",
+            int_name(l_ty),
+            int_name(r_ty)
+        );
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
-        let e_res_ty = deps.require_local::<SnapshotEnc>(res_ty).unwrap();
+        let e_res_ty = deps
+            .require_local::<SnapshotEnc>(res_ty)
+            .unwrap()
+            .generic_snapshot;
         let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
-        deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
-            function,
-        });
+        deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef { function });
 
+        let e_res_ty = deps
+            .require_local::<SnapshotEnc>(res_ty)
+            .unwrap()
+            .generic_snapshot;
         // The result of a checked add will always be `(T, bool)`, get the `T`
         // type
         let rvalue_pure_ty = res_ty.tuple_fields()[0];
         let bool_ty = res_ty.tuple_fields()[1];
         assert!(bool_ty.is_bool());
 
-        let e_rvalue_pure_ty = deps.require_local::<SnapshotEnc>(rvalue_pure_ty).unwrap();
+        let e_rvalue_pure_ty = deps
+            .require_local::<SnapshotEnc>(rvalue_pure_ty)
+            .unwrap()
+            .generic_snapshot;
         let e_rvalue_pure_ty = e_rvalue_pure_ty.specifics.expect_primitive();
-        let e_bool = deps.require_local::<SnapshotEnc>(bool_ty).unwrap();
+        let e_bool = deps
+            .require_local::<SnapshotEnc>(bool_ty)
+            .unwrap()
+            .generic_snapshot;
         let bool_cons = e_bool.specifics.expect_primitive().prim_to_snap;
 
         // Unbounded value
