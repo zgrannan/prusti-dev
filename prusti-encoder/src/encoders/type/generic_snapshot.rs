@@ -37,7 +37,7 @@ impl TaskEncoder for GenericSnapshotEnc {
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        task.with_normalized_param_name(vir::with_vcx(|vcx| vcx.tcx))
+        *task
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(

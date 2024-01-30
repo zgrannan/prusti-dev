@@ -107,7 +107,7 @@ impl TaskEncoder for DomainEnc {
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        task.with_normalized_param_name(vir::with_vcx(|vcx| vcx.tcx))
+        *task
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(
@@ -235,15 +235,6 @@ impl TaskEncoder for DomainEnc {
     }
 }
 
-impl DomainEnc {
-    pub fn expect_param(ty: ty::Ty) -> ty::ParamTy {
-        match ty.kind() {
-            TyKind::Param(param) => *param,
-            _ => panic!("non-param ty: {ty}"),
-        }
-    }
-}
-
 pub struct VariantData<'vir, 'tcx>  {
     discr_ty: vir::Type<'vir>,
     discr_prim: DomainDataPrim<'vir>,
@@ -291,31 +282,31 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             generic_ref.type_snapshot,
         );
 
-        let upcast_arg_tys = vcx.alloc([self_ty]);
+        let make_generic_arg_tys = vcx.alloc([self_ty]);
 
-        let upcast_ident = FunctionIdent::new(
-            vir::vir_format!(vcx, "upcast_s_{base_name}"),
-            UnaryArity::new(upcast_arg_tys),
+        let make_generic_ident = FunctionIdent::new(
+            vir::vir_format!(vcx, "make_generic_s_{base_name}"),
+            UnaryArity::new(make_generic_arg_tys),
             generic_ref.param_snapshot,
         );
 
-        let upcast_function = vcx.mk_domain_function(
+        let make_generic = vcx.mk_domain_function(
             false,
-            upcast_ident.name(),
-            upcast_arg_tys,
+            make_generic_ident.name(),
+            make_generic_arg_tys,
             generic_ref.param_snapshot,
         );
 
-        let downcast_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
+        let make_concrete_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
 
-        let downcast_ident = FunctionIdent::new(
-            vir::vir_format!(vcx, "downcast_s_{base_name}"),
-            UnaryArity::new(downcast_arg_tys),
+        let make_concrete_ident = FunctionIdent::new(
+            vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
+            UnaryArity::new(make_concrete_arg_tys),
             self_ty,
         );
 
-        let downcast_function =
-            vcx.mk_domain_function(false, downcast_ident.name(), downcast_arg_tys, self_ty);
+        let make_concrete =
+            vcx.mk_domain_function(false, make_concrete_ident.name(), make_concrete_arg_tys, self_ty);
 
         let self_local = vcx.mk_local("self", self_ty);
         let self_ex = vcx.mk_local_ex_local(self_local);
@@ -329,11 +320,11 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 self_ex,
                 self_decl,
                 axioms: Vec::new(),
-                functions: vec![type_function, upcast_function, downcast_function],
+                functions: vec![type_function, make_generic, make_concrete],
                 type_function: type_function_ident,
                 cast_functions: CastFunctions {
-                    upcast: upcast_ident,
-                    downcast: downcast_ident,
+                    make_generic: make_generic_ident,
+                    make_concrete: make_concrete_ident,
                 },
             },
             param_snaps,

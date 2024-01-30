@@ -13,7 +13,10 @@ pub struct PredicateEnc;
 
 #[derive(Clone)]
 pub struct PredicateEncOutputRef<'vir> {
+    /// The predicate output for the "most generic version" of the input type
     pub generic_predicate: GenericPredicateEncOutputRef<'vir>,
+
+    /// The lifted representation of the input type as a Viper value
     pub ty: LiftedTy<'vir>,
 }
 

@@ -9,10 +9,15 @@ use vir::{Caster, UnaryArity};
 
 use crate::encoders::{snapshot::SnapshotEnc, GenericEnc};
 
+/// The "most generic" version of a type is one that use
+/// "identity substitutions" for all type parameters.
+/// e.g the most generic version of `Vec<u32>` is `Vec<T>`
+/// the most generic version of `Option<Vec<U>>` is `Option<T>`, etc.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
 impl<'tcx> MostGenericTy<'tcx> {
+
     pub fn kind(&self) -> &TyKind<'tcx> {
         self.0.kind()
     }
@@ -26,13 +31,6 @@ impl<'tcx> MostGenericTy<'tcx> {
             vcx.tcx.mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
         });
         MostGenericTy(tuple)
-    }
-
-    pub fn with_normalized_param_name(&self, tcx: ty::TyCtxt<'tcx>) -> MostGenericTy<'tcx> {
-        match *self.kind() {
-            TyKind::Param(_) => MostGenericTy(to_placeholder(tcx, None)),
-            _ => *self,
-        }
     }
 
     pub fn ty(&self) -> ty::Ty<'tcx> {
@@ -61,10 +59,6 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Never => Vec::new(),
             other => todo!("generics for {:?}", other),
         }
-    }
-
-    pub fn bool(tcx: ty::TyCtxt<'tcx>) -> Self {
-        MostGenericTy(tcx.types.bool)
     }
 }
 
@@ -120,7 +114,8 @@ pub fn extract_type_params<'tcx>(
             let ty = tcx.mk_ty_from_kind(TyKind::Ref(r, ty, m));
             (MostGenericTy(ty), vec![orig])
         }
-        TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Param(_) | TyKind::Never => {
+        TyKind::Param(_) => (MostGenericTy(to_placeholder(tcx, None)), Vec::new()),
+        TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Never => {
             (MostGenericTy(ty), Vec::new())
         }
         _ => todo!("extract_type_params for {:?}", ty),
@@ -129,8 +124,11 @@ pub fn extract_type_params<'tcx>(
 
 #[derive(Copy, Clone, Debug)]
 pub struct CastFunctions<'vir> {
-    pub upcast: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
-    pub downcast: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+    /// Casts a concrete type to a generic type
+    pub make_generic: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+
+    /// Casts a generic type to a concrete type
+    pub make_concrete: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
 }
 
 pub struct TyMapCaster<'vir> {
@@ -173,7 +171,7 @@ impl<'vir> Caster<'vir> for TyMapCaster<'vir> {
         self.cast_functions
             .get(&expr.ty())
             .unwrap()
-            .upcast
+            .make_generic
             .apply(vcx, [expr])
     }
 
@@ -185,7 +183,7 @@ impl<'vir> Caster<'vir> for TyMapCaster<'vir> {
         self.cast_functions
             .get(&expr.ty())
             .unwrap()
-            .downcast
+            .make_concrete
             .apply(vcx, [expr])
     }
 }
