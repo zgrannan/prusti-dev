@@ -173,10 +173,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::{encoders::GenericEnc, util::MostGenericTy};
 
 use super::{
-    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct},
-    generic_snapshot::GenericSnapshotEnc,
-    lifted::LiftedTy,
-    predicate::{PredicateEnc, PredicateEncOutputRef},
+    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, generic_snapshot::GenericSnapshotEnc, lifted::LiftedTy, lifted_generic::LiftedGeneric, predicate::{PredicateEnc, PredicateEncOutputRef}
 };
 
 impl TaskEncoder for GenericPredicateEnc {
@@ -215,7 +212,6 @@ impl TaskEncoder for GenericPredicateEnc {
                 &snap.base_name,
                 snap.snapshot,
                 snap.generics,
-                generic_output_ref.type_snapshot,
             )
         });
         match task_key.kind() {
@@ -404,13 +400,12 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         vcx: &'vir vir::VirCtxt<'tcx>,
         base_name: &str,
         snap_inst: vir::Type<'vir>,
-        generics: &'vir [&'vir str],
-        generic_type: vir::Type<'vir>,
+        generics: &'vir [LiftedGeneric<'vir>]
     ) -> Self {
         let self_ex: vir::Expr<'vir> = vcx.mk_local_ex("self", &vir::TypeData::Ref);
         let generic_decls: Vec<_> = generics
             .iter()
-            .map(|g| vcx.mk_local_decl(g, generic_type))
+            .map(|g| g.decl())
             .collect();
         let mut ref_to_decls = vec![vcx.mk_local_decl("self", &vir::TypeData::Ref)];
         ref_to_decls.extend(generic_decls.iter());

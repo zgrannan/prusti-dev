@@ -17,14 +17,17 @@ impl<'vir> task_encoder::OutputRefAny for GenericSnapshotEncOutputRef<'vir> {}
 pub struct GenericSnapshotEncOutput<'vir> {
     pub base_name: String,
     pub snapshot: vir::Type<'vir>,
-    pub generics: &'vir [&'vir str],
+    pub generics: &'vir [LiftedGeneric<'vir>],
     pub specifics: DomainEncSpecifics<'vir>,
     pub cast_functions: Option<CastFunctions<'vir>>,
 }
 
 use crate::util::{CastFunctions, MostGenericTy};
 
-use super::domain::{DomainEnc, DomainEncSpecifics};
+use super::{
+    domain::{DomainEnc, DomainEncSpecifics},
+    lifted_generic::{LiftedGeneric, LiftedGenericEnc},
+};
 
 impl TaskEncoder for GenericSnapshotEnc {
     task_encoder::encoder_cache!(GenericSnapshotEnc);
@@ -65,10 +68,7 @@ impl TaskEncoder for GenericSnapshotEnc {
             let generics = vcx.alloc_slice(
                 ty.generics()
                     .iter()
-                    .map(|g| match g.kind() {
-                        TyKind::Param(param) => param.name.as_str(),
-                        _ => unreachable!(),
-                    })
+                    .map(|g| deps.require_ref::<LiftedGenericEnc>(*g).unwrap())
                     .collect::<Vec<_>>()
                     .as_slice(),
             );

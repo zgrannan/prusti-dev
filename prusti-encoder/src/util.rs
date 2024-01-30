@@ -39,14 +39,27 @@ impl<'tcx> MostGenericTy<'tcx> {
         self.0
     }
 
-    pub fn generics(&self) -> Vec<ty::Ty<'tcx>> {
-        match *self.kind() {
-            TyKind::Adt(_, args) => args.into_iter().flat_map(ty::GenericArg::as_type).collect(),
-            TyKind::Tuple(tys) => tys.to_vec(),
-            TyKind::Array(orig, _) => vec![orig],
-            TyKind::Slice(orig) => vec![orig],
-            TyKind::Ref(_, orig, _) => vec![orig],
-            _ => Vec::new(),
+    pub fn generics(&self) -> Vec<&'tcx ty::ParamTy> {
+        let as_param_ty = |ty: ty::Ty<'tcx>| match ty.kind() {
+            TyKind::Param(p) => p,
+            _ => unreachable!(),
+        };
+        match self.kind() {
+            TyKind::Adt(_, args) => args
+                .into_iter()
+                .flat_map(ty::GenericArg::as_type)
+                .map(as_param_ty)
+                .collect(),
+            TyKind::Tuple(tys) => tys.iter().map(as_param_ty).collect::<Vec<_>>(),
+            TyKind::Array(orig, _) => vec![as_param_ty(*orig)],
+            TyKind::Slice(orig) => vec![as_param_ty(*orig)],
+            TyKind::Ref(_, orig, _) => vec![as_param_ty(*orig)],
+            TyKind::Bool => Vec::new(),
+            TyKind::Int(_) => Vec::new(),
+            TyKind::Uint(_) => Vec::new(),
+            TyKind::Param(_) => Vec::new(),
+            TyKind::Never => Vec::new(),
+            other => todo!("generics for {:?}", other),
         }
     }
 
@@ -107,7 +120,10 @@ pub fn extract_type_params<'tcx>(
             let ty = tcx.mk_ty_from_kind(TyKind::Ref(r, ty, m));
             (MostGenericTy(ty), vec![orig])
         }
-        _ => (MostGenericTy(ty), Vec::new()),
+        TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Param(_) | TyKind::Never => {
+            (MostGenericTy(ty), Vec::new())
+        }
+        _ => todo!("extract_type_params for {:?}", ty),
     }
 }
 
