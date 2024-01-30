@@ -301,44 +301,6 @@ impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData
     }
 }
 
-pub trait Caster<'vir> {
-    fn is_generic(&self, ty: Type<'vir>) -> bool;
-    fn upcast<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir VirCtxt<'_>,
-        expr: ExprGen<'vir, Curr, Next>,
-    ) -> ExprGen<'vir, Curr, Next>;
-    fn downcast<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir VirCtxt<'_>,
-        expr: ExprGen<'vir, Curr, Next>,
-    ) -> ExprGen<'vir, Curr, Next>;
-
-    fn apply_function_with_casts<'tcx, Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir VirCtxt<'tcx>,
-        ident: FunctionIdent<'vir, UnknownArity<'vir>>,
-        args: &[ExprGen<'vir, Curr, Next>],
-    ) -> ExprGen<'vir, Curr, Next> {
-        let args = args
-            .iter()
-            .zip(ident.arity().args().iter())
-            .map(|(a, expected)| {
-                let arg_generic = self.is_generic(a.typ());
-                let expected_generic = self.is_generic(expected);
-                if arg_generic && !expected_generic {
-                    self.downcast(vcx, a)
-                } else if !arg_generic && expected_generic {
-                    self.upcast(vcx, a)
-                } else {
-                    a
-                }
-            })
-            .collect::<Vec<_>>();
-        let args = vcx.alloc_slice(&args);
-        ident.apply(vcx, args)
-    }
-}
 
 // Func arity checked at runtime
 

@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 //    SsaAnalysis,
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{Caster, MethodIdent, UnknownArity};
+use vir::{MethodIdent, UnknownArity};
 
 pub struct MirImpureEnc;
 
@@ -30,7 +30,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::{encoders::{predicate::PredicateEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc}, util::TyMapCaster};
+use crate::{encoders::{predicate::PredicateEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc}, util::{Caster, TyMapCaster}};
 
 const ENCODE_REACH_BB: bool = false;
 

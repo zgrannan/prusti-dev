@@ -8,10 +8,9 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::Caster;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::{encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::TyMapCaster};
+use crate::{encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::{Caster, TyMapCaster}};
 
 use super::{predicate::PredicateEnc, snapshot::SnapshotEnc};
 
@@ -522,6 +521,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .expect_structlike()
                     .field_snaps_to_snap;
                 let (snap, place_ref) = self.encode_place_with_ref(curr_ver, place);
+                let place_ty = place.ty(self.body, self.vcx.tcx).ty;
+                let caster = TyMapCaster::new(vec![place_ty], self.deps);
                 if kind.mutability().is_mut() {
                     // We want to distinguish if `place` is a value that lives
                     // in pure code or not. If it lives in impure (the only way
@@ -533,10 +534,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     // a re-borrow of created-in-pure reference then it will be
                     // field projections of `null` which is also `null`.
                     let place_ref = place_ref.unwrap_or_else(|| self.vcx.mk_null());
-                    e_rvalue_ty.apply(self.vcx, &[snap, place_ref])
+                    caster.apply_function_with_casts(self.vcx, e_rvalue_ty, &[snap, place_ref])
                 } else {
-                    let place_ty = place.ty(self.body, self.vcx.tcx).ty;
-                    let caster = TyMapCaster::new(vec![place_ty], self.deps);
                     // For shared borrows we want to use just the snapshot
                     // without the reference so that snapshot equality compares
                     // only values.
