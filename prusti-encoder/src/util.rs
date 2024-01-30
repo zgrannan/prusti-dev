@@ -13,6 +13,8 @@ use crate::encoders::{snapshot::SnapshotEnc, GenericEnc};
 /// "identity substitutions" for all type parameters.
 /// e.g the most generic version of `Vec<u32>` is `Vec<T>`
 /// the most generic version of `Option<Vec<U>>` is `Option<T>`, etc.
+///
+/// To construct an instance, use `extract_type_params`
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
@@ -68,7 +70,7 @@ impl<'tcx> From<MostGenericTy<'tcx>> for ty::Ty<'tcx> {
     }
 }
 
-pub fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
+fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
     let name = idx
         .map(|idx| format!("T{idx}"))
         .unwrap_or_else(|| String::from("T"));
