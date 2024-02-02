@@ -7,8 +7,8 @@ use prusti_rustc_interface::{
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
 use crate::encoders::{
-    predicate::{PredicateEnc, PredicateEncOutputRef},
-    GenericPredicateEncOutputRef,
+    rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef},
+    PredicateEncOutputRef,
 };
 
 pub struct MirLocalDefEnc;
@@ -25,7 +25,7 @@ pub struct LocalDef<'vir> {
     pub local_ex: vir::Expr<'vir>,
     pub impure_snap: vir::Expr<'vir>,
     pub impure_pred: vir::Expr<'vir>,
-    pub ty: &'vir GenericPredicateEncOutputRef<'vir>,
+    pub ty: &'vir PredicateEncOutputRef<'vir>,
 }
 
 impl TaskEncoder for MirLocalDefEnc {
@@ -64,7 +64,7 @@ impl TaskEncoder for MirLocalDefEnc {
         fn mk_local_def<'vir, 'tcx>(
             vcx: &'vir vir::VirCtxt<'tcx>,
             name: &'vir str,
-            ty: PredicateEncOutputRef<'vir>,
+            ty: RustTyPredicatesEncOutputRef<'vir>,
         ) -> LocalDef<'vir> {
             let local = vcx.mk_local(name, &vir::TypeData::Ref);
             let local_ex = vcx.mk_local_ex_local(local);
@@ -85,7 +85,7 @@ impl TaskEncoder for MirLocalDefEnc {
                 let body = vcx.body.borrow_mut().get_impure_fn_body(local_def_id, substs, caller_def_id);
                 let locals = IndexVec::from_fn_n(|arg: mir::Local| {
                     let local = vir::vir_format!(vcx, "_{}p", arg.index());
-                    let ty = deps.require_ref::<PredicateEnc>(
+                    let ty = deps.require_ref::<RustTyPredicatesEnc>(
                         body.local_decls[arg].ty,
                     ).unwrap();
                     mk_local_def(vcx, local, ty)
@@ -107,7 +107,7 @@ impl TaskEncoder for MirLocalDefEnc {
                     } else {
                         sig.inputs()[arg.index() - 1]
                     };
-                    let ty = deps.require_ref::<PredicateEnc>(
+                    let ty = deps.require_ref::<RustTyPredicatesEnc>(
                         ty,
                     ).unwrap();
                     mk_local_def(vcx, local, ty)

@@ -7,7 +7,7 @@ use prusti_rustc_interface::{
 use task_encoder::TaskEncoderDependencies;
 use vir::{Arity, CallableIdent, HasType, UnaryArity};
 
-use crate::encoders::{snapshot::SnapshotEnc, GenericEnc};
+use crate::encoders::{rust_ty_snapshots::RustTySnapshotsEnc, GenericEnc};
 
 /// The "most generic" version of a type is one that use
 /// "identity substitutions" for all type parameters.
@@ -150,7 +150,7 @@ impl<'vir> TyMapCaster<'vir> {
         let cast_functions = tys
             .iter()
             .filter_map(|ty| {
-                let enc = deps.require_ref::<SnapshotEnc>(*ty).unwrap();
+                let enc = deps.require_ref::<RustTySnapshotsEnc>(*ty).unwrap();
                 enc.generic_snapshot
                     .cast_functions
                     .map(|cast_functions| (enc.generic_snapshot.snapshot, cast_functions))

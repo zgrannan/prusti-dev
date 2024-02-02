@@ -7,7 +7,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
 use crate::{
-    encoders::{mir_pure::PureKind, predicate::PredicateEnc, MirPureEnc},
+    encoders::{mir_pure::PureKind, rust_ty_predicates::RustTyPredicatesEnc, MirPureEnc},
     util::{extract_type_params, MostGenericTy},
 };
 pub struct MirSpecEnc;
@@ -86,7 +86,7 @@ impl TaskEncoder for MirSpecEnc {
             };
 
             let to_bool = deps
-                .require_ref::<PredicateEnc>(vcx.tcx.types.bool)
+                .require_ref::<RustTyPredicatesEnc>(vcx.tcx.types.bool)
                 .unwrap()
                 .generic_predicate
                 .expect_prim()

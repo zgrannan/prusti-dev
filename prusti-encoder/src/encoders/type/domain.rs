@@ -88,7 +88,7 @@ use crate::{
     util::{CastFunctions, MostGenericTy},
 };
 
-use super::snapshot::SnapshotEnc;
+use super::rust_ty_snapshots::RustTySnapshotsEnc;
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
@@ -167,7 +167,7 @@ impl TaskEncoder for DomainEnc {
                                 .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
                             let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
                             let discr_ty = deps
-                                .require_local::<SnapshotEnc>(discr_ty)
+                                .require_local::<RustTySnapshotsEnc>(discr_ty)
                                 .unwrap()
                                 .generic_snapshot;
                             Some(VariantData {
@@ -343,7 +343,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
             .map(|ty| {
-                deps.require_local::<SnapshotEnc>(ty)
+                deps.require_local::<RustTySnapshotsEnc>(ty)
                     .unwrap()
                     .generic_snapshot
                     .snapshot

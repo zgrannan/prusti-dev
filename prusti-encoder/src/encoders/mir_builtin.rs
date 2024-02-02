@@ -33,7 +33,7 @@ pub struct MirBuiltinEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
-use super::snapshot::SnapshotEnc;
+use super::rust_ty_snapshots::RustTySnapshotsEnc;
 
 impl TaskEncoder for MirBuiltinEnc {
     task_encoder::encoder_cache!(MirBuiltinEnc);
@@ -98,7 +98,7 @@ impl MirBuiltinEnc {
         ty: ty::Ty<'tcx>,
     ) -> vir::Function<'vir> {
         let e_ty = deps
-            .require_local::<SnapshotEnc>(ty)
+            .require_local::<RustTySnapshotsEnc>(ty)
             .unwrap()
             .generic_snapshot;
 
@@ -149,15 +149,15 @@ impl MirBuiltinEnc {
     ) -> vir::Function<'vir> {
         use mir::BinOp::*;
         let e_l_ty = deps
-            .require_local::<SnapshotEnc>(l_ty)
+            .require_local::<RustTySnapshotsEnc>(l_ty)
             .unwrap()
             .generic_snapshot;
         let e_r_ty = deps
-            .require_local::<SnapshotEnc>(r_ty)
+            .require_local::<RustTySnapshotsEnc>(r_ty)
             .unwrap()
             .generic_snapshot;
         let e_res_ty = deps
-            .require_local::<SnapshotEnc>(res_ty)
+            .require_local::<RustTySnapshotsEnc>(res_ty)
             .unwrap()
             .generic_snapshot;
         let prim_l_ty = e_l_ty.specifics.expect_primitive();
@@ -258,11 +258,11 @@ impl MirBuiltinEnc {
             mir::BinOp::Add | mir::BinOp::Sub | mir::BinOp::Mul
         ));
         let e_l_ty = deps
-            .require_local::<SnapshotEnc>(l_ty)
+            .require_local::<RustTySnapshotsEnc>(l_ty)
             .unwrap()
             .generic_snapshot;
         let e_r_ty = deps
-            .require_local::<SnapshotEnc>(r_ty)
+            .require_local::<RustTySnapshotsEnc>(r_ty)
             .unwrap()
             .generic_snapshot;
 
@@ -274,14 +274,14 @@ impl MirBuiltinEnc {
         );
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
         let e_res_ty = deps
-            .require_local::<SnapshotEnc>(res_ty)
+            .require_local::<RustTySnapshotsEnc>(res_ty)
             .unwrap()
             .generic_snapshot;
         let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef { function });
 
         let e_res_ty = deps
-            .require_local::<SnapshotEnc>(res_ty)
+            .require_local::<RustTySnapshotsEnc>(res_ty)
             .unwrap()
             .generic_snapshot;
         // The result of a checked add will always be `(T, bool)`, get the `T`
@@ -291,12 +291,12 @@ impl MirBuiltinEnc {
         assert!(bool_ty.is_bool());
 
         let e_rvalue_pure_ty = deps
-            .require_local::<SnapshotEnc>(rvalue_pure_ty)
+            .require_local::<RustTySnapshotsEnc>(rvalue_pure_ty)
             .unwrap()
             .generic_snapshot;
         let e_rvalue_pure_ty = e_rvalue_pure_ty.specifics.expect_primitive();
         let e_bool = deps
-            .require_local::<SnapshotEnc>(bool_ty)
+            .require_local::<RustTySnapshotsEnc>(bool_ty)
             .unwrap()
             .generic_snapshot;
         let bool_cons = e_bool.specifics.expect_primitive().prim_to_snap;

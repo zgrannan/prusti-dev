@@ -12,7 +12,7 @@ use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::{encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::{Caster, TyMapCaster}};
 
-use super::{predicate::PredicateEnc, snapshot::SnapshotEnc};
+use super::{rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
 
@@ -216,7 +216,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             &vir::TypeData::Unsupported(vir::UnsupportedType { name: "closure" })
         } else {
             self.deps
-                .require_ref::<SnapshotEnc>(ty)
+                .require_ref::<RustTySnapshotsEnc>(ty)
                 .unwrap()
                 .generic_snapshot
                 .snapshot
@@ -359,7 +359,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 // encode the discriminant operand
                 let discr_expr = self.encode_operand(&new_curr_ver, discr);
                 let discr_ty = discr.ty(self.body, self.vcx.tcx);
-                let discr_ty_out = self.deps.require_local::<SnapshotEnc>(
+                let discr_ty_out = self.deps.require_local::<RustTySnapshotsEnc>(
                     discr_ty
                 ).unwrap().generic_snapshot.specifics.expect_primitive();
 
@@ -513,7 +513,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
             mir::Rvalue::Ref(_, kind, place) => {
                 let rvalue_snapshot_encoding = self
                     .deps
-                    .require_local::<SnapshotEnc>(rvalue_ty)
+                    .require_local::<RustTySnapshotsEnc>(rvalue_ty)
                     .unwrap()
                     .generic_snapshot;
                 let e_rvalue_ty = rvalue_snapshot_encoding
@@ -590,7 +590,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     tuple_ref.mk_cons(self.vcx, &fields)
                 }
                 mir::AggregateKind::Adt(..) | mir::AggregateKind::Tuple => {
-                    let e_rvalue_ty = self.deps.require_ref::<PredicateEnc>(rvalue_ty).unwrap();
+                    let e_rvalue_ty = self.deps.require_ref::<RustTyPredicatesEnc>(rvalue_ty).unwrap();
                     let sl = match kind {
                         mir::AggregateKind::Adt(_, vidx, _, _, _) => {
                             e_rvalue_ty.generic_predicate.get_variant_any(*vidx)
@@ -609,7 +609,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 let place_ty = place.ty(self.body, self.vcx.tcx);
                 let ty = self
                     .deps
-                    .require_local::<SnapshotEnc>(place_ty.ty)
+                    .require_local::<RustTySnapshotsEnc>(place_ty.ty)
                     .unwrap()
                     .generic_snapshot
                     .specifics;
@@ -624,7 +624,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     None => {
                         let e_rvalue_ty = self
                             .deps
-                            .require_local::<SnapshotEnc>(rvalue_ty)
+                            .require_local::<RustTySnapshotsEnc>(rvalue_ty)
                             .unwrap()
                             .generic_snapshot
                             .specifics
@@ -698,7 +698,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 assert!(place_ty.variant_index.is_none());
                 let e_ty = self
                     .deps
-                    .require_local::<SnapshotEnc>(place_ty.ty)
+                    .require_local::<RustTySnapshotsEnc>(place_ty.ty)
                     .unwrap()
                     .generic_snapshot;
                 let place_ref = e_ty
@@ -723,7 +723,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                        (tuple_ref.mk_elem(self.vcx, expr, field_idx), place_ref)
                     }
                     _ => {
-                        let e_ty = self.deps.require_ref::<PredicateEnc>(place_ty.ty).unwrap();
+                        let e_ty = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
                         let struct_like = e_ty
                             .generic_predicate
                             .expect_variant_opt(place_ty.variant_index);
@@ -782,7 +782,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
 
                 let bool_cons = self
                     .deps
-                    .require_local::<SnapshotEnc>(self.vcx.tcx.types.bool)
+                    .require_local::<RustTySnapshotsEnc>(self.vcx.tcx.types.bool)
                     .unwrap()
                     .generic_snapshot
                     .specifics
@@ -809,7 +809,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         .iter()
                         .enumerate()
                         .map(|(idx, qvar_ty)| {
-                            let ty_out = self.deps.require_ref::<SnapshotEnc>(qvar_ty).unwrap();
+                            let ty_out = self.deps.require_ref::<RustTySnapshotsEnc>(qvar_ty).unwrap();
                             self.vcx.mk_local_decl(
                                 vir::vir_format!(self.vcx, "qvar_{}_{idx}", self.encoding_depth),
                                 ty_out.generic_snapshot.snapshot,
@@ -864,7 +864,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     ))
                     .lift();
 
-                let bool = self.deps.require_local::<SnapshotEnc>(
+                let bool = self.deps.require_local::<RustTySnapshotsEnc>(
                     self.vcx.tcx.types.bool,
                 ).unwrap().generic_snapshot.specifics;
                 let bool = bool.expect_primitive();
