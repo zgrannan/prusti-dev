@@ -439,6 +439,12 @@ impl From<u64> for PermAmount {
     }
 }
 
+impl From<u128> for PermAmount {
+    fn from(_value: u128) -> PermAmount {
+        unimplemented!()
+    }
+}
+
 impl From<Int> for PermAmount {
     fn from(_value: Int) -> PermAmount {
         unimplemented!()

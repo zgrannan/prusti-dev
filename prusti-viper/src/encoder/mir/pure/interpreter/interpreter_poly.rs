@@ -641,9 +641,9 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                                 state
                             }
 
-                            "std::convert::From::from" 
+                            "std::convert::From::from"
                                 if call_substs.type_at(0).to_string() == PERM_AMOUNT_TYPENAME &&
-                                  matches!(call_substs.type_at(1).to_string().as_str(), "u32" | "u64" | "i32") => { 
+                                  matches!(call_substs.type_at(1).to_string().as_str(), "u32" | "u64" | "i32" | "u128") => {
                                 // TODO match more types
                                 let expr = match encoded_args[0].get_type() {
                                     vir::Type::Int => perm_amount_from_int(&encoded_args[0]),
