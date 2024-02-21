@@ -78,14 +78,12 @@ pub struct DomainEncOutputRef<'vir> {
     /// Takes as input the generics for this type (if any),
     /// and returns the resulting type. Used for generics
     pub type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
-
-    pub cast_functions: Option<CastFunctions<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::{
     encoders::GenericEnc,
-    util::{CastFunctions, MostGenericTy},
+    util::MostGenericTy,
 };
 
 use super::rust_ty_snapshots::RustTySnapshotsEnc;
@@ -220,7 +218,6 @@ impl TaskEncoder for DomainEnc {
                         base_name: out.base_name,
                         domain: out.domain_param_name,
                         type_function: out.param_type_function.as_unknown_arity(),
-                        cast_functions: None,
                     },
                 );
                 Ok((
@@ -250,7 +247,6 @@ struct DomainEncData<'vir, 'tcx> {
     self_ex: vir::Expr<'vir>,
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
     type_function: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
-    cast_functions: CastFunctions<'vir>,
     axioms: Vec<vir::DomainAxiom<'vir>>,
     functions: Vec<vir::DomainFunction<'vir>>,
 }
@@ -320,12 +316,8 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 self_ex,
                 self_decl,
                 axioms: Vec::new(),
-                functions: vec![type_function, make_generic, make_concrete],
-                type_function: type_function_ident,
-                cast_functions: CastFunctions {
-                    make_generic: make_generic_ident,
-                    make_concrete: make_concrete_ident,
-                },
+                functions: vec![type_function],
+                type_function: type_function_ident
             },
             param_snaps,
         )
@@ -606,7 +598,6 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             base_name,
             domain: self.domain,
             type_function: self.type_function,
-            cast_functions: Some(self.cast_functions),
         }
     }
     fn finalize(self) -> vir::Domain<'vir> {

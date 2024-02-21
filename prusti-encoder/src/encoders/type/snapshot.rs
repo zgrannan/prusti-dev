@@ -8,7 +8,6 @@ pub struct SnapshotEnc;
 #[derive(Clone, Debug)]
 pub struct SnapshotEncOutputRef<'vir> {
     pub snapshot: vir::Type<'vir>,
-    pub cast_functions: Option<CastFunctions<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for SnapshotEncOutputRef<'vir> {}
 
@@ -18,10 +17,9 @@ pub struct SnapshotEncOutput<'vir> {
     pub snapshot: vir::Type<'vir>,
     pub generics: &'vir [LiftedGeneric<'vir>],
     pub specifics: DomainEncSpecifics<'vir>,
-    pub cast_functions: Option<CastFunctions<'vir>>,
 }
 
-use crate::util::{CastFunctions, MostGenericTy};
+use crate::util::MostGenericTy;
 
 use super::{
     domain::{DomainEnc, DomainEncSpecifics},
@@ -60,7 +58,6 @@ impl TaskEncoder for SnapshotEnc {
                 *ty,
                 SnapshotEncOutputRef {
                     snapshot,
-                    cast_functions: out.cast_functions,
                 },
             );
             let specifics = deps.require_dep::<DomainEnc>(*ty).unwrap();
@@ -77,7 +74,6 @@ impl TaskEncoder for SnapshotEnc {
                     snapshot,
                     specifics,
                     generics,
-                    cast_functions: out.cast_functions,
                 },
                 (),
             ))

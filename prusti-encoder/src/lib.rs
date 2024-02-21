@@ -9,7 +9,7 @@ extern crate rustc_type_ir;
 mod encoders;
 mod util;
 
-use prusti_interface::{environment::EnvBody, specs::typed::SpecificationItem};
+use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::{
     middle::ty,
     hir,
@@ -81,6 +81,12 @@ pub fn test_entrypoint<'tcx>(
     header(&mut viper_code, "generics");
     for output in crate::encoders::GenericEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.type_snapshot));
+    }
+
+    header(&mut viper_code, "generic casts");
+    for output in crate::encoders::generic_cast::GenericCastEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output.make_concrete));
+        viper_code.push_str(&format!("{:?}\n", output.make_generic));
     }
 
     header(&mut viper_code, "snapshots");

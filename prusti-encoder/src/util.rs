@@ -7,7 +7,7 @@ use prusti_rustc_interface::{
 use task_encoder::TaskEncoderDependencies;
 use vir::{Arity, CallableIdent, HasType, UnaryArity};
 
-use crate::encoders::{rust_ty_snapshots::RustTySnapshotsEnc, GenericEnc};
+use crate::encoders::{generic_cast::GenericCastOutputRef, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_snapshots::RustTySnapshotsEnc, GenericEnc};
 
 /// The "most generic" version of a type is one that use
 /// "identity substitutions" for all type parameters.
@@ -124,21 +124,12 @@ pub fn extract_type_params<'tcx>(
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct CastFunctions<'vir> {
-    /// Casts a concrete type to a generic type
-    pub make_generic: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
-
-    /// Casts a generic type to a concrete type
-    pub make_concrete: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
-}
-
 pub struct TyMapCaster<'vir> {
     /// The Viper encoding of a Rust value having a generic type (e.g. `s_Param`)
     generic_ty: vir::Type<'vir>,
     /// Cast functions for relevant types. A panic will occur if
     /// one attempts to perform a cast on a type that is not in this map.
-    cast_functions: BTreeMap<vir::Type<'vir>, CastFunctions<'vir>>,
+    cast_functions: BTreeMap<vir::Type<'vir>, GenericCastOutputRef<'vir>>,
 }
 
 impl<'vir> TyMapCaster<'vir> {
@@ -149,11 +140,10 @@ impl<'vir> TyMapCaster<'vir> {
         let generic_ty = deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot;
         let cast_functions = tys
             .iter()
-            .filter_map(|ty| {
-                let enc = deps.require_ref::<RustTySnapshotsEnc>(*ty).unwrap();
-                enc.generic_snapshot
-                    .cast_functions
-                    .map(|cast_functions| (enc.generic_snapshot.snapshot, cast_functions))
+            .map(|ty| {
+                let snap_ref = deps.require_ref::<RustTySnapshotsEnc>(*ty).unwrap();
+                let enc = deps.require_ref::<RustTyGenericCastEnc>(*ty).unwrap();
+                (snap_ref.generic_snapshot.snapshot, enc.cast)
             })
             .collect();
         Self {
