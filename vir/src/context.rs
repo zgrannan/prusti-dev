@@ -2,7 +2,7 @@ use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::DEBUGINFO_NONE, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
+use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -11,6 +11,7 @@ macro_rules! const_expr {
             debug_info: DEBUGINFO_NONE
         }
     };
+
 }
 
 /// The VIR context is a data structure used throughout the encoding process.
@@ -117,20 +118,16 @@ impl<'tcx> VirCtxt<'tcx> {
         kind: UnOpKind,
         expr: ExprGen<'vir, Curr, Next>,
     ) -> ExprGen<'vir, Curr, Next> {
-        self.alloc(ExprGenData::new(
-            self.alloc(ExprKindGenData::UnOp(
-                self.alloc(UnOpGenData { kind, expr })
-            ))
-        ))
+        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::UnOp(
+            self.alloc(UnOpGenData { kind, expr }),
+        ))))
     }
 
     pub fn mk_old_expr<'vir, Curr, Next>(
         &'vir self,
         expr: ExprGen<'vir, Curr, Next>,
     ) -> ExprGen<'vir, Curr, Next> {
-        self.alloc(ExprGenData::new(
-            self.alloc(ExprKindGenData::Old(expr))
-        ))
+        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Old(expr))))
     }
 
     pub fn mk_forall_expr<'vir, Curr, Next>(

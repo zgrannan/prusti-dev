@@ -20,5 +20,4 @@ cfg-if = "1.0.0"
 rustc_private = true
 
 [features]
-# default = ["vir_debug"] # Uncomment to enable debug info
 vir_debug = []

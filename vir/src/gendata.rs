@@ -1,11 +1,9 @@
 use std::fmt::Debug;
 
-use crate::{
-    data::*,
-    debug_info::DebugInfo,
-    genrefs::*,
-    refs::*,
-};
+use crate::data::*;
+use crate::debug_info::DebugInfo;
+use crate::genrefs::*;
+use crate::refs::*;
 
 use vir_proc_macro::*;
 
