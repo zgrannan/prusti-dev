@@ -34,7 +34,7 @@ pub struct DomainDataPrim<'vir> {
 #[derive(Clone, Copy, Debug)]
 pub struct DomainDataStruct<'vir> {
     /// Construct domain from snapshots of fields or for primitive types
-    /// from the single Viper primitive value. `None` for generic parameters.
+    /// from the single Viper primitive value.
     pub field_snaps_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
     /// Functions to access the fields.
     pub field_access: &'vir [FieldFunctions<'vir>],

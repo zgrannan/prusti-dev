@@ -3,7 +3,7 @@ use mir_state_analysis::{
     utils::Place,
 };
 use prusti_rustc_interface::{
-    middle::{mir, ty},
+    middle::{mir, ty::{self, GenericArgs}},
     span::def_id::DefId,
 };
 //use mir_ssa_analysis::{
@@ -30,7 +30,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::{encoders::{rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc}, util::{Caster, TyMapCaster}};
+use crate::{encoders::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc}, util::{Caster, TyMapCaster}};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -679,13 +679,46 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                                 e_rvalue_ty.generic_predicate.get_variant_any(*vidx),
                             _ => e_rvalue_ty.generic_predicate.expect_structlike()
                         };
-                        let cons_args: Vec<_> = fields.iter().map(|field| self.encode_operand_snap(field)).collect();
-                        let field_tys = fields.iter().map(|field| field.ty(self.local_decls, self.vcx.tcx));
-                        let caster = TyMapCaster::new(
-                            field_tys.collect::<Vec<_>>(),
-                            self.deps
-                        );
-                        caster.apply_function_with_casts(self.vcx, sl.snap_data.field_snaps_to_snap, &cons_args)
+                        let casted_args = match kind {
+                            mir::AggregateKind::Tuple => {
+                                // All arguements to tuple constructor should be generic
+                                fields.iter().map(|field| {
+                                    let snap = self.encode_operand_snap(field);
+                                    let field_ty = field.ty(self.local_decls, self.vcx.tcx);
+                                    if matches!(field_ty.kind(), ty::TyKind::Param(..)) {
+                                        // This argument is alread generic, don't make abstract
+                                        snap
+                                    } else {
+                                        let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
+                                        cast_functions.cast.make_generic.apply(self.vcx, [snap])
+                                    }
+                                }).collect::<Vec<_>>()
+                            }
+                            mir::AggregateKind::Adt(def_id, vid, ..) => {
+                                let adt_def = self.vcx.tcx.adt_def(*def_id);
+                                let variant = &adt_def.variant(*vid);
+                                let identity_substs = GenericArgs::identity_for_item(self.vcx.tcx, *def_id);
+                                assert!(variant.fields.len() == fields.len());
+                                variant.fields.iter().zip(fields.iter()).map(|(v_field, field)| {
+                                    let field_ty = field.ty(self.local_decls, self.vcx.tcx);
+                                    let v_field_is_param = matches!(v_field.ty(self.vcx.tcx, identity_substs).kind(), ty::TyKind::Param(..));
+                                    let field_is_param = matches!(field_ty.kind(), ty::TyKind::Param(..));
+                                    let snap = self.encode_operand_snap(field);
+                                    if v_field_is_param != field_is_param {
+                                        let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
+                                        if !field_is_param {
+                                            cast_functions.cast.make_generic.apply(self.vcx, [snap])
+                                        } else {
+                                            cast_functions.cast.make_concrete.apply(self.vcx, [snap])
+                                        }
+                                    } else {
+                                        snap
+                                    }
+                                }).collect::<Vec<_>>()
+                            }
+                            _ => unreachable!()
+                        };
+                        sl.snap_data.field_snaps_to_snap.apply(self.vcx, self.vcx.alloc_slice(&casted_args))
                     }
                     mir::Rvalue::Discriminant(place) => {
                         let e_rvalue_ty = self.deps.require_ref::<RustTyPredicatesEnc>(rvalue_ty).unwrap();
