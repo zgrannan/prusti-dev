@@ -20,6 +20,13 @@ pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
 impl<'tcx> MostGenericTy<'tcx> {
 
+    pub fn is_generic(&self) -> bool {
+        match self.kind() {
+            TyKind::Param(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn kind(&self) -> &TyKind<'tcx> {
         self.0.kind()
     }
@@ -140,6 +147,7 @@ impl<'vir> TyMapCaster<'vir> {
         let generic_ty = deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot;
         let cast_functions = tys
             .iter()
+            .filter(|ty| !matches!(ty.kind(), TyKind::Param(_)))
             .map(|ty| {
                 let snap_ref = deps.require_ref::<RustTySnapshotsEnc>(*ty).unwrap();
                 let enc = deps.require_ref::<RustTyGenericCastEnc>(*ty).unwrap();

@@ -142,6 +142,7 @@ impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
             Self::Result(_) => write!(f, "result"),
             Self::Field(e, field) => write!(f, "{:?}.{}", e, field.name),
             Self::Forall(e) => e.fmt(f),
+            Self::Exists(e) => e.fmt(f),
             Self::FuncApp(e) => e.fmt(f),
             Self::Let(e) => e.fmt(f),
             Self::Lazy(desc, _) => write!(f, "%%/*{desc}*/"),
@@ -165,6 +166,20 @@ impl<'vir> Debug for FieldData<'vir> {
 impl<'vir, Curr, Next> Debug for ForallGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "forall ")?;
+        fmt_comma_sep(f, &self.qvars)?;
+        write!(f, " ::")?;
+        for trigger in self.triggers {
+            write!(f, " {{")?;
+            fmt_comma_sep(f, trigger)?;
+            write!(f, "}}")?;
+        }
+        write!(f, " {:?}", self.body)
+    }
+}
+
+impl<'vir, Curr, Next> Debug for ExistsGenData<'vir, Curr, Next> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "exists ")?;
         fmt_comma_sep(f, &self.qvars)?;
         write!(f, " ::")?;
         for trigger in self.triggers {

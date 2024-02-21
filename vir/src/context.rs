@@ -130,6 +130,19 @@ impl<'tcx> VirCtxt<'tcx> {
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Old(expr))))
     }
 
+    pub fn mk_exists_expr<'vir, Curr, Next>(
+        &'vir self,
+        qvars: &'vir [LocalDecl<'vir>],
+        triggers: &'vir [&'vir [ExprGen<'vir, Curr, Next>]],
+        body: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Exists(self.alloc(ExistsGenData {
+            qvars,
+            triggers,
+            body,
+        })))))
+    }
+
     pub fn mk_forall_expr<'vir, Curr, Next>(
         &'vir self,
         qvars: &'vir [LocalDecl<'vir>],

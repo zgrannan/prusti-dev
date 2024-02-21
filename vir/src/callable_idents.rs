@@ -233,6 +233,9 @@ pub type TernaryArity<'vir> = KnownArity<'vir, 3>;
 #[derive(Debug)]
 pub struct UnknownArityAny<'vir, T>(&'vir [T]);
 impl<'vir, T> UnknownArityAny<'vir, T> {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
     pub const fn new(types: &'vir [T]) -> Self {
         Self(types)
     }
@@ -314,8 +317,10 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             vcx.mk_func_app(self.name(), args, self.result_ty())
         } else {
             panic!(
-                "Function {} could not be applied, debug info: {}",
+                "Function {} could not be applied. Expected: {:?}, Actual: {:?} debug info: {}",
                 self.name(),
+                self.arity(),
+                args,
                 self.debug_info()
             );
         }

@@ -50,6 +50,13 @@ pub struct ForallGenData<'vir, Curr, Next> {
 }
 
 #[derive(Reify)]
+pub struct ExistsGenData<'vir, Curr, Next> {
+    #[reify_copy] pub(crate) qvars: &'vir [LocalDecl<'vir>],
+    pub(crate) triggers: &'vir [&'vir [ExprGen<'vir, Curr, Next>]],
+    pub(crate) body: ExprGen<'vir, Curr, Next>,
+}
+
+#[derive(Reify)]
 pub struct FuncAppGenData<'vir, Curr, Next> {
     #[reify_copy] pub(crate) target: &'vir str, // TODO: identifiers
     pub(crate) args: &'vir [ExprGen<'vir, Curr, Next>],
@@ -132,6 +139,7 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     // map ops?
     // sequence, map, set, multiset literals
     Ternary(TernaryGen<'vir, Curr, Next>),
+    Exists(ExistsGen<'vir, Curr, Next>),
     Forall(ForallGen<'vir, Curr, Next>),
     Let(LetGen<'vir, Curr, Next>),
     FuncApp(FuncAppGen<'vir, Curr, Next>),
@@ -158,6 +166,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::BinOp(b) => b.ty(),
             ExprKindGenData::Ternary(t) => t.then.ty(),
             ExprKindGenData::Forall(_) => &TypeData::Bool,
+            ExprKindGenData::Exists(_) => &TypeData::Bool,
             ExprKindGenData::Let(l) => l.expr.ty(),
             ExprKindGenData::FuncApp(a) => a.result_ty,
             ExprKindGenData::PredicateApp(_) => &TypeData::Predicate,

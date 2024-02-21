@@ -54,6 +54,7 @@ impl TaskEncoder for RustTyGenericCastEnc {
         ),
     > {
         with_vcx(|vcx| {
+            assert!(!matches!(task_key.kind(), ty::TyKind::Param(_)));
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let cast = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
             deps.emit_output_ref::<RustTyGenericCastEnc>(
@@ -61,7 +62,9 @@ impl TaskEncoder for RustTyGenericCastEnc {
                 RustTyGenericCastEncOutputRef { cast },
             );
             for arg in args {
-                deps.require_ref::<RustTyGenericCastEnc>(arg).unwrap();
+                if !matches!(arg.kind(), ty::TyKind::Param(_)) {
+                    deps.require_ref::<RustTyGenericCastEnc>(arg).unwrap();
+                }
             }
             let cast = deps
                 .require_local::<GenericCastEnc>(generic_ty)

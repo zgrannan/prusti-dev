@@ -2,7 +2,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, UnaryArity};
 
 use crate::{
-    encoders::{domain::DomainEnc, GenericEnc},
+    encoders::{domain::DomainEnc, GenericEnc, SnapshotEnc},
     util::MostGenericTy,
 };
 
@@ -50,6 +50,7 @@ impl TaskEncoder for GenericCastEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
+        assert!(!ty.is_generic());
         vir::with_vcx(|vcx| {
             let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
@@ -74,8 +75,8 @@ impl TaskEncoder for GenericCastEnc {
             );
 
             let make_concrete_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
-            let make_concrete_arg_decls =
-                vcx.alloc_slice(&[vcx.mk_local_decl("snap", generic_ref.param_snapshot)]);
+            let make_concrete_arg_decl = vcx.mk_local_decl("snap", generic_ref.param_snapshot);
+            let make_concrete_arg_decls = vcx.alloc_slice(&[make_concrete_arg_decl]);
 
             let make_concrete_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
@@ -83,11 +84,38 @@ impl TaskEncoder for GenericCastEnc {
                 self_ty,
             );
 
+            let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
+            let num_ty_args = domain_ref.type_function.arity().len();
+            let lifted_param_ty = generic_ref.param_type_function.apply(
+                vcx,
+                [vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty)],
+            );
+            let make_concrete_pre = if num_ty_args > 0 {
+                let typs = (0..num_ty_args).map(|i| {
+                    vcx.mk_local_decl(vcx.alloc(format!("t{i}")), generic_ref.type_snapshot)
+                });
+                vcx.mk_exists_expr(
+                    vcx.alloc_slice(typs.clone().collect::<Vec<_>>().as_slice()),
+                    &[], // TODO
+                    vcx.mk_eq_expr(
+                        lifted_param_ty,
+                        domain_ref.type_function.apply(
+                            vcx,
+                            typs.map(|t| vcx.mk_local_ex(t.name, t.ty))
+                                .collect::<Vec<_>>()
+                                .as_slice(),
+                        ),
+                    ),
+                )
+            } else {
+                vcx.mk_eq_expr(lifted_param_ty, domain_ref.type_function.apply(vcx, &[]))
+            };
+
             let make_concrete = vcx.mk_function(
                 make_concrete_ident.name(),
                 make_concrete_arg_decls,
                 self_ty,
-                &[],
+                vcx.alloc_slice(&[make_concrete_pre]),
                 &[],
                 None,
             );
