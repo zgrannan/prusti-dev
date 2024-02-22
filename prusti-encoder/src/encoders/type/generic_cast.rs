@@ -58,6 +58,34 @@ impl TaskEncoder for GenericCastEnc {
             let base_name = domain_ref.base_name;
             let make_generic_arg_tys = vcx.alloc([self_ty]);
             let make_generic_arg_decls = vcx.alloc_slice(&[vcx.mk_local_decl("self", self_ty)]);
+            let num_ty_args = domain_ref.type_function.arity().len();
+
+            let mk_type_spec = |param| {
+                let lifted_param_snap_ty = generic_ref.param_type_function.apply(vcx, [param]);
+                if num_ty_args > 0 {
+                    let typs = (0..num_ty_args).map(|i| {
+                        vcx.mk_local_decl(vcx.alloc(format!("t{i}")), generic_ref.type_snapshot)
+                    });
+                    vcx.mk_exists_expr(
+                        vcx.alloc_slice(typs.clone().collect::<Vec<_>>().as_slice()),
+                        &[], // TODO
+                        vcx.mk_eq_expr(
+                            lifted_param_snap_ty,
+                            domain_ref.type_function.apply(
+                                vcx,
+                                typs.map(|t| vcx.mk_local_ex(t.name, t.ty))
+                                    .collect::<Vec<_>>()
+                                    .as_slice(),
+                            ),
+                        ),
+                    )
+                } else {
+                    vcx.mk_eq_expr(
+                        lifted_param_snap_ty,
+                        domain_ref.type_function.apply(vcx, &[]),
+                    )
+                }
+            };
 
             let make_generic_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_generic_s_{base_name}"),
@@ -65,12 +93,15 @@ impl TaskEncoder for GenericCastEnc {
                 generic_ref.param_snapshot,
             );
 
+            let make_generic_post =
+                mk_type_spec(vcx.mk_local_ex("result", generic_ref.param_snapshot));
+
             let make_generic = vcx.mk_function(
                 make_generic_ident.name(),
                 make_generic_arg_decls,
                 generic_ref.param_snapshot,
                 &[],
-                &[],
+                vcx.alloc_slice(&[make_generic_post]),
                 None,
             );
 
@@ -84,32 +115,9 @@ impl TaskEncoder for GenericCastEnc {
                 self_ty,
             );
 
-            let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
-            let num_ty_args = domain_ref.type_function.arity().len();
-            let lifted_param_ty = generic_ref.param_type_function.apply(
-                vcx,
-                [vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty)],
+            let make_concrete_pre = mk_type_spec(
+                vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
             );
-            let make_concrete_pre = if num_ty_args > 0 {
-                let typs = (0..num_ty_args).map(|i| {
-                    vcx.mk_local_decl(vcx.alloc(format!("t{i}")), generic_ref.type_snapshot)
-                });
-                vcx.mk_exists_expr(
-                    vcx.alloc_slice(typs.clone().collect::<Vec<_>>().as_slice()),
-                    &[], // TODO
-                    vcx.mk_eq_expr(
-                        lifted_param_ty,
-                        domain_ref.type_function.apply(
-                            vcx,
-                            typs.map(|t| vcx.mk_local_ex(t.name, t.ty))
-                                .collect::<Vec<_>>()
-                                .as_slice(),
-                        ),
-                    ),
-                )
-            } else {
-                vcx.mk_eq_expr(lifted_param_ty, domain_ref.type_function.apply(vcx, &[]))
-            };
 
             let make_concrete = vcx.mk_function(
                 make_concrete_ident.name(),

@@ -1,14 +1,7 @@
-use std::collections::BTreeMap;
-
 use prusti_rustc_interface::{
     middle::ty::{self, TyKind},
     span::symbol,
 };
-use task_encoder::TaskEncoderDependencies;
-use vir::{Arity, CallableIdent, HasType, UnaryArity};
-
-use crate::encoders::{generic_cast::GenericCastOutputRef, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_snapshots::RustTySnapshotsEnc, GenericEnc};
-
 /// The "most generic" version of a type is one that use
 /// "identity substitutions" for all type parameters.
 /// e.g the most generic version of `Vec<u32>` is `Vec<T>`
@@ -19,7 +12,6 @@ use crate::encoders::{generic_cast::GenericCastOutputRef, rust_ty_generic_cast::
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
 impl<'tcx> MostGenericTy<'tcx> {
-
     pub fn is_generic(&self) -> bool {
         match self.kind() {
             TyKind::Param(_) => true,
@@ -128,104 +120,5 @@ pub fn extract_type_params<'tcx>(
             (MostGenericTy(ty), Vec::new())
         }
         _ => todo!("extract_type_params for {:?}", ty),
-    }
-}
-
-pub struct TyMapCaster<'vir> {
-    /// The Viper encoding of a Rust value having a generic type (e.g. `s_Param`)
-    generic_ty: vir::Type<'vir>,
-    /// Cast functions for relevant types. A panic will occur if
-    /// one attempts to perform a cast on a type that is not in this map.
-    cast_functions: BTreeMap<vir::Type<'vir>, GenericCastOutputRef<'vir>>,
-}
-
-impl<'vir> TyMapCaster<'vir> {
-    pub fn new<'tcx: 'vir>(
-        tys: Vec<ty::Ty<'tcx>>,
-        deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> Self {
-        let generic_ty = deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot;
-        let cast_functions = tys
-            .iter()
-            .filter(|ty| !matches!(ty.kind(), TyKind::Param(_)))
-            .map(|ty| {
-                let snap_ref = deps.require_ref::<RustTySnapshotsEnc>(*ty).unwrap();
-                let enc = deps.require_ref::<RustTyGenericCastEnc>(*ty).unwrap();
-                (snap_ref.generic_snapshot.snapshot, enc.cast)
-            })
-            .collect();
-        Self {
-            generic_ty,
-            cast_functions,
-        }
-    }
-}
-
-pub trait Caster<'vir> {
-    fn is_generic(&self, ty: vir::Type<'vir>) -> bool;
-    fn make_generic<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'_>,
-        expr: vir::ExprGen<'vir, Curr, Next>,
-    ) -> vir::ExprGen<'vir, Curr, Next>;
-    fn make_concrete<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'_>,
-        expr: vir::ExprGen<'vir, Curr, Next>,
-    ) -> vir::ExprGen<'vir, Curr, Next>;
-
-    fn apply_function_with_casts<'tcx, Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        ident: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
-        args: &[vir::ExprGen<'vir, Curr, Next>],
-    ) -> vir::ExprGen<'vir, Curr, Next> {
-        let args = args
-            .iter()
-            .zip(ident.arity().args().iter())
-            .map(|(a, expected)| {
-                let arg_generic = self.is_generic(a.typ());
-                let expected_generic = self.is_generic(expected);
-                if arg_generic && !expected_generic {
-                    self.make_concrete(vcx, a)
-                } else if !arg_generic && expected_generic {
-                    self.make_generic(vcx, a)
-                } else {
-                    a
-                }
-            })
-            .collect::<Vec<_>>();
-        let args = vcx.alloc_slice(&args);
-        ident.apply(vcx, args)
-    }
-}
-
-impl<'vir> Caster<'vir> for TyMapCaster<'vir> {
-    fn is_generic(&self, ty: vir::Type<'vir>) -> bool {
-        ty == self.generic_ty
-    }
-
-    fn make_generic<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'_>,
-        expr: vir::ExprGen<'vir, Curr, Next>,
-    ) -> vir::ExprGen<'vir, Curr, Next> {
-        self.cast_functions
-            .get(&expr.ty())
-            .unwrap()
-            .make_generic
-            .apply(vcx, [expr])
-    }
-
-    fn make_concrete<Curr: 'vir, Next: 'vir>(
-        &self,
-        vcx: &'vir vir::VirCtxt<'_>,
-        expr: vir::ExprGen<'vir, Curr, Next>,
-    ) -> vir::ExprGen<'vir, Curr, Next> {
-        self.cast_functions
-            .get(&expr.ty())
-            .unwrap()
-            .make_concrete
-            .apply(vcx, [expr])
     }
 }

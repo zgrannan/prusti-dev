@@ -261,8 +261,10 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
             vcx.mk_func_app(self.name(), &args, self.result_ty())
         } else {
             panic!(
-                "Function {} could not be applied, debug info: {}",
+                "Function {} could not be applied. Expected: {:?}, Actual: {:?}, debug info: {}",
                 self.name(),
+                self.arity(),
+                args.map(|a| a.ty()),
                 self.debug_info()
             );
         }

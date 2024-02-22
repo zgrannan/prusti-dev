@@ -5,6 +5,7 @@ mod mir_pure;
 mod spec;
 mod mir_pure_function;
 mod pure;
+mod pure_generic_cast;
 mod local_def;
 mod r#type;
 mod r#const;

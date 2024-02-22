@@ -2,7 +2,8 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
-use crate::{encoders::SnapshotEnc, util::extract_type_params};
+
+use crate::util::extract_type_params;
 
 use super::{generic_cast::{GenericCastEnc, GenericCastOutput, GenericCastOutputRef}, snapshot::{SnapshotEncOutput, SnapshotEncOutputRef}};
 

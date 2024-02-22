@@ -8,11 +8,12 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
+use crate::encoders::GenericEnc;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::{encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc}, util::{Caster, TyMapCaster}};
+use crate::encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
 
-use super::{rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
 
@@ -522,7 +523,19 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .field_snaps_to_snap;
                 let (snap, place_ref) = self.encode_place_with_ref(curr_ver, place);
                 let place_ty = place.ty(self.body, self.vcx.tcx).ty;
-                let caster = TyMapCaster::new(vec![place_ty], self.deps);
+                let snap = if matches!(place_ty.kind(), ty::Param(_)) {
+                    snap
+                } else {
+                    assert_ne!(
+                        snap.ty(),
+                        self.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
+                        "Non-param kind {:?} was encoded as param type",
+                        place_ty.kind(),
+                    );
+                    eprintln!("Place_ty_kind: {:?}", place_ty.kind());
+                    let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty).unwrap();
+                    cast_ref.cast.make_generic.apply(self.vcx, [snap])
+                };
                 if kind.mutability().is_mut() {
                     // We want to distinguish if `place` is a value that lives
                     // in pure code or not. If it lives in impure (the only way
@@ -534,12 +547,12 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     // a re-borrow of created-in-pure reference then it will be
                     // field projections of `null` which is also `null`.
                     let place_ref = place_ref.unwrap_or_else(|| self.vcx.mk_null());
-                    caster.apply_function_with_casts(self.vcx, e_rvalue_ty, &[snap, place_ref])
+                    e_rvalue_ty.apply(self.vcx, &[snap, place_ref])
                 } else {
                     // For shared borrows we want to use just the snapshot
                     // without the reference so that snapshot equality compares
                     // only values.
-                    caster.apply_function_with_casts(self.vcx, e_rvalue_ty, &[snap])
+                    e_rvalue_ty.apply(self.vcx, &[snap])
                 }
             }
             // ThreadLocalRef
@@ -676,13 +689,22 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         let mut place_ty =  mir::tcx::PlaceTy::from_ty(self.body.local_decls[place.local].ty);
         let mut expr = self.mk_local_ex(place.local, curr_ver[&place.local]);
         let mut place_ref = None;
+        eprintln!("{:?} encoded as {:?}", place_ty.ty.kind(), expr.ty());
         // TODO: factor this out (duplication with impure encoder)?
         for elem in place.projection {
             (expr, place_ref) = self.encode_place_element(place_ty, elem, expr, place_ref);
             place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
+            eprintln!("PROJ {elem:?} {:?} encoded as {:?}", place_ty.ty.kind(), expr.ty());
         }
         // Can we ever have the use of a projected place?
         assert!(place_ty.variant_index.is_none());
+        assert_eq!(
+            expr.ty() == self.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
+            matches!(place_ty.ty.kind(), ty::Param(_)),
+            "Expr ty was {:?} but place ty was {:?}",
+            expr.ty(),
+            place_ty.ty.kind(),
+        );
         (expr, place_ref)
     }
 
@@ -700,16 +722,23 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .deps
                     .require_local::<RustTySnapshotsEnc>(place_ty.ty)
                     .unwrap()
-                    .generic_snapshot;
-                let place_ref = e_ty
+                    .generic_snapshot
                     .specifics
-                    .expect_structlike()
+                    .expect_structlike();
+                let place_ref = e_ty
                     .field_access
                     .get(1)
                     .map(|r| r.read.apply(self.vcx, [expr]));
-                let expr = e_ty.specifics.expect_structlike().field_access[0]
+                let expr = e_ty.field_access[0]
                     .read
                     .apply(self.vcx, [expr]);
+                let place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
+                let expr = if matches!(place_ty.ty.kind(), ty::Param(_)) {
+                    expr
+                } else {
+                    let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty.ty).unwrap();
+                    cast_ref.cast.make_concrete.apply(self.vcx, [expr])
+                };
                 (expr, place_ref)
             }
             mir::ProjectionElem::Field(field_idx, _) => {

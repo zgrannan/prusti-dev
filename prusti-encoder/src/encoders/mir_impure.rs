@@ -11,6 +11,7 @@ use prusti_rustc_interface::{
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity};
+use crate::encoders::pure_generic_cast::{CastArgs, PureGenericCastEnc};
 
 pub struct MirImpureEnc;
 
@@ -30,7 +31,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::{encoders::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc}, util::{Caster, TyMapCaster}};
+use crate::encoders::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -701,19 +702,14 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                                 assert!(variant.fields.len() == fields.len());
                                 variant.fields.iter().zip(fields.iter()).map(|(v_field, field)| {
                                     let field_ty = field.ty(self.local_decls, self.vcx.tcx);
-                                    let v_field_is_param = matches!(v_field.ty(self.vcx.tcx, identity_substs).kind(), ty::TyKind::Param(..));
-                                    let field_is_param = matches!(field_ty.kind(), ty::TyKind::Param(..));
-                                    let snap = self.encode_operand_snap(field);
-                                    if v_field_is_param != field_is_param {
-                                        let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
-                                        if !field_is_param {
-                                            cast_functions.cast.make_generic.apply(self.vcx, [snap])
-                                        } else {
-                                            cast_functions.cast.make_concrete.apply(self.vcx, [snap])
+                                    let cast = self.deps.require_ref::<PureGenericCastEnc>(
+                                        CastArgs {
+                                            expected: v_field.ty(self.vcx.tcx,identity_substs),
+                                            actual: field_ty
                                         }
-                                    } else {
-                                        snap
-                                    }
+                                    ).unwrap();
+                                    let snap = self.encode_operand_snap(field);
+                                    cast.apply(self.vcx, snap)
                                 }).collect::<Vec<_>>()
                             }
                             _ => unreachable!()
