@@ -92,8 +92,6 @@ impl TaskEncoder for GenericCastEnc {
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
             let self_ty = domain_ref.domain.apply(vcx, []);
             let base_name = domain_ref.base_name;
-            let make_generic_arg_tys = vcx.alloc([self_ty]);
-            let make_generic_arg_decls = vcx.alloc_slice(&[vcx.mk_local_decl("self", self_ty)]);
             let num_ty_args = domain_ref.type_function.arity().len();
 
             let mk_type_spec = |param| {
@@ -123,27 +121,15 @@ impl TaskEncoder for GenericCastEnc {
                 }
             };
 
+            let make_generic_arg_tys = vcx.alloc([self_ty]);
+
             let make_generic_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_generic_s_{base_name}"),
                 UnaryArity::new(make_generic_arg_tys),
                 generic_ref.param_snapshot,
             );
 
-            let make_generic_post =
-                mk_type_spec(vcx.mk_local_ex("result", generic_ref.param_snapshot));
-
-            let make_generic = vcx.mk_function(
-                make_generic_ident.name(),
-                make_generic_arg_decls,
-                generic_ref.param_snapshot,
-                &[],
-                vcx.alloc_slice(&[make_generic_post]),
-                None,
-            );
-
             let make_concrete_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
-            let make_concrete_arg_decl = vcx.mk_local_decl("snap", generic_ref.param_snapshot);
-            let make_concrete_arg_decls = vcx.alloc_slice(&[make_concrete_arg_decl]);
 
             let make_concrete_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
@@ -151,7 +137,42 @@ impl TaskEncoder for GenericCastEnc {
                 self_ty,
             );
 
+            deps.emit_output_ref::<Self>(
+                *ty,
+                GenericCastOutputRef::CastFunctions {
+                    make_generic: make_generic_ident,
+                    make_concrete: make_concrete_ident,
+                },
+            );
+
+            let make_generic_arg = vcx.mk_local_decl("self", self_ty);
+
+            let make_generic_arg_decls = vcx.alloc_slice(&[make_generic_arg]);
+
+            let make_generic_result = vcx.mk_local_ex("result", generic_ref.param_snapshot);
+
+            let make_generic_post = vcx.mk_eq_expr(
+                make_concrete_ident.apply(vcx, [make_generic_result]),
+                vcx.mk_local_ex(make_generic_arg.name, make_generic_arg.ty),
+            );
+            let make_generic = vcx.mk_function(
+                make_generic_ident.name(),
+                make_generic_arg_decls,
+                generic_ref.param_snapshot,
+                &[],
+                vcx.alloc_slice(&[mk_type_spec(make_generic_result), make_generic_post]),
+                None,
+            );
+
+            let make_concrete_arg_decl = vcx.mk_local_decl("snap", generic_ref.param_snapshot);
+            let make_concrete_arg_decls = vcx.alloc_slice(&[make_concrete_arg_decl]);
+
             let make_concrete_pre = mk_type_spec(
+                vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
+            );
+
+            let make_concrete_post = vcx.mk_eq_expr(
+                make_generic_ident.apply(vcx, [vcx.mk_local_ex("result", self_ty)]),
                 vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
             );
 
@@ -160,15 +181,8 @@ impl TaskEncoder for GenericCastEnc {
                 make_concrete_arg_decls,
                 self_ty,
                 vcx.alloc_slice(&[make_concrete_pre]),
-                &[],
+                vcx.alloc_slice(&[make_concrete_post]),
                 None,
-            );
-            deps.emit_output_ref::<Self>(
-                *ty,
-                GenericCastOutputRef::CastFunctions {
-                    make_generic: make_generic_ident,
-                    make_concrete: make_concrete_ident,
-                },
             );
 
             Ok((vcx.alloc_slice(&[make_generic, make_concrete]), ()))

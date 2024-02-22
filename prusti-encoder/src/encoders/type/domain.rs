@@ -278,32 +278,6 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             generic_ref.type_snapshot,
         );
 
-        let make_generic_arg_tys = vcx.alloc([self_ty]);
-
-        let make_generic_ident = FunctionIdent::new(
-            vir::vir_format!(vcx, "make_generic_s_{base_name}"),
-            UnaryArity::new(make_generic_arg_tys),
-            generic_ref.param_snapshot,
-        );
-
-        let make_generic = vcx.mk_domain_function(
-            false,
-            make_generic_ident.name(),
-            make_generic_arg_tys,
-            generic_ref.param_snapshot,
-        );
-
-        let make_concrete_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
-
-        let make_concrete_ident = FunctionIdent::new(
-            vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
-            UnaryArity::new(make_concrete_arg_tys),
-            self_ty,
-        );
-
-        let make_concrete =
-            vcx.mk_domain_function(false, make_concrete_ident.name(), make_concrete_arg_tys, self_ty);
-
         let self_local = vcx.mk_local("self", self_ty);
         let self_ex = vcx.mk_local_ex_local(self_local);
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl_local(self_local)]);
