@@ -682,17 +682,12 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         };
                         let casted_args = match kind {
                             mir::AggregateKind::Tuple => {
-                                // All arguements to tuple constructor should be generic
+                                // All arguments to tuple constructor should be generic
                                 fields.iter().map(|field| {
                                     let snap = self.encode_operand_snap(field);
                                     let field_ty = field.ty(self.local_decls, self.vcx.tcx);
-                                    if matches!(field_ty.kind(), ty::TyKind::Param(..)) {
-                                        // This argument is alread generic, don't make abstract
-                                        snap
-                                    } else {
-                                        let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
-                                        cast_functions.cast.make_generic.apply(self.vcx, [snap])
-                                    }
+                                    let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
+                                    cast_functions.cast.cast_to_generic_if_necessary(self.vcx, snap)
                                 }).collect::<Vec<_>>()
                             }
                             mir::AggregateKind::Adt(def_id, vid, ..) => {

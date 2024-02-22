@@ -85,8 +85,9 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "generic casts");
     for output in crate::encoders::generic_cast::GenericCastEnc::all_outputs() {
-        viper_code.push_str(&format!("{:?}\n", output.make_concrete));
-        viper_code.push_str(&format!("{:?}\n", output.make_generic));
+        for cast_function in output {
+            viper_code.push_str(&format!("{:?}\n", cast_function));
+        }
     }
 
     header(&mut viper_code, "snapshots");

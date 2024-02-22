@@ -523,19 +523,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .field_snaps_to_snap;
                 let (snap, place_ref) = self.encode_place_with_ref(curr_ver, place);
                 let place_ty = place.ty(self.body, self.vcx.tcx).ty;
-                let snap = if matches!(place_ty.kind(), ty::Param(_)) {
-                    snap
-                } else {
-                    assert_ne!(
-                        snap.ty(),
-                        self.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
-                        "Non-param kind {:?} was encoded as param type",
-                        place_ty.kind(),
-                    );
-                    eprintln!("Place_ty_kind: {:?}", place_ty.kind());
-                    let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty).unwrap();
-                    cast_ref.cast.make_generic.apply(self.vcx, [snap])
-                };
+                let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty).unwrap();
+                // The snapshot of the referenced value should be encoded as a generic `Param`
+                let snap = cast_ref.cast.cast_to_generic_if_necessary(self.vcx, snap);
                 if kind.mutability().is_mut() {
                     // We want to distinguish if `place` is a value that lives
                     // in pure code or not. If it lives in impure (the only way
@@ -689,22 +679,13 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         let mut place_ty =  mir::tcx::PlaceTy::from_ty(self.body.local_decls[place.local].ty);
         let mut expr = self.mk_local_ex(place.local, curr_ver[&place.local]);
         let mut place_ref = None;
-        eprintln!("{:?} encoded as {:?}", place_ty.ty.kind(), expr.ty());
         // TODO: factor this out (duplication with impure encoder)?
         for elem in place.projection {
             (expr, place_ref) = self.encode_place_element(place_ty, elem, expr, place_ref);
             place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
-            eprintln!("PROJ {elem:?} {:?} encoded as {:?}", place_ty.ty.kind(), expr.ty());
         }
         // Can we ever have the use of a projected place?
         assert!(place_ty.variant_index.is_none());
-        assert_eq!(
-            expr.ty() == self.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
-            matches!(place_ty.ty.kind(), ty::Param(_)),
-            "Expr ty was {:?} but place ty was {:?}",
-            expr.ty(),
-            place_ty.ty.kind(),
-        );
         (expr, place_ref)
     }
 
@@ -733,12 +714,10 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .read
                     .apply(self.vcx, [expr]);
                 let place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
-                let expr = if matches!(place_ty.ty.kind(), ty::Param(_)) {
-                    expr
-                } else {
-                    let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty.ty).unwrap();
-                    cast_ref.cast.make_concrete.apply(self.vcx, [expr])
-                };
+                // Since the `expr` is the target of a reference, it is encoded as a `Param`.
+                // If it is not a type parameter, we cast it to its concrete Snapshot.
+                let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty.ty).unwrap();
+                let expr = cast_ref.cast.cast_to_concrete_if_possible(self.vcx, expr);
                 (expr, place_ref)
             }
             mir::ProjectionElem::Field(field_idx, _) => {

@@ -1,29 +1,61 @@
+use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, FunctionIdent, UnaryArity};
+use vir::{CallableIdent, FunctionIdent, UnaryArity, VirCtxt};
 
 use crate::{
-    encoders::{domain::DomainEnc, GenericEnc, SnapshotEnc},
+    encoders::{domain::DomainEnc, GenericEnc},
     util::MostGenericTy,
 };
 
 pub struct GenericCastEnc;
 
 #[derive(Copy, Clone, Debug)]
-pub struct GenericCastOutputRef<'vir> {
-    /// Casts a concrete type to a generic type
-    pub make_generic: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+pub enum GenericCastOutputRef<'vir> {
+    CastFunctions {
+        /// Casts a concrete type to a generic type
+        make_generic: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+        /// Casts a generic type to a concrete type
+        make_concrete: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+    },
+    AlreadyGeneric,
+}
 
-    /// Casts a generic type to a concrete type
-    pub make_concrete: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+impl<'vir> GenericCastOutputRef<'vir> {
+    /// Converts the snapshot `snap` to a generic "Param" snapshot, if it's not
+    /// encoded as one already.
+    pub fn cast_to_generic_if_necessary<'tcx, Curr, Next>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        snap: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        match self {
+            GenericCastOutputRef::AlreadyGeneric => snap,
+            GenericCastOutputRef::CastFunctions { make_generic, .. } => {
+                make_generic.apply(vcx, [snap])
+            }
+        }
+    }
+
+    // Converts the snapshot `snap` to a concrete snapshot, if the concrete type
+    // is known.
+    pub fn cast_to_concrete_if_possible<'tcx, Curr, Next>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+        snap: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        match self {
+            GenericCastOutputRef::AlreadyGeneric => snap,
+            GenericCastOutputRef::CastFunctions { make_concrete, .. } => {
+                make_concrete.apply(vcx, [snap])
+            }
+        }
+    }
 }
 
 impl<'vir> task_encoder::OutputRefAny for GenericCastOutputRef<'vir> {}
 
-#[derive(Clone)]
-pub struct GenericCastOutput<'vir> {
-    pub make_generic: vir::Function<'vir>,
-    pub make_concrete: vir::Function<'vir>,
-}
+/// The list of cast functions, if any
+type GenericCastOutput<'vir> = &'vir [vir::Function<'vir>];
 
 impl TaskEncoder for GenericCastEnc {
     task_encoder::encoder_cache!(GenericCastEnc);
@@ -50,6 +82,10 @@ impl TaskEncoder for GenericCastEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
+        if ty.is_generic() {
+            deps.emit_output_ref::<Self>(*ty, GenericCastOutputRef::AlreadyGeneric);
+            return Ok((&[], ()));
+        }
         assert!(!ty.is_generic());
         vir::with_vcx(|vcx| {
             let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
@@ -129,19 +165,13 @@ impl TaskEncoder for GenericCastEnc {
             );
             deps.emit_output_ref::<Self>(
                 *ty,
-                GenericCastOutputRef {
+                GenericCastOutputRef::CastFunctions {
                     make_generic: make_generic_ident,
                     make_concrete: make_concrete_ident,
                 },
             );
 
-            Ok((
-                GenericCastOutput {
-                    make_generic,
-                    make_concrete,
-                },
-                (),
-            ))
+            Ok((vcx.alloc_slice(&[make_generic, make_concrete]), ()))
         })
     }
 }
