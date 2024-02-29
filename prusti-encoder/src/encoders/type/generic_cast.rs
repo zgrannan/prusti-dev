@@ -1,12 +1,16 @@
-use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, FunctionIdent, UnaryArity, VirCtxt};
+use vir::{CallableIdent, FunctionIdent, UnaryArity};
 
 use crate::{
     encoders::{domain::DomainEnc, GenericEnc},
     util::MostGenericTy,
 };
 
+/// Takes as input the most generic version (c.f. `MostGenericTy`) of a Rust
+/// type, and generates functions to convert the generic Viper representation of
+/// a Rust expression with that type to its concrete representation, and
+/// vice-versa. If the provided type is generic, it does nothing, returning
+/// `GenericCastOutputRef::AlreadyGeneric`.
 pub struct GenericCastEnc;
 
 #[derive(Copy, Clone, Debug)]
@@ -86,7 +90,6 @@ impl TaskEncoder for GenericCastEnc {
             deps.emit_output_ref::<Self>(*ty, GenericCastOutputRef::AlreadyGeneric);
             return Ok((&[], ()));
         }
-        assert!(!ty.is_generic());
         vir::with_vcx(|vcx| {
             let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();

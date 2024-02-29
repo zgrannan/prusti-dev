@@ -7,7 +7,17 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use vir::{Arity, BinaryArity, CallableIdent, DomainParamData, Function, FunctionIdent, KnownArityAny, ToKnownArity, UnaryArity, UnknownArity};
+use vir::{
+    BinaryArity,
+    CallableIdent,
+    DomainParamData,
+    FunctionIdent,
+    KnownArityAny,
+    NullaryArityAny,
+    ToKnownArity,
+    UnaryArity,
+    UnknownArity
+};
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
 /// Note: there should never be a dependency on `PredicateEnc` inside this
@@ -73,7 +83,7 @@ pub enum DomainEncSpecifics<'vir> {
 #[derive(Clone, Debug)]
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
-    pub domain: vir::DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
+    pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
 
     /// Takes as input the generics for this type (if any),
     /// and returns the resulting type. Used for generics

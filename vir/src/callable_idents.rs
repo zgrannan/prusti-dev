@@ -223,6 +223,8 @@ impl<'vir, T, const N: usize> Clone for KnownArityAny<'vir, T, N> {
         Self(self.0)
     }
 }
+pub type NullaryArityAny<'vir, T> = KnownArityAny<'vir, T, 0>;
+
 impl<'vir, T, const N: usize> Copy for KnownArityAny<'vir, T, N> {}
 pub type KnownArity<'vir, const N: usize> = KnownArityAny<'vir, Type<'vir>, N>;
 pub type NullaryArity<'vir> = KnownArity<'vir, 0>;

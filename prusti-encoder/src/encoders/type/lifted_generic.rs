@@ -35,10 +35,6 @@ impl TaskEncoder for LiftedGenericEnc {
 
     type OutputFullLocal<'vir> = ();
 
-    type OutputFullDependency<'vir> = ();
-
-    type EnqueueingError = ();
-
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {

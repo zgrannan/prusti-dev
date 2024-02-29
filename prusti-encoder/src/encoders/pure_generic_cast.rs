@@ -3,10 +3,7 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::VirCtxt;
 
-use super::{
-    generic::GenericEncOutputRef, generic_cast::GenericCastOutputRef,
-    rust_ty_generic_cast::RustTyGenericCastEncOutputRef,
-};
+use super::generic_cast::GenericCastOutputRef;
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {
@@ -35,6 +32,16 @@ impl<'vir> PureGenericCastOutputRef<'vir> {
 
 impl<'vir> task_encoder::OutputRefAny for PureGenericCastOutputRef<'vir> {}
 
+/// Returns necessary data to support casting the generic Viper representation
+/// of a Rust expression to its concrete type, or vice versa, for function
+/// applications. It takes as input a `CastArgs` struct, which contains the the
+/// parameter type a function expects, and the type of the argument. If the
+/// function expects the concrete version of the type and the argument is
+/// generic, it returns a function to casts the generic expression to its
+/// concrete version. Likewise, if the function expects the generic version of
+/// the type and the argument is concrete, it returns a function to cast the
+/// concrete expression to its generic version. Otherwise, no cast is necessary
+/// and it returns `PureGenericCastOutputRef::NoCast`.
 pub struct PureGenericCastEnc;
 
 impl TaskEncoder for PureGenericCastEnc {
