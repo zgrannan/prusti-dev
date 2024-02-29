@@ -6,7 +6,7 @@ use crate::encoders::GenericEnc;
 
 /// Lifting of a Rust type parameter to a Viper value
 /// Internally, this is represented as a LocalDecl, because
-/// unsubstituted generic parameters will always corresponds
+/// unsubstituted generic parameters will always correspond
 /// to a method or function parameter
 #[derive(Clone, Copy, Debug)]
 pub struct LiftedGeneric<'vir>(vir::LocalDecl<'vir>);
