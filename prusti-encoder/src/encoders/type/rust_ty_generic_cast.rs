@@ -5,6 +5,8 @@ use vir::with_vcx;
 
 use super::{generic_cast::{GenericCastEnc, GenericCastOutputRef}, most_generic_ty::extract_type_params};
 
+/// Generates Viper functions to cast between generic and non-generic Viper
+/// representations of a Rust value. See `GenericCastEnc` for more details.
 pub struct RustTyGenericCastEnc;
 
 #[derive(Clone)]
@@ -20,13 +22,10 @@ impl TaskEncoder for RustTyGenericCastEnc {
     type TaskDescription<'vir> = ty::Ty<'vir>;
 
     type OutputRef<'vir> = RustTyGenericCastEncOutputRef<'vir>;
+
     type OutputFullLocal<'vir> = ();
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
-
-    type OutputFullDependency<'vir> = ();
-
-    type EnqueueingError = ();
 
     type EncodingError = ();
 

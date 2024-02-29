@@ -20,6 +20,10 @@ pub enum LiftedTy<'vir> {
 }
 
 impl<'vir, 'tcx> LiftedTy<'vir> {
+    /// Extracts the unique type parameters that should be used to instantiate
+    /// the type, removing duplicate instances of the same parameter. For
+    /// example, from type `Tuple3<T, U, Result<T, W>>` it would return `[T, U,
+    /// W]`.
     pub fn instantiation_arguments(&self) -> Vec<vir::LocalDecl<'vir>> {
         match self {
             LiftedTy::Generic(g) => vec![g.decl()],
@@ -68,13 +72,7 @@ impl TaskEncoder for LiftedTyEnc {
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
 
-    type OutputRef<'vir> = LiftedTy<'vir>;
-
-    type OutputFullLocal<'vir> = ();
-
-    type OutputFullDependency<'vir> = ();
-
-    type EnqueueingError = ();
+    type OutputFullLocal<'vir> = LiftedTy<'vir>;
 
     type EncodingError = ();
 
@@ -95,8 +93,9 @@ impl TaskEncoder for LiftedTyEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
+        deps.emit_output_ref::<Self>(*task_key, ());
         with_vcx(|vcx| {
-            let output_ref = if let TyKind::Param(p) = task_key.kind() {
+            let result = if let TyKind::Param(p) = task_key.kind() {
                 LiftedTy::Generic(
                     deps.require_ref::<LiftedGenericEnc>(p).unwrap()
                 )
@@ -108,15 +107,14 @@ impl TaskEncoder for LiftedTyEnc {
                     .type_function;
                 let args = args
                     .into_iter()
-                    .map(|ty| deps.require_ref::<Self>(ty).unwrap())
+                    .map(|ty| deps.require_local::<Self>(ty).unwrap())
                     .collect::<Vec<_>>();
                 LiftedTy::Instantiated {
                     ty_constructor,
                     args: vcx.alloc_slice(&args),
                 }
             };
-            deps.emit_output_ref::<LiftedTyEnc>(*task_key, output_ref);
-        });
-        Ok(((), ()))
+            Ok((result, ()))
+        })
     }
 }

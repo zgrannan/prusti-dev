@@ -98,7 +98,7 @@ impl TaskEncoder for RustTyPredicatesEnc {
         with_vcx(|vcx| {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let generic_predicate = deps.require_ref::<PredicateEnc>(generic_ty).unwrap();
-            let ty = deps.require_ref::<LiftedTyEnc>(*task_key).unwrap();
+            let ty = deps.require_local::<LiftedTyEnc>(*task_key).unwrap();
             deps.emit_output_ref::<RustTyPredicatesEnc>(
                 *task_key,
                 RustTyPredicatesEncOutputRef {
