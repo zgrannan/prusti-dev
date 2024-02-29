@@ -170,14 +170,10 @@ pub struct PredicateEncOutput<'vir> {
     pub method_assign: vir::Method<'vir>,
 }
 
-use crate::{encoders::GenericEnc, util::MostGenericTy};
+use crate::encoders::GenericEnc;
 
 use super::{
-    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct},
-    snapshot::SnapshotEnc,
-    lifted::LiftedTy,
-    lifted_generic::LiftedGeneric,
-    rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef},
+    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, lifted::LiftedTy, lifted_generic::LiftedGeneric, most_generic_ty::MostGenericTy, rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef}, snapshot::SnapshotEnc
 };
 
 impl TaskEncoder for PredicateEnc {

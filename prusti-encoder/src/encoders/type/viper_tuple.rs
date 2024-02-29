@@ -3,9 +3,7 @@ use task_encoder::{
     TaskEncoderDependencies,
 };
 
-use crate::util::MostGenericTy;
-
-use super::domain::{DomainEnc, DomainDataStruct};
+use super::{domain::{DomainDataStruct, DomainEnc}, most_generic_ty::MostGenericTy};
 
 pub struct ViperTupleEnc;
 

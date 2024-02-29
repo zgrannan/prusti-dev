@@ -2,9 +2,7 @@ use prusti_rustc_interface::middle::ty::{self, TyKind};
 use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{with_vcx, FunctionIdent, UnknownArity};
 
-use crate::util::extract_type_params;
-
-use super::{domain::DomainEnc, lifted_generic::{LiftedGeneric, LiftedGenericEnc}};
+use super::{domain::DomainEnc, lifted_generic::{LiftedGeneric, LiftedGenericEnc}, most_generic_ty::extract_type_params};
 
 /// Representation of a Rust type as a Viper expression
 #[derive(Clone, Copy, Debug)]

@@ -2,9 +2,9 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
-use crate::{encoders::SnapshotEnc, util::extract_type_params};
+use crate::encoders::SnapshotEnc;
 
-use super::snapshot::{SnapshotEncOutput, SnapshotEncOutputRef};
+use super::{most_generic_ty::extract_type_params, snapshot::{SnapshotEncOutput, SnapshotEncOutputRef}};
 
 pub struct RustTySnapshotsEnc;
 

@@ -1,10 +1,9 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, UnaryArity};
 
-use crate::{
-    encoders::{domain::DomainEnc, GenericEnc},
-    util::MostGenericTy,
-};
+use crate::encoders::{domain::DomainEnc, GenericEnc} ;
+
+use super::most_generic_ty::MostGenericTy;
 
 /// Takes as input the most generic version (c.f. `MostGenericTy`) of a Rust
 /// type, and generates functions to convert the generic Viper representation of

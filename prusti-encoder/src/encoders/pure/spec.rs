@@ -6,10 +6,7 @@ use prusti_rustc_interface::{
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
-use crate::{
-    encoders::{mir_pure::PureKind, rust_ty_predicates::RustTyPredicatesEnc, MirPureEnc},
-    util::{extract_type_params, MostGenericTy},
-};
+use crate::encoders::{mir_pure::PureKind, rust_ty_predicates::RustTyPredicatesEnc, MirPureEnc};
 pub struct MirSpecEnc;
 
 #[derive(Clone)]

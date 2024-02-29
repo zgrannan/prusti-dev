@@ -3,9 +3,7 @@ use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
 
-use crate::util::extract_type_params;
-
-use super::generic_cast::{GenericCastEnc, GenericCastOutputRef};
+use super::{generic_cast::{GenericCastEnc, GenericCastOutputRef}, most_generic_ty::extract_type_params};
 
 pub struct RustTyGenericCastEnc;
 

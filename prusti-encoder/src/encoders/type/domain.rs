@@ -91,12 +91,9 @@ pub struct DomainEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
-use crate::{
-    encoders::GenericEnc,
-    util::MostGenericTy,
-};
+use crate::encoders::GenericEnc;
 
-use super::rust_ty_snapshots::RustTySnapshotsEnc;
+use super::{most_generic_ty::MostGenericTy, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()

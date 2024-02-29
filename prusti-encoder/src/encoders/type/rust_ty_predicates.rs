@@ -2,12 +2,9 @@ use prusti_rustc_interface::middle::ty::{self};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{with_vcx, Type, TypeData};
 
-use crate::{
-    encoders::{PredicateEnc, PredicateEncOutputRef},
-    util::extract_type_params,
-};
+use crate::encoders::{PredicateEnc, PredicateEncOutputRef};
 
-use super::lifted::{LiftedTy, LiftedTyEnc};
+use super::{lifted::{LiftedTy, LiftedTyEnc}, most_generic_ty::extract_type_params};
 
 pub struct RustTyPredicatesEnc;
 

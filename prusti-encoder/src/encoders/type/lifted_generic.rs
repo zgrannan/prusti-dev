@@ -4,10 +4,10 @@ use vir::with_vcx;
 
 use crate::encoders::GenericEnc;
 
-/// Lifting of a Rust type parameter to a Viper value
-/// Internally, this is represented as a LocalDecl, because
-/// unsubstituted generic parameters will always correspond
-/// to a method or function parameter
+/// Lifting of a Rust type parameter in a function to a Viper value of type
+/// `Type`. This is represented as a LocalDecl, because unsubstituted generic
+/// parameters will always correspond to a method or function parameter in the
+/// Viper encoding.
 #[derive(Clone, Copy, Debug)]
 pub struct LiftedGeneric<'vir>(vir::LocalDecl<'vir>);
 

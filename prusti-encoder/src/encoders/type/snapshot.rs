@@ -19,11 +19,9 @@ pub struct SnapshotEncOutput<'vir> {
     pub specifics: DomainEncSpecifics<'vir>,
 }
 
-use crate::util::MostGenericTy;
-
 use super::{
     domain::{DomainEnc, DomainEncSpecifics},
-    lifted_generic::{LiftedGeneric, LiftedGenericEnc},
+    lifted_generic::{LiftedGeneric, LiftedGenericEnc}, most_generic_ty::MostGenericTy,
 };
 
 impl TaskEncoder for SnapshotEnc {
