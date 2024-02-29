@@ -23,10 +23,10 @@ pub struct Stopwatch<Level: LogLevel> {
     level: PhantomData<Level>,
 }
 
-impl Stopwatch<log_level::Info> {
+impl Stopwatch<log_level::Error> {
     /// Starts a stopwatch logging at info level, within the given domain, timing a section with the given name.
     pub fn start<D: Display, S: ToString>(domain: D, section_name: S) -> Self {
-        Self::start_info(domain, section_name)
+        Self::start_error(domain, section_name)
     }
 }
 
