@@ -24,6 +24,21 @@ pub enum GenericCastOutputRef<'vir> {
 }
 
 impl<'vir> GenericCastOutputRef<'vir> {
+
+    pub fn concrete_option(&self) -> Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>> {
+        match self {
+            GenericCastOutputRef::AlreadyGeneric => None,
+            GenericCastOutputRef::CastFunctions { make_concrete, .. } => Some(*make_concrete),
+        }
+    }
+
+    pub fn generic_option(&self) -> Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>> {
+        match self {
+            GenericCastOutputRef::AlreadyGeneric => None,
+            GenericCastOutputRef::CastFunctions { make_generic, .. } => Some(*make_generic),
+        }
+    }
+
     /// Converts the snapshot `snap` to a generic "Param" snapshot, if it's not
     /// encoded as one already.
     pub fn cast_to_generic_if_necessary<'tcx, Curr, Next>(

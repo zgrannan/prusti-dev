@@ -11,7 +11,7 @@ use prusti_rustc_interface::{
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity};
-use crate::encoders::pure_generic_cast::{CastArgs, PureGenericCastEnc};
+use crate::encoders::{aggregate_snap_args::{AggregateSnapArgsEnc, AggregateSnapArgsEncTask}, pure_generic_cast::{CastArgs, PureGenericCastEnc}};
 
 pub struct MirImpureEnc;
 
@@ -680,35 +680,17 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                                 e_rvalue_ty.generic_predicate.get_variant_any(*vidx),
                             _ => e_rvalue_ty.generic_predicate.expect_structlike()
                         };
-                        let casted_args = match kind {
-                            mir::AggregateKind::Tuple => {
-                                // All arguments to tuple constructor should be generic
-                                fields.iter().map(|field| {
-                                    let snap = self.encode_operand_snap(field);
-                                    let field_ty = field.ty(self.local_decls, self.vcx.tcx);
-                                    let cast_functions = self.deps.require_ref::<RustTyGenericCastEnc>(field_ty).unwrap();
-                                    cast_functions.cast.cast_to_generic_if_necessary(self.vcx, snap)
-                                }).collect::<Vec<_>>()
+                        let field_tys = fields.iter()
+                            .map(|field| field.ty(self.local_decls, self.vcx.tcx))
+                            .collect::<Vec<_>>();
+                        let ty_caster = self.deps.require_local::<AggregateSnapArgsEnc>(
+                            AggregateSnapArgsEncTask {
+                                tys: field_tys,
+                                aggregate_type: kind.into()
                             }
-                            mir::AggregateKind::Adt(def_id, vid, ..) => {
-                                let adt_def = self.vcx.tcx.adt_def(*def_id);
-                                let variant = &adt_def.variant(*vid);
-                                let identity_substs = GenericArgs::identity_for_item(self.vcx.tcx, *def_id);
-                                assert!(variant.fields.len() == fields.len());
-                                variant.fields.iter().zip(fields.iter()).map(|(v_field, field)| {
-                                    let field_ty = field.ty(self.local_decls, self.vcx.tcx);
-                                    let cast = self.deps.require_ref::<PureGenericCastEnc>(
-                                        CastArgs {
-                                            expected: v_field.ty(self.vcx.tcx,identity_substs),
-                                            actual: field_ty
-                                        }
-                                    ).unwrap();
-                                    let snap = self.encode_operand_snap(field);
-                                    cast.apply(self.vcx, snap)
-                                }).collect::<Vec<_>>()
-                            }
-                            _ => unreachable!()
-                        };
+                        ).unwrap();
+                        let field_snaps = fields.iter().map(|field| self.encode_operand_snap(field)).collect::<Vec<_>>();
+                        let casted_args = ty_caster.apply_casts(self.vcx, field_snaps);
                         sl.snap_data.field_snaps_to_snap.apply(self.vcx, self.vcx.alloc_slice(&casted_args))
                     }
                     mir::Rvalue::Discriminant(place) => {

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
 
-use super::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{aggregate_snap_args::{AggregateSnapArgsEnc, AggregateSnapArgsEncTask}, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
 
@@ -600,11 +600,21 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         }
                         _ => e_rvalue_ty.generic_predicate.expect_structlike(),
                     };
+                    let field_tys = fields.iter()
+                        .map(|field| field.ty(&self.body.local_decls, self.vcx.tcx))
+                        .collect::<Vec<_>>();
+                    let ty_caster = self.deps.require_local::<AggregateSnapArgsEnc>(
+                        AggregateSnapArgsEncTask {
+                            tys: field_tys,
+                            aggregate_type: kind.into()
+                        }
+                    ).unwrap();
                     let cons_args: Vec<_> = fields
                         .iter()
                         .map(|field| self.encode_operand(curr_ver, field))
                         .collect();
-                    sl.snap_data.field_snaps_to_snap.apply(self.vcx, &cons_args)
+                    let casted_args = ty_caster.apply_casts(self.vcx, cons_args);
+                    sl.snap_data.field_snaps_to_snap.apply(self.vcx, self.vcx.alloc_slice(&casted_args))
                 }
                 _ => todo!("Unsupported Rvalue::AggregateKind: {kind:?}"),
             },
