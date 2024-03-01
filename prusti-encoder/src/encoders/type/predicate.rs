@@ -173,7 +173,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::encoders::GenericEnc;
 
 use super::{
-    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, lifted::LiftedTy, lifted_generic::LiftedGeneric, most_generic_ty::MostGenericTy, rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef}, snapshot::SnapshotEnc
+    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, lifted::{LiftedTy, LiftedTyEnc}, lifted_generic::LiftedGeneric, most_generic_ty::MostGenericTy, rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef}, snapshot::SnapshotEnc
 };
 
 impl TaskEncoder for PredicateEnc {
@@ -350,11 +350,12 @@ impl TaskEncoder for PredicateEnc {
                     enc.output_ref(PredicateEncData::Ref(specifics)),
                 );
 
+                let lifted_ty = deps.require_local::<LiftedTyEnc>(inner).unwrap();
                 let inner = deps
                     .require_ref::<RustTyPredicatesEnc>(inner)
                     .unwrap()
                     .generic_predicate;
-                Ok((enc.mk_ref(inner, specifics), ()))
+                Ok((enc.mk_ref(inner, lifted_ty, specifics), ()))
             }
             unsupported_type => todo!("type not supported: {unsupported_type:?}"),
         }
@@ -646,6 +647,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     pub fn mk_ref(
         mut self,
         inner: PredicateEncOutputRef<'vir>,
+        lifted_ty: LiftedTy<'vir>,
         data: PredicateEncDataRef<'vir>,
     ) -> PredicateEncOutput<'vir> {
         let self_field = self
@@ -656,19 +658,24 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         let non_null = self
             .vcx
             .mk_bin_op_expr(vir::BinOpKind::CmpNe, self_ref, self.vcx.mk_null());
+        let inner_ref_to_args = inner.ref_to_args(
+            self.vcx,
+            lifted_ty,
+            self_ref
+        );
         let inner_pred = self.vcx.mk_predicate_app_expr(inner.ref_to_pred.apply(
             self.vcx,
-            &[self_ref],
+            inner_ref_to_args,
             data.perm,
         ));
         let predicate = self.vcx.mk_conj(&[self_field, non_null, inner_pred]);
         self.predicates.push(self.vcx.mk_predicate(
             self.ref_to_pred,
-            self.self_decl,
+            self.ref_to_decls,
             Some(predicate),
         ));
 
-        let inner_snap = inner.ref_to_snap.apply(self.vcx, &[self_ref]);
+        let inner_snap = inner.ref_to_snap.apply(self.vcx, inner_ref_to_args);
         let snap = if data.perm.is_none() {
             // `Ref` is only part of snapshots for mutable references.
             data.snap_data

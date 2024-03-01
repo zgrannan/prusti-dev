@@ -1,8 +1,9 @@
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
+use std::fmt::Debug;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
+use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::DEBUGINFO_NONE, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -326,12 +327,21 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
-    pub fn mk_predicate<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir>>(
+    pub fn mk_predicate<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir> + Debug>(
         &'vir self,
         ident: PredicateIdent<'vir, A>,
         args: &'vir [LocalDecl<'vir>],
         expr: Option<ExprGen<'vir, Curr, Next>>
     ) -> PredicateGen<'vir, Curr, Next> {
+        if !ident.arity().types_match(args) {
+            panic!(
+                "Predicate {} could not be applied. Expected: {:?}, Actual: {:?} debug info: {}",
+                ident.name(),
+                ident.arity(),
+                args,
+                ident.debug_info()
+            );
+        }
         assert!(ident.arity().types_match(args));
         self.mk_predicate_unchecked(
             ident.name(),

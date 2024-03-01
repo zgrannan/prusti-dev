@@ -105,12 +105,15 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A
     }
 }
 
+impl <'vir, A: Arity<'vir>> PredicateIdent<'vir, A> {
+    pub fn debug_info(&self) -> DebugInfo {
+        self.2
+    }
+}
+
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
         Self(name, args, DebugInfo::new())
-    }
-    pub fn debug_info(&self) -> DebugInfo {
-        self.2
     }
     pub fn as_unknown_arity(self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
         PredicateIdent(self.0, UnknownArity::new(self.1.args()), self.debug_info())
