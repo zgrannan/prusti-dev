@@ -11,10 +11,14 @@ use crate::encoders::{
     rust_ty_generic_cast::RustTyGenericCastEnc,
 };
 
-pub struct AggregateSnapArgsEnc;
+/// Casts arguments to the snapshot constructor for an aggregate type (e.g.
+/// Tuples, ADTs) to appropriate (generic or concrete) Viper representations,
+/// depending on what the aggregate constructor expects. See
+/// `RustTyGenericCastEnc` and `PureGenericCastEnc` for more details.
+pub struct AggregateSnapArgsCastEnc;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct AggregateSnapArgsEncTask<'tcx> {
+pub struct AggregateSnapArgsCastEncTask<'tcx> {
     pub tys: Vec<Ty<'tcx>>,
     pub aggregate_type: AggregateType,
 }
@@ -44,11 +48,11 @@ impl From<&mir::AggregateKind<'_>> for AggregateType {
 }
 
 #[derive(Clone)]
-pub struct AggregateSnapArgsEncOutput<'vir>(
+pub struct AggregateSnapArgsCastEncOutput<'vir>(
     &'vir [Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>>],
 );
 
-impl<'vir> AggregateSnapArgsEncOutput<'vir> {
+impl<'vir> AggregateSnapArgsCastEncOutput<'vir> {
     pub fn apply_casts<Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'_>,
@@ -65,12 +69,12 @@ impl<'vir> AggregateSnapArgsEncOutput<'vir> {
     }
 }
 
-impl TaskEncoder for AggregateSnapArgsEnc {
-    task_encoder::encoder_cache!(AggregateSnapArgsEnc);
+impl TaskEncoder for AggregateSnapArgsCastEnc {
+    task_encoder::encoder_cache!(AggregateSnapArgsCastEnc);
 
-    type TaskDescription<'tcx> = AggregateSnapArgsEncTask<'tcx>;
+    type TaskDescription<'tcx> = AggregateSnapArgsCastEncTask<'tcx>;
 
-    type OutputFullLocal<'vir> = AggregateSnapArgsEncOutput<'vir>;
+    type OutputFullLocal<'vir> = AggregateSnapArgsCastEncOutput<'vir>;
 
     type EncodingError = ();
 
@@ -91,7 +95,7 @@ impl TaskEncoder for AggregateSnapArgsEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        deps.emit_output_ref::<AggregateSnapArgsEnc>(task_key.clone(), ());
+        deps.emit_output_ref::<AggregateSnapArgsCastEnc>(task_key.clone(), ());
         vir::with_vcx(|vcx| {
             let cast_functions: Vec<Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>>> =
                 match task_key.aggregate_type {
@@ -129,7 +133,7 @@ impl TaskEncoder for AggregateSnapArgsEnc {
                     }
                 };
             Ok((
-                AggregateSnapArgsEncOutput(vcx.alloc_slice(&cast_functions)),
+                AggregateSnapArgsCastEncOutput(vcx.alloc_slice(&cast_functions)),
                 (),
             ))
         })

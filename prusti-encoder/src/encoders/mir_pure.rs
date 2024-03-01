@@ -8,12 +8,10 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
-use crate::encoders::GenericEnc;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
-
-use super::{aggregate_snap_args::{AggregateSnapArgsEnc, AggregateSnapArgsEncTask}, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
 
@@ -603,8 +601,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     let field_tys = fields.iter()
                         .map(|field| field.ty(&self.body.local_decls, self.vcx.tcx))
                         .collect::<Vec<_>>();
-                    let ty_caster = self.deps.require_local::<AggregateSnapArgsEnc>(
-                        AggregateSnapArgsEncTask {
+                    let ty_caster = self.deps.require_local::<AggregateSnapArgsCastEnc>(
+                        AggregateSnapArgsCastEncTask {
                             tys: field_tys,
                             aggregate_type: kind.into()
                         }

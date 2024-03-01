@@ -3,7 +3,7 @@ use mir_state_analysis::{
     utils::Place,
 };
 use prusti_rustc_interface::{
-    middle::{mir, ty::{self, GenericArgs}},
+    middle::{mir, ty},
     span::def_id::DefId,
 };
 //use mir_ssa_analysis::{
@@ -11,7 +11,6 @@ use prusti_rustc_interface::{
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity};
-use crate::encoders::{aggregate_snap_args::{AggregateSnapArgsEnc, AggregateSnapArgsEncTask}, pure_generic_cast::{CastArgs, PureGenericCastEnc}};
 
 pub struct MirImpureEnc;
 
@@ -31,7 +30,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
+use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -683,8 +682,8 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         let field_tys = fields.iter()
                             .map(|field| field.ty(self.local_decls, self.vcx.tcx))
                             .collect::<Vec<_>>();
-                        let ty_caster = self.deps.require_local::<AggregateSnapArgsEnc>(
-                            AggregateSnapArgsEncTask {
+                        let ty_caster = self.deps.require_local::<AggregateSnapArgsCastEnc>(
+                            AggregateSnapArgsCastEncTask {
                                 tys: field_tys,
                                 aggregate_type: kind.into()
                             }

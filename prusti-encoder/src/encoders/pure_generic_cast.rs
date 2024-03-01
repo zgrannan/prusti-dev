@@ -18,22 +18,10 @@ pub enum PureGenericCastOutputRef<'vir> {
 }
 
 impl<'vir> PureGenericCastOutputRef<'vir> {
-
     pub fn cast_function(&self) -> Option<vir::FunctionIdent<'vir, vir::UnaryArity<'vir>>> {
         match self {
             PureGenericCastOutputRef::NoCast => None,
             PureGenericCastOutputRef::Cast(f) => Some(*f),
-        }
-    }
-
-    pub fn apply<Curr, Next>(
-        &self,
-        vcx: &'vir VirCtxt<'_>,
-        expr: vir::ExprGen<'vir, Curr, Next>,
-    ) -> vir::ExprGen<'vir, Curr, Next> {
-        match self {
-            PureGenericCastOutputRef::NoCast => expr,
-            PureGenericCastOutputRef::Cast(f) => f.apply(vcx, [expr]),
         }
     }
 }
