@@ -154,7 +154,7 @@ impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
             Self::Ternary(e) => e.fmt(f),
             Self::UnOp(e) => e.fmt(f),
             Self::Unfolding(e) => e.fmt(f),
-            Self::Todo(e) => write!(f, "{}", e),
+            Self::Todo(debug_info, e) => write!(f, "{e} {debug_info}"),
         }
     }
 }

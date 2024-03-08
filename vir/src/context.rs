@@ -1,9 +1,10 @@
+use cfg_if::cfg_if;
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 use std::fmt::Debug;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::DEBUGINFO_NONE, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
+use crate::{ data::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, gendata::*, genrefs::*, refs::*, Arity, CallableIdent, CheckTypes, MethodIdent, PredicateIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -13,6 +14,25 @@ macro_rules! const_expr {
         }
     };
 
+}
+
+// This is duplicated from debug_info.rs, because exported macros seem not to be
+// usable in the same crate. See
+// https://users.rust-lang.org/t/macro-rules-resolution-hell/40236
+cfg_if! {
+    if #[cfg(feature="vir_debug")] {
+        macro_rules! add_debug_note {
+            ($debug_info:expr, $($arg:tt)*) => {{
+                $debug_info.add_debug_note_never_call_this_function_directly(format!($($arg)*))
+            }};
+        }
+    } else {
+        macro_rules! add_debug_note {
+            ($debug_info:expr, $($arg:tt)*) => {{
+                ()
+            }};
+        }
+    }
 }
 
 /// The VIR context is a data structure used throughout the encoding process.
@@ -62,8 +82,15 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     pub fn mk_local<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> Local<'vir> {
-        self.alloc(LocalData { name, ty })
+        self.alloc(
+            LocalData {
+                name,
+                ty,
+                debug_info: DebugInfo::new(),
+            }
+        )
     }
+
     pub fn mk_local_decl<'vir>(&'vir self, name: &'vir str, ty: Type<'vir>) -> LocalDecl<'vir> {
         self.alloc(LocalDeclData { name, ty })
     }
@@ -75,7 +102,13 @@ impl<'tcx> VirCtxt<'tcx> {
         &'vir self,
         local: Local<'vir>,
     ) -> ExprGen<'vir, Curr, Next> {
-        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Local(local))))
+        let expr = ExprGenData::new(self.alloc(ExprKindGenData::Local(local)));
+        add_debug_note!(
+            expr.debug_info,
+            "Created from local containing debug info: {}",
+            local.debug_info
+        );
+        self.alloc(expr)
     }
     pub fn mk_local_ex<'vir, Curr, Next>(&'vir self, name: &'vir str, ty: Type<'vir>) -> ExprGen<'vir, Curr, Next> {
         self.mk_local_ex_local(self.mk_local(name, ty))
@@ -232,7 +265,7 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     pub fn mk_todo_expr<'vir, Curr, Next>(&'vir self, msg: &'vir str) -> ExprGen<'vir, Curr, Next> {
-        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Todo(msg))))
+        self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Todo(DebugInfo::new(), msg))))
     }
 
     pub const fn mk_bool<'vir, const VALUE: bool>(&'vir self) -> Expr<'vir> {

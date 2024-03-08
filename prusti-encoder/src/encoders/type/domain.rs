@@ -217,7 +217,7 @@ impl TaskEncoder for DomainEnc {
                     "Ref_immutable"
                 };
                 let (mut enc, mut ty_params) =
-                    DomainEncData::new(vcx, &base_name, [inner].into_iter(), deps);
+                    DomainEncData::new(vcx, base_name, [inner].into_iter(), deps);
                 deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                 if m.is_mut() {
                     ty_params.push(&vir::TypeData::Ref);

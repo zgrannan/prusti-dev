@@ -1,13 +1,14 @@
 use std::fmt::Debug;
 
 use prusti_rustc_interface::middle::mir;
-use crate::{refs::*, FunctionIdent, UnknownArity, callable_idents::CallableIdent};
+use crate::{callable_idents::CallableIdent, debug_info::DebugInfo, refs::*, FunctionIdent, UnknownArity};
 use std::collections::HashMap;
 
 
 pub struct LocalData<'vir> {
     pub name: &'vir str, // TODO: identifiers
     pub ty: Type<'vir>,
+    pub debug_info: DebugInfo,
 }
 
 #[derive(Eq, PartialEq)]

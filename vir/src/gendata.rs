@@ -149,7 +149,7 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
 
     Lazy(&'vir str, Box<dyn for <'a> Fn(&'vir crate::VirCtxt<'a>, Curr) -> Next + 'vir>),
 
-    Todo(&'vir str),
+    Todo(DebugInfo, &'vir str),
 }
 
 impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
@@ -171,7 +171,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::FuncApp(a) => a.result_ty,
             ExprKindGenData::PredicateApp(_) => &TypeData::Predicate,
             ExprKindGenData::Lazy(_, _) => panic!("cannot get type of lazy expression"),
-            ExprKindGenData::Todo(msg) => panic!("{msg}")
+            ExprKindGenData::Todo(debug_info, msg) => panic!("{msg} {debug_info}")
         }
     }
 }

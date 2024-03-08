@@ -68,7 +68,10 @@ cfg_if! {
 
         impl std::fmt::Display for DebugInfoData {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "Debug Notes: {:?}", self.debug_notes)?;
+                write!(f, "Debug Notes:\n")?;
+                for note in &self.debug_notes {
+                    write!(f, "- {}\n", note)?;
+                }
                 write!(f, "Backtrace: {}", self.backtrace)
             }
         }

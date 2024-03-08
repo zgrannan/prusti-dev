@@ -454,14 +454,31 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         tmp_exp
     }
 
+    fn encode_ref_to_place(
+        &mut self,
+        place: Place<'tcx>,
+    ) -> vir::Expr<'vir> {
+        match place.projection {
+            [mir::ProjectionElem::Deref, ..] => {
+                // TODO: This probably isn't the correct way to handle a reborrow
+                self.encode_projection(place.local, &place.projection[1..])
+            }
+            other => unimplemented!("{other:?}")
+        }
+    }
+
     fn encode_place(
         &mut self,
         place: Place<'tcx>,
     ) -> vir::Expr<'vir> {
-        let mut place_ty = mir::tcx::PlaceTy::from_ty(self.local_decls[place.local].ty);
-        let mut expr = self.local_defs.locals[place.local].local_ex;
+        self.encode_projection(place.local, &place.projection)
+    }
+
+    fn encode_projection(&mut self, local: mir::Local, projection: &[mir::ProjectionElem<mir::Local, ty::Ty<'tcx>>]) -> vir::Expr<'vir> {
+        let mut place_ty = mir::tcx::PlaceTy::from_ty(self.local_decls[local].ty);
+        let mut expr = self.local_defs.locals[local].local_ex;
         // TODO: factor this out (duplication with pure encoder)?
-        for &elem in place.projection {
+        for &elem in projection {
             expr = self.encode_place_element(place_ty, elem, expr);
             place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
         }
@@ -714,6 +731,9 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     //mir::Rvalue::Discriminant(Place<'tcx>) => {}
                     //mir::Rvalue::ShallowInitBox(Operand<'tcx>, Ty<'tcx>) => {}
                     //mir::Rvalue::CopyForDeref(Place<'tcx>) => {}
+                    mir::Rvalue::Ref(_, _ , place) => {
+                        self.encode_ref_to_place(Place::from(*place))
+                    }
                     other => {
                         tracing::error!("unsupported rvalue {other:?}");
                         self.vcx.mk_todo_expr(vir::vir_format!(self.vcx, "rvalue {rvalue:?}"))

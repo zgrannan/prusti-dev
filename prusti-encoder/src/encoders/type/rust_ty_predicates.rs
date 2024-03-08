@@ -25,7 +25,12 @@ impl<'vir> RustTyPredicatesEncOutputRef<'vir> {
         self_new_snap: vir::Expr<'vir>,
     ) -> vir::Stmt<'vir> {
         assert!(self_ref.ty() == &TypeData::Ref);
-        assert!(self_new_snap.ty() == self.snapshot());
+        assert_eq!(
+            self_new_snap.ty(),
+            self.snapshot(),
+            "type mismatch, self_new_snap created at {}",
+            self_new_snap.debug_info
+        );
         let mut args = vec![self_ref];
         args.extend(self.ty.arg_exprs(vcx));
         args.push(self_new_snap);
