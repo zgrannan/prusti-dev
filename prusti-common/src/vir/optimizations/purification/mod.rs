@@ -432,17 +432,17 @@ impl<'a> ast::ExprFolder for Purifier<'a> {
             }
         }
 
-        Expr::unfolding_with_pos(
+        Expr::Unfolding(ast::Unfolding {
             predicate,
-            arguments
+            arguments: arguments
                 .into_iter()
                 .map(|e| ast::ExprFolder::fold(self, e))
                 .collect(),
-            *self.fold_boxed(base),
+            base: self.fold_boxed(base),
             permission,
             variant,
             position,
-        )
+        })
     }
 
     fn fold_labelled_old(

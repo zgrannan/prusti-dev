@@ -180,7 +180,6 @@ impl<'v> ToViper<'v, viper::Stmt<'v>> for Stmt {
                 ast.exhale(expr.to_viper(context, ast), pos.to_viper(context, ast))
             }
             Stmt::Assert(ref expr, ref pos) => {
-                // debug_assert!(expr.is_pure(), "Asserted expression {expr} is not pure");
                 ast.assert(expr.to_viper(context, ast), pos.to_viper(context, ast))
             }
             Stmt::Refute(ref expr, ref pos) => {
@@ -730,14 +729,12 @@ impl<'v> ToViper<'v, viper::Expr<'v>> for Expr {
                 right.to_viper(context, ast),
                 pos.to_viper(context, ast),
             ),
-            Expr::ForAll(ref vars, ref triggers, ref body, ref pos) => {
-                ast.forall_with_pos(
-                    &vars.to_viper_decl(context, ast)[..],
-                    &(triggers, pos).to_viper(context, ast),
-                    body.to_viper(context, ast),
-                    pos.to_viper(context, ast),
-                )
-            },
+            Expr::ForAll(ref vars, ref triggers, ref body, ref pos) => ast.forall_with_pos(
+                &vars.to_viper_decl(context, ast)[..],
+                &(triggers, pos).to_viper(context, ast),
+                body.to_viper(context, ast),
+                pos.to_viper(context, ast),
+            ),
             Expr::Exists(ref vars, ref triggers, ref body, ref pos) => ast.exists_with_pos(
                 &vars.to_viper_decl(context, ast)[..],
                 &(triggers, pos).to_viper(context, ast),

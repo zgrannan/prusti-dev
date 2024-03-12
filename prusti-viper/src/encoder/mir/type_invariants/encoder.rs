@@ -15,38 +15,6 @@ use prusti_interface::specs::typed;
 use prusti_rustc_interface::{middle::ty, target::abi::Integer};
 use vir_crate::polymorphic::{self as vir, ExprFolder, ExprIterator};
 
-const fn tykind_discriminant(value: &ty::TyKind) -> usize {
-    match value {
-        ty::TyKind::Bool => 0,
-        ty::TyKind::Char => 1,
-        ty::TyKind::Int(_) => 2,
-        ty::TyKind::Uint(_) => 3,
-        ty::TyKind::Float(_) => 4,
-        ty::TyKind::Adt(_, _) => 5,
-        ty::TyKind::Foreign(_) => 6,
-        ty::TyKind::Str => 7,
-        ty::TyKind::Array(_, _) => 8,
-        ty::TyKind::Slice(_) => 9,
-        ty::TyKind::RawPtr(_) => 10,
-        ty::TyKind::Ref(_, _, _) => 11,
-        ty::TyKind::FnDef(_, _) => 12,
-        ty::TyKind::FnPtr(_) => 13,
-        ty::TyKind::Dynamic(..) => 14,
-        ty::TyKind::Closure(_, _) => 15,
-        ty::TyKind::Generator(_, _, _) => 16,
-        ty::TyKind::GeneratorWitness(_) => 17,
-        ty::TyKind::Never => 18,
-        ty::TyKind::Tuple(_) => 19,
-        ty::TyKind::Alias(_, _) => 20,
-        ty::TyKind::Param(_) => 21,
-        ty::TyKind::Bound(_, _) => 22,
-        ty::TyKind::Placeholder(_) => 23,
-        ty::TyKind::Infer(_) => 24,
-        ty::TyKind::Error(_) => 25,
-        ty::TyKind::GeneratorWitnessMIR(_, _) => 26,
-    }
-}
-
 pub(super) fn needs_invariant_func(ty: ty::Ty<'_>) -> bool {
     match ty.kind() {
         ty::TyKind::Ref(_, ty, _) => needs_invariant_func(*ty),

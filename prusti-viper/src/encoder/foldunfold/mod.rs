@@ -1238,14 +1238,14 @@ impl<'b, 'a: 'b> FallibleExprFolder for ExprReplacer<'b, 'a> {
         );
 
         let res = if self.wait_old_expr {
-            vir::Expr::unfolding_with_pos(
+            vir::Expr::Unfolding(vir::Unfolding {
                 predicate,
                 arguments,
-                *self.fallible_fold_boxed(base)?,
+                base: self.fallible_fold_boxed(base)?,
                 permission,
                 variant,
                 position,
-            )
+            })
         } else {
             // Compute inner state
             let mut inner_pctxt = self.curr_pctxt.clone();
@@ -1267,14 +1267,14 @@ impl<'b, 'a: 'b> FallibleExprFolder for ExprReplacer<'b, 'a> {
             // Restore states
             std::mem::swap(&mut self.curr_pctxt, &mut tmp_curr_pctxt);
 
-            vir::Expr::unfolding_with_pos(
+            vir::Expr::Unfolding(vir::Unfolding {
                 predicate,
                 arguments,
-                *inner_expr,
+                base: inner_expr,
                 permission,
                 variant,
                 position,
-            )
+            })
         };
 
         trace!("[exit] fallible_fold_unfolding = {}", res);

@@ -324,7 +324,7 @@ impl<'tcx> ErrorManager<'tcx> {
         let opt_error_ctxts = opt_offending_pos_id
             .and_then(|pos_id| self.error_contexts.get(&pos_id))
             .or(
-                opt_pos_id 
+                opt_pos_id
                     .and_then(|pos_id| self.error_contexts.get(&pos_id))
             );
         let opt_pos_span = opt_pos_id.and_then(|pos_id| self.position_manager.source_span.get(&pos_id));

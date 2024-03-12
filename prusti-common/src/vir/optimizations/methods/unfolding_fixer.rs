@@ -101,14 +101,14 @@ impl vir::ExprFolder for Optimizer {
             let arguments = arguments.into_iter().map(|e| self.fold(e)).collect();
             let base = self.fold_boxed(base);
             self.stack.pop().unwrap();
-            vir::Expr::unfolding_with_pos(
+            vir::Expr::Unfolding(vir::Unfolding {
                 predicate,
                 arguments,
-                *base,
+                base,
                 permission,
                 variant,
                 position,
-            )
+            })
         }
     }
 }

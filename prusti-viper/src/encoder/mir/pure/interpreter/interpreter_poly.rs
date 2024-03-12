@@ -24,9 +24,9 @@ use crate::{
             MirEncoder, PlaceEncoder, PlaceEncoding, PRECONDITION_LABEL, WAND_LHS_LABEL,
         },
         snapshot::interface::SnapshotEncoderInterface,
-        Encoder
+        Encoder,
     },
-    error_unsupported
+    error_unsupported,
 };
 use log::{debug, trace};
 use prusti_common::vir_local;

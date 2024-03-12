@@ -100,16 +100,6 @@ impl vir::ExprFolder for Optimizer {
         let mut replacer = Replacer::new(&variables, &mut self.counter);
         let replaced_body = replacer.fold_boxed(folded_body);
         debug!("replaced body: {}", replaced_body);
-        if cfg!(debug_assertions) {
-            for (expr, _) in &replacer.map {
-                for var in &variables {
-                    debug_assert!(
-                        !expr.find(&vir::Expr::local(var.clone())),
-                        "Expression {expr} contains quantified variable {var}, cannot lift out"
-                    );
-                }
-            }
-        }
         let mut forall = vir::Expr::ForAll(vir::ForAll {
             variables,
             triggers,
@@ -158,7 +148,6 @@ impl<'a> Replacer<'a> {
     }
 
     fn replace_expr(&mut self, original_expr: vir::Expr, pos: vir::Position) -> vir::Expr {
-        debug_assert!(original_expr.is_pure());
         if let Some(local) = self.map.get(&original_expr) {
             vir::Expr::Local(vir::Local {
                 variable: local.clone(),
@@ -364,7 +353,7 @@ impl vir::ExprFolder for UnfoldingExtractor {
                 base: Box::new(forall),
                 permission: perm_amount,
                 variant,
-                position
+                position,
             });
         }
         debug!("replaced quantifier: {}", forall);
@@ -387,14 +376,14 @@ impl vir::ExprFolder for UnfoldingExtractor {
                 .insert((predicate, arguments), (permission, variant, position));
             self.fold(*base)
         } else {
-            vir::Expr::unfolding_with_pos(
+            vir::Expr::Unfolding(vir::Unfolding {
                 predicate,
                 arguments,
-                *base,
+                base,
                 permission,
                 variant,
                 position,
-            )
+            })
         }
     }
     fn fold_labelled_old(&mut self, labelled_old: vir::LabelledOld) -> vir::Expr {

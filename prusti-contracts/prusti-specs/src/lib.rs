@@ -95,7 +95,9 @@ fn extract_prusti_attributes(
                     }
                     SpecAttributeKind::Invariant => unreachable!("type invariant on function"),
                     SpecAttributeKind::Model => unreachable!("model on function"),
-                    SpecAttributeKind::PrintCounterexample => unreachable!("print_counterexample on function"),
+                    SpecAttributeKind::PrintCounterexample => {
+                        unreachable!("print_counterexample on function")
+                    }
                     SpecAttributeKind::Resource => unreachable!("resource on function"),
                 };
                 prusti_attributes.push((attr_kind, tokens));
@@ -971,7 +973,7 @@ fn generate_spec_and_assertions_for_types(
             SpecAttributeKind::Trusted => generate_for_trusted_for_types(attr_tokens, item),
             SpecAttributeKind::Model => generate_for_model(attr_tokens, item),
             SpecAttributeKind::PrintCounterexample => {
-              generate_for_print_counterexample(attr_tokens, item)
+               generate_for_print_counterexample(attr_tokens, item)
             }
             SpecAttributeKind::Resource => generate_for_resource(attr_tokens, item),
         };
