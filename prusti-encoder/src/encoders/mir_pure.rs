@@ -349,6 +349,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         match &term.kind {
             &mir::TerminatorKind::Goto { target }
             | &mir::TerminatorKind::FalseEdge { real_target: target, ..}
+            | &mir::TerminatorKind::Drop { target, ..}
             => {
                 let rest_update = self.encode_cfg(&new_curr_ver, target, join_point);
                 stmt_update.merge(rest_update)

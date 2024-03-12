@@ -943,6 +943,13 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             }
             mir::TerminatorKind::Unreachable => self.unreachable(),
 
+            mir::TerminatorKind::Drop { target, .. } => {
+                self.vcx.mk_goto_stmt(
+                    self.vcx
+                        .alloc(vir::CfgBlockLabelData::BasicBlock(target.as_usize())),
+                )
+            }
+
             unsupported_kind => self.vcx.mk_dummy_stmt(
                 vir::vir_format!(self.vcx, "terminator {unsupported_kind:?}")
             ),
