@@ -73,11 +73,11 @@ pub enum DiscrBounds<'vir> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum DomainEncSpecifics<'vir> {
+    Param,
     Primitive(DomainDataPrim<'vir>),
     // structs, tuples
     StructLike(DomainDataStruct<'vir>),
     EnumLike(Option<DomainDataEnum<'vir>>),
-    Param,
 }
 
 #[derive(Clone, Debug)]

@@ -9,6 +9,7 @@ use super::{domain::DomainEnc, lifted_generic::{LiftedGeneric, LiftedGenericEnc}
 pub enum LiftedTy<'vir> {
     /// Uninstantiated generic type parameter
     Generic(LiftedGeneric<'vir>),
+
     /// Non-generic type
     Instantiated {
         /// Type constructor function e.g. corresponding to `Option`, `Result`, etc

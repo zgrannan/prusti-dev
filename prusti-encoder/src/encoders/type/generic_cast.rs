@@ -24,7 +24,6 @@ pub enum GenericCastOutputRef<'vir> {
 }
 
 impl<'vir> GenericCastOutputRef<'vir> {
-
     pub fn concrete_option(&self) -> Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => None,

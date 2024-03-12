@@ -2,12 +2,12 @@ use prusti_rustc_interface::{
     middle::ty::{self, TyKind},
     span::symbol,
 };
-/// The "most generic" version of a type is one that use
-/// "identity substitutions" for all type parameters.
-/// e.g the most generic version of `Vec<u32>` is `Vec<T>`
-/// the most generic version of `Option<Vec<U>>` is `Option<T>`, etc.
+/// The "most generic" version of a type is one that uses "identity
+/// substitutions" for all type parameters. For example, the most generic
+/// version of `Vec<u32>` is `Vec<T>`, the most generic version of
+/// `Option<Vec<U>>` is `Option<T>`, etc.
 ///
-/// To construct an instance, use `extract_type_params`
+/// To construct an instance, use `extract_type_params`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 

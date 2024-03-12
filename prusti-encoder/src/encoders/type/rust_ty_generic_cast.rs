@@ -2,7 +2,6 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
-
 use super::{generic_cast::{GenericCastEnc, GenericCastOutputRef}, most_generic_ty::extract_type_params};
 
 /// Generates Viper functions to cast between generic and non-generic Viper
