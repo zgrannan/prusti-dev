@@ -8,6 +8,7 @@ use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
+use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::encoders::{lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, MirFunctionEnc, ViperTupleEnc};
@@ -97,10 +98,11 @@ impl TaskEncoder for MirPureEnc {
         tracing::debug!("encoding {def_id:?}");
         let expr = vir::with_vcx(move |vcx| {
             //let body = vcx.tcx.mir_promoted(local_def_id).0.borrow();
+            let identity_substs = ty::GenericArgs::identity_for_item(vcx.tcx, def_id);
             let body = match kind {
-                PureKind::Closure => vcx.body.borrow_mut().get_closure_body(def_id, substs, caller_def_id),
-                PureKind::Spec => vcx.body.borrow_mut().get_spec_body(def_id, substs, caller_def_id),
-                PureKind::Pure => vcx.body.borrow_mut().get_pure_fn_body(def_id, substs, caller_def_id),
+                PureKind::Closure => vcx.body.borrow_mut().get_closure_body(def_id, identity_substs, caller_def_id),
+                PureKind::Spec => vcx.body.borrow_mut().get_spec_body(def_id, identity_substs, caller_def_id),
+                PureKind::Pure => vcx.body.borrow_mut().get_pure_fn_body(def_id, identity_substs, caller_def_id),
                 PureKind::Constant(promoted) => vcx.body.borrow_mut().get_promoted_constant_body(def_id, promoted)
             };
 
@@ -109,7 +111,7 @@ impl TaskEncoder for MirPureEnc {
             // We wrap the expression with an additional lazy that will perform
             // some sanity checks. These requirements cannot be expressed using
             // only the type system.
-            vcx.mk_lazy_expr(
+            let expr = vcx.mk_lazy_expr(
                 vir::vir_format!(vcx, "pure body {def_id:?}"),
                 Box::new(move |vcx, lctx: ExprInput<'_>| {
                     // check: are we actually providing arguments for the
@@ -122,7 +124,9 @@ impl TaskEncoder for MirPureEnc {
                     use vir::Reify;
                     expr_inner.kind.reify(vcx, lctx)
                 }),
-            )
+            );
+            add_debug_note!(expr.debug_info, "Inner expr: {}", expr_inner.debug_info);
+            expr
         });
         tracing::debug!("finished {def_id:?}");
 
@@ -449,12 +453,16 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                             let pure_func = self.deps.require_ref::<MirFunctionEnc>(
                                 (def_id, self.def_id)
                             ).unwrap().function_ref;
-                            let fn_arg_tys = if let Some(local_def_id) = def_id.as_local() {
+                            let (fn_arg_tys, fn_result_ty) = if let Some(local_def_id) = def_id.as_local() {
                                 let body = self.vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
-                                (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>()
+                                let arg_tys = (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>();
+                                let result_ty = body.local_decls[mir::RETURN_PLACE].ty;
+                                (arg_tys, result_ty)
                             } else {
                                 let sig = self.vcx.tcx.fn_sig(def_id);
-                                sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>()
+                                let arg_tys = sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>();
+                                let result_ty = sig.skip_binder().output().skip_binder();
+                                (arg_tys, result_ty)
                             };
 
                             let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
@@ -477,7 +485,14 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                                 })
                                 .collect::<Vec<_>>();
                             encoded_args.append(&mut encoded_fn_args);
-                            pure_func.apply(self.vcx, &encoded_args)
+                            let call = pure_func.apply(self.vcx, &encoded_args);
+                            let result_cast = self.deps.require_ref::<PureGenericCastEnc>(
+                                CastArgs {
+                                    expected: destination.ty(self.body, self.vcx.tcx).ty,
+                                    actual: fn_result_ty
+                                }
+                            ).unwrap();
+                            result_cast.apply_cast_if_necessary(self.vcx, call)
                         } else {
                             self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
                         }

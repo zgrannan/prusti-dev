@@ -107,7 +107,16 @@ impl TaskEncoder for MirFunctionEnc {
                     .unwrap()
                     .expr;
 
-                Some(expr.reify(vcx, (def_id, spec.pre_args)))
+
+
+                let expr = expr.reify(vcx, (def_id, spec.pre_args));
+                eprintln!("{function_name}: {:?}", expr.ty());
+                if function_name == "f_test1_CALLER_0_8" {
+                    eprintln!("expr : {:?}", expr);
+                    eprintln!("expr : {}", expr.debug_info);
+                }
+                assert!(expr.ty() == return_type.snapshot, "expected {:?}, got {:?}", return_type.snapshot, expr.ty());
+                Some(expr)
             };
 
             tracing::debug!("finished {def_id:?}");
@@ -117,7 +126,7 @@ impl TaskEncoder for MirFunctionEnc {
                     function: vcx.mk_function(
                         function_name,
                         vcx.alloc_slice(&func_args),
-                        local_defs.locals[mir::RETURN_PLACE].ty.snapshot,
+                        return_type.snapshot,
                         vcx.alloc_slice(&spec.pres),
                         vcx.alloc_slice(&spec.posts),
                         expr

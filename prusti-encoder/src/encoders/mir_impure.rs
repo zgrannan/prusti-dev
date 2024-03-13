@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 //    SsaAnalysis,
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{MethodIdent, UnknownArity};
+use vir::{add_debug_note, MethodIdent, UnknownArity};
 
 pub struct MirImpureEnc;
 
@@ -30,7 +30,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
+use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, lifted_func_app_generics::LiftedFuncAppGenericsEnc, most_generic_ty::{extract_type_params, MostGenericTy}, pure_generic_cast::{CastArgs, PureGenericCastEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -893,6 +893,24 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         .unwrap()
                         .generic_predicate
                         .method_assign;
+
+                    let func_return_ty = self.vcx.tcx.fn_sig(func_def_id).skip_binder().output();
+
+                    let pure_cast_args = CastArgs {
+                        expected: return_ty,
+                        actual: func_return_ty.skip_binder()
+                    };
+
+                    let cast = self.deps.require_ref::<PureGenericCastEnc>(pure_cast_args).unwrap();
+
+                    add_debug_note!(
+                        method_assign.debug_info(),
+                        "Pure function {:?}, debuginfo: {}",
+                        pure_func.function_ref,
+                        pure_func.function_ref.debug_info(),
+                    );
+
+                    let pure_func_app = cast.apply_cast_if_necessary(self.vcx, pure_func_app);
 
                     self.stmt(
                         self.vcx
