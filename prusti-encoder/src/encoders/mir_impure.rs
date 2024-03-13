@@ -32,6 +32,8 @@ pub struct MirImpureEncOutput<'vir> {
 
 use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, lifted_func_app_generics::LiftedFuncAppGenericsEnc, most_generic_ty::{extract_type_params, MostGenericTy}, pure_generic_cast::{CastArgs, PureGenericCastEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
 
+use super::pure_func_app::PureFuncAppEnc;
+
 const ENCODE_REACH_BB: bool = false;
 
 impl TaskEncoder for MirImpureEnc {
@@ -249,6 +251,12 @@ struct EncVisitor<'tcx, 'vir, 'enc>
     current_terminator: Option<vir::TerminatorStmt<'vir>>,
 
     encoded_blocks: Vec<vir::CfgBlock<'vir>>, // TODO: use IndexVec ?
+}
+
+impl<'tcx: 'vir, 'vir> PureFuncAppEnc<'tcx, 'vir> for EncVisitor<'tcx, 'vir, '_> {
+    fn vcx(&self) -> &'vir vir::VirCtxt<'tcx> {
+        self.vcx
+    }
 }
 
 impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
@@ -847,13 +855,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     spec.kind.is_pure().unwrap_or_default()
                 ).unwrap_or_default();
 
-                let fn_arg_tys = if let Some(local_def_id) = func_def_id.as_local() {
-                    let body = self.vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
-                    (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>()
-                } else {
-                    let sig = self.vcx.tcx.fn_sig(func_def_id);
-                    sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>()
-                };
+                let (fn_arg_tys, _) = self.get_pure_func_sig(func_def_id);
 
                 let dest = self.encode_place(Place::from(*destination));
 

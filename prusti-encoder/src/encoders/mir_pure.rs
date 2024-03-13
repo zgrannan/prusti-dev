@@ -12,7 +12,7 @@ use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::encoders::{lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, MirFunctionEnc, ViperTupleEnc};
-use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, pure_func_app::PureFuncAppEnc, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
 
@@ -176,6 +176,12 @@ struct Enc<'tcx, 'vir: 'enc, 'enc>
     visited: IndexVec<mir::BasicBlock, bool>,
     version_ctr: IndexVec<mir::Local, usize>,
     phi_ctr: usize,
+}
+
+impl <'tcx: 'vir, 'vir, 'enc> PureFuncAppEnc<'tcx, 'vir> for Enc<'tcx, 'vir, 'enc> {
+    fn vcx(&self) -> &'vir vir::VirCtxt<'tcx> {
+        self.vcx
+    }
 }
 
 impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
@@ -453,17 +459,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                             let pure_func = self.deps.require_ref::<MirFunctionEnc>(
                                 (def_id, self.def_id)
                             ).unwrap().function_ref;
-                            let (fn_arg_tys, fn_result_ty) = if let Some(local_def_id) = def_id.as_local() {
-                                let body = self.vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
-                                let arg_tys = (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>();
-                                let result_ty = body.local_decls[mir::RETURN_PLACE].ty;
-                                (arg_tys, result_ty)
-                            } else {
-                                let sig = self.vcx.tcx.fn_sig(def_id);
-                                let arg_tys = sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>();
-                                let result_ty = sig.skip_binder().output().skip_binder();
-                                (arg_tys, result_ty)
-                            };
+                            let (fn_arg_tys, fn_result_ty) = self.get_pure_func_sig(def_id);
 
                             let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
                                 arg_tys
