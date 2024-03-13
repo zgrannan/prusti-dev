@@ -1,9 +1,9 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, FunctionIdent, UnaryArity};
+use vir::{CallableIdent, FunctionIdent, UnaryArity, UnknownArity};
 
 use crate::encoders::{domain::DomainEnc, GenericEnc};
 
-use super::{lifted::LiftedTyEnc, most_generic_ty::MostGenericTy};
+use super::{lifted::{LiftedTy, LiftedTyEnc}, most_generic_ty::MostGenericTy};
 
 /// Takes as input the most generic version (c.f. `MostGenericTy`) of a Rust
 /// type, and generates functions to convert the generic Viper representation of
@@ -16,22 +16,22 @@ pub struct GenericCastEnc;
 pub enum GenericCastOutputRef<'vir> {
     CastFunctions {
         /// Casts a concrete type to a generic type
-        make_generic: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+        make_generic: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
         /// Casts a generic type to a concrete type
-        make_concrete: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
+        make_concrete: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
     },
     AlreadyGeneric,
 }
 
 impl<'vir> GenericCastOutputRef<'vir> {
-    pub fn concrete_option(&self) -> Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>> {
+    pub fn concrete_option(&self) -> Option<vir::FunctionIdent<'vir, UnknownArity<'vir>>> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => None,
             GenericCastOutputRef::CastFunctions { make_concrete, .. } => Some(*make_concrete),
         }
     }
 
-    pub fn generic_option(&self) -> Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>> {
+    pub fn generic_option(&self) -> Option<vir::FunctionIdent<'vir, UnknownArity<'vir>>> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => None,
             GenericCastOutputRef::CastFunctions { make_generic, .. } => Some(*make_generic),
@@ -44,11 +44,15 @@ impl<'vir> GenericCastOutputRef<'vir> {
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
         snap: vir::ExprGen<'vir, Curr, Next>,
+        ty_args: &'vir [LiftedTy<'vir>],
     ) -> vir::ExprGen<'vir, Curr, Next> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => snap,
             GenericCastOutputRef::CastFunctions { make_generic, .. } => {
-                make_generic.apply(vcx, [snap])
+                let args = std::iter::once(snap)
+                    .chain(ty_args.iter().map(|t| t.expr(vcx)))
+                    .collect::<Vec<_>>();
+                make_generic.apply(vcx, &args)
             }
         }
     }
@@ -59,11 +63,15 @@ impl<'vir> GenericCastOutputRef<'vir> {
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
         snap: vir::ExprGen<'vir, Curr, Next>,
+        ty_args: &'vir [LiftedTy<'vir>],
     ) -> vir::ExprGen<'vir, Curr, Next> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => snap,
             GenericCastOutputRef::CastFunctions { make_concrete, .. } => {
-                make_concrete.apply(vcx, [snap])
+                let args = std::iter::once(snap)
+                    .chain(ty_args.iter().map(|t| t.expr(vcx)))
+                    .collect::<Vec<_>>();
+                make_concrete.apply(vcx, &args)
             }
         }
     }
@@ -128,19 +136,24 @@ impl TaskEncoder for GenericCastEnc {
                 )
             };
 
-            let make_generic_arg_tys = vcx.alloc([self_ty]);
+            let mut make_generic_arg_tys = vec![self_ty];
+            let make_generic_arg_tys = std::iter::once(self_ty)
+                .chain(ty_args.iter().map(|t| t.ty))
+                .collect::<Vec<_>>();
 
             let make_generic_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_generic_s_{base_name}"),
-                UnaryArity::new(make_generic_arg_tys),
+                UnknownArity::new(vcx.alloc(make_generic_arg_tys)),
                 generic_ref.param_snapshot,
             );
 
-            let make_concrete_arg_tys = vcx.alloc([generic_ref.param_snapshot]);
+            let make_concrete_arg_tys = std::iter::once(generic_ref.param_snapshot)
+                .chain(ty_args.iter().map(|t| t.ty))
+                .collect::<Vec<_>>();
 
             let make_concrete_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
-                UnaryArity::new(make_concrete_arg_tys),
+                UnknownArity::new(vcx.alloc(make_concrete_arg_tys)),
                 self_ty,
             );
 
@@ -160,10 +173,19 @@ impl TaskEncoder for GenericCastEnc {
                     .collect::<Vec<_>>()),
             );
 
+            let ty_arg_exprs = ty_args
+                .iter()
+                .map(|t| vcx.mk_local_ex(t.name, t.ty))
+                .collect::<Vec<_>>();
+
             let make_generic_result = vcx.mk_local_ex("result", generic_ref.param_snapshot);
 
+            let make_concrete_args = std::iter::once(make_generic_result)
+                .chain(ty_arg_exprs.iter().map(|t| *t))
+                .collect::<Vec<_>>();
+
             let make_generic_post = vcx.mk_eq_expr(
-                make_concrete_ident.apply(vcx, [make_generic_result]),
+                make_concrete_ident.apply(vcx, &make_concrete_args),
                 vcx.mk_local_ex(make_generic_arg.name, make_generic_arg.ty),
             );
             let make_generic = vcx.mk_function(
@@ -186,8 +208,12 @@ impl TaskEncoder for GenericCastEnc {
                 vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
             );
 
+            let make_generic_args = std::iter::once(vcx.mk_local_ex("result", self_ty))
+                .chain(ty_arg_exprs.iter().map(|t| *t))
+                .collect::<Vec<_>>();
+
             let make_concrete_post = vcx.mk_eq_expr(
-                make_generic_ident.apply(vcx, [vcx.mk_local_ex("result", self_ty)]),
+                make_generic_ident.apply(vcx, &make_generic_args),
                 vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
             );
 

@@ -3,7 +3,7 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::VirCtxt;
 
-use super::generic_cast::GenericCastOutputRef;
+use super::{generic_cast::GenericCastOutputRef, lifted::LiftedTy};
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {
@@ -11,14 +11,63 @@ pub struct CastArgs<'tcx> {
     pub actual: ty::Ty<'tcx>,
 }
 
+#[derive(Copy, Clone)]
+pub struct PureCast<'vir> {
+    cast_function: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
+    ty_args: &'vir [LiftedTy<'vir>],
+}
+
+impl<'vir> PureCast<'vir> {
+    pub fn new(
+        cast_function: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
+        ty_args: &'vir [LiftedTy<'vir>],
+    ) -> PureCast<'vir> {
+        PureCast {
+            cast_function,
+            ty_args,
+        }
+    }
+    pub fn apply<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir VirCtxt,
+        expr: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        self.cast_function.apply(
+            vcx,
+            &std::iter::once(expr)
+                .chain(self.ty_args.iter().map(|t| t.expr(vcx)))
+                .collect::<Vec<_>>(),
+        )
+    }
+ }
+
 #[derive(Clone)]
 pub enum PureGenericCastOutputRef<'vir> {
     NoCast,
-    Cast(vir::FunctionIdent<'vir, vir::UnaryArity<'vir>>),
+    Cast(PureCast<'vir>),
 }
 
 impl<'vir> PureGenericCastOutputRef<'vir> {
-    pub fn cast_function(&self) -> Option<vir::FunctionIdent<'vir, vir::UnaryArity<'vir>>> {
+    pub fn apply_cast_if_necessary<Curr: 'vir, Next: 'vir>(
+        &self,
+        vcx: &'vir VirCtxt<'_>,
+        expr: vir::ExprGen<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        match self {
+            PureGenericCastOutputRef::NoCast => expr,
+            PureGenericCastOutputRef::Cast(PureCast {
+                cast_function,
+                ty_args,
+            }) => cast_function.apply(
+                vcx,
+                &std::iter::once(expr)
+                    .chain(ty_args.iter().map(|t| t.expr(vcx)))
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+
+    pub fn cast_function(&self) -> Option<PureCast<'vir>> {
         match self {
             PureGenericCastOutputRef::NoCast => None,
             PureGenericCastOutputRef::Cast(f) => Some(*f),
@@ -71,23 +120,29 @@ impl TaskEncoder for PureGenericCastEnc {
         } else {
             if actual_is_param {
                 // expected is concrete type, `actual` should be concretized
-                if let GenericCastOutputRef::CastFunctions { make_concrete, .. } = deps
-                    .require_ref::<RustTyGenericCastEnc>(task_key.expected)
-                    .unwrap()
-                    .cast
+                let generic_cast = deps
+                    .require_local::<RustTyGenericCastEnc>(task_key.expected)
+                    .unwrap();
+                if let GenericCastOutputRef::CastFunctions { make_concrete, .. } = generic_cast.cast
                 {
-                    PureGenericCastOutputRef::Cast(make_concrete)
+                    PureGenericCastOutputRef::Cast(PureCast::new(
+                        make_concrete,
+                        generic_cast.ty_args,
+                    ))
                 } else {
                     unreachable!()
                 }
             } else {
                 // expected is generic type, `actual` should be be made generic
-                if let GenericCastOutputRef::CastFunctions { make_generic, .. } = deps
-                    .require_ref::<RustTyGenericCastEnc>(task_key.actual)
-                    .unwrap()
-                    .cast
+                let generic_cast = deps
+                    .require_local::<RustTyGenericCastEnc>(task_key.actual)
+                    .unwrap();
+                if let GenericCastOutputRef::CastFunctions { make_generic, .. } = generic_cast.cast
                 {
-                    PureGenericCastOutputRef::Cast(make_generic)
+                    PureGenericCastOutputRef::Cast(PureCast::new(
+                        make_generic,
+                        generic_cast.ty_args,
+                    ))
                 } else {
                     unreachable!()
                 }

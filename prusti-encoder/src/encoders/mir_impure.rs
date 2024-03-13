@@ -30,7 +30,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
+use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
 
 const ENCODE_REACH_BB: bool = false;
 
@@ -847,14 +847,44 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     spec.kind.is_pure().unwrap_or_default()
                 ).unwrap_or_default();
 
+                let fn_arg_tys = if let Some(local_def_id) = func_def_id.as_local() {
+                    let body = self.vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
+                    (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>()
+                } else {
+                    let sig = self.vcx.tcx.fn_sig(func_def_id);
+                    sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>()
+                };
+
                 let dest = self.encode_place(Place::from(*destination));
 
-                let task = (func_def_id, arg_tys, self.def_id);
+                let task = (func_def_id, self.def_id);
                 if is_pure {
                     let pure_func = self.deps.require_ref::<MirFunctionEnc>(task).unwrap();
 
-                    let func_args: Vec<_> =
-                        args.iter().map(|op| self.encode_operand_snap(op)).collect();
+
+                    let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
+                        arg_tys
+                    ).unwrap();
+
+
+                    let encoded_ty_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx)).collect::<Vec<_>>();
+
+                    // Initial arguments are lifted type parameters
+                    let mut func_args = encoded_ty_args;
+
+                    func_args.extend(
+                        fn_arg_tys.into_iter().zip(args.iter())
+                            .map(|(expected_ty, op)| {
+                                let base = self.encode_operand_snap(op);
+                                let caster = self.deps.require_ref::<PureGenericCastEnc>(
+                                    CastArgs {
+                                        expected: expected_ty,
+                                        actual: op.ty(self.local_decls, self.vcx.tcx)
+                                    }
+                                ).unwrap();
+                                caster.apply_cast_if_necessary(self.vcx, base)
+                            })
+                    );
                     let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
                     let method_assign = self
@@ -871,7 +901,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 } else {
                     let func_out = self
                         .deps
-                        .require_ref::<MirImpureEnc>((task.0, task.1, Some(task.2)))
+                        .require_ref::<MirImpureEnc>((task.0, arg_tys, Some(task.1)))
                         .unwrap();
 
                     let method_in = args.iter().map(|op| self.encode_operand(op));

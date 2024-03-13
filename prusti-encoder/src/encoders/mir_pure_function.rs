@@ -1,10 +1,10 @@
-use prusti_rustc_interface::{middle::{mir, ty}, span::def_id::DefId};
+use prusti_rustc_interface::{middle::{mir, ty::GenericArgs}, span::def_id::DefId};
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    MirPureEnc, MirPureEncTask, mir_pure::PureKind, MirSpecEnc, MirLocalDefEnc,
+    lifted_func_def_generics::LiftedFuncDefGenericsEnc, mir_pure::PureKind, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -30,7 +30,6 @@ impl TaskEncoder for MirFunctionEnc {
 
     type TaskDescription<'vir> = (
         DefId, // ID of the function
-        ty::GenericArgsRef<'vir>, // ? this should be the "signature", after applying the env/substs
         DefId, // Caller DefID
     );
 
@@ -56,38 +55,41 @@ impl TaskEncoder for MirFunctionEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        let (def_id, substs, caller_def_id) = *task_key;
+        let (def_id, caller_def_id) = *task_key;
         let trusted = crate::encoders::with_proc_spec(def_id, |def_spec|
             def_spec.trusted.extract_inherit().unwrap_or_default()
         ).unwrap_or_default();
 
         vir::with_vcx(|vcx| {
+            let substs = GenericArgs::identity_for_item(vcx.tcx, def_id);
             let local_defs = deps.require_local::<MirLocalDefEnc>(
                 (def_id, substs, Some(caller_def_id)),
             ).unwrap();
 
             tracing::debug!("encoding {def_id:?}");
 
-            let extra: String = substs.iter().map(|s| format!("_{s}")).collect();
             let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
-            let function_name = vir::vir_format!(vcx, "f_{}{extra}_CALLER_{krate}_{index}", vcx.tcx.item_name(def_id));
-            let args: Vec<_> = (1..=local_defs.arg_count)
+            let function_name = vir::vir_format!(vcx, "f_{}_CALLER_{krate}_{index}", vcx.tcx.item_name(def_id));
+            let ty_arg_decls = deps.require_local::<LiftedFuncDefGenericsEnc>(def_id).unwrap();
+            let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
+            ident_args.extend((1..=local_defs.arg_count)
                 .map(mir::Local::from)
                 .map(|def_idx| local_defs.locals[def_idx].ty.snapshot)
-                .collect();
-            let args = UnknownArity::new(vcx.alloc_slice(&args));
+            );
+            let ident_args = UnknownArity::new(vcx.alloc_slice(&ident_args));
             let return_type = local_defs.locals[mir::RETURN_PLACE].ty;
-            let function_ref = FunctionIdent::new(function_name, args, return_type.snapshot);
+            let function_ref = FunctionIdent::new(function_name, ident_args, return_type.snapshot);
             deps.emit_output_ref::<Self>(*task_key, MirFunctionEncOutputRef { function_ref });
 
             let spec = deps.require_local::<MirSpecEnc>(
                 (def_id, substs, Some(caller_def_id), true)
             ).unwrap();
 
-            let func_args: Vec<_> = (1..=local_defs.arg_count).map(mir::Local::from).map(|arg| vcx.alloc(vir::LocalDeclData {
+            let mut func_args = ty_arg_decls.iter().map(|arg| arg.decl()).collect::<Vec<_>>();
+            func_args.extend((1..=local_defs.arg_count).map(mir::Local::from).map(|arg| vcx.alloc(vir::LocalDeclData {
                 name: local_defs.locals[arg].local.name,
                 ty: local_defs.locals[arg].ty.snapshot,
-            })).collect();
+            })));
 
             let expr = if trusted {
                 None

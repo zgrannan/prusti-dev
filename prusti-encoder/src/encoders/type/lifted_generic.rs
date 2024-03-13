@@ -15,7 +15,10 @@ impl <'vir> LiftedGeneric<'vir> {
     pub fn decl(&self) -> vir::LocalDecl<'vir> {
         self.0
     }
-    pub fn expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
+    pub fn ty(&self) -> vir::Type<'vir> {
+        self.0.ty
+    }
+    pub fn expr<Curr: 'vir, Next: 'vir>(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::ExprGen<'vir, Curr, Next> {
         vcx.mk_local_ex(self.0.name, self.0.ty)
     }
 }

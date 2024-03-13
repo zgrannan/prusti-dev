@@ -11,6 +11,8 @@ use crate::encoders::{
     rust_ty_generic_cast::RustTyGenericCastEnc,
 };
 
+use super::pure_generic_cast::PureCast;
+
 /// Casts arguments to the snapshot constructor for an aggregate type (e.g.
 /// Tuples, ADTs) to appropriate (generic or concrete) Viper representations,
 /// depending on what the aggregate constructor expects. See
@@ -49,7 +51,7 @@ impl From<&mir::AggregateKind<'_>> for AggregateType {
 
 #[derive(Clone)]
 pub struct AggregateSnapArgsCastEncOutput<'vir>(
-    &'vir [Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>>],
+    &'vir [Option<PureCast<'vir>>],
 );
 
 impl<'vir> AggregateSnapArgsCastEncOutput<'vir> {
@@ -62,7 +64,7 @@ impl<'vir> AggregateSnapArgsCastEncOutput<'vir> {
             .iter()
             .zip(exprs)
             .map(|(cast, expr)| match cast {
-                Some(cast) => cast.apply(vcx, [expr]),
+                Some(cast) => cast.apply(vcx, expr),
                 None => expr,
             })
             .collect()
@@ -97,15 +99,15 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
     > {
         deps.emit_output_ref::<AggregateSnapArgsCastEnc>(task_key.clone(), ());
         vir::with_vcx(|vcx| {
-            let cast_functions: Vec<Option<vir::FunctionIdent<'vir, UnaryArity<'vir>>>> =
+            let cast_functions: Vec<Option<PureCast<'vir>>> =
                 match task_key.aggregate_type {
                     AggregateType::Tuple => task_key
                         .tys
                         .iter()
                         .map(|ty| {
                             let cast_functions =
-                                deps.require_ref::<RustTyGenericCastEnc>(*ty).unwrap();
-                            cast_functions.cast.generic_option()
+                                deps.require_local::<RustTyGenericCastEnc>(*ty).unwrap();
+                            cast_functions.to_generic_caster()
                         })
                         .collect::<Vec<_>>(),
                     AggregateType::Adt {
@@ -133,7 +135,7 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
                     }
                 };
             Ok((
-                AggregateSnapArgsCastEncOutput(vcx.alloc_slice(&cast_functions)),
+                AggregateSnapArgsCastEncOutput(vcx.alloc(cast_functions)),
                 (),
             ))
         })

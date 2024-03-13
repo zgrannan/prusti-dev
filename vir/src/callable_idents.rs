@@ -60,10 +60,10 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> FunctionIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A);
+pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
     fn new(name: &'vir str, args: A, _unused: ()) -> Self {
-        Self(name, args)
+        Self(name, args, DebugInfo::new())
     }
     fn name(&self) -> &'vir str {
         self.0
@@ -77,14 +77,20 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
 }
 
 impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
+    pub fn debug_info(&self) -> DebugInfo {
+        self.2
+    }
+}
+
+impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
-        Self(name, args)
+        Self(name, args, DebugInfo::new())
     }
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> MethodIdent<'vir, A> {
     pub fn as_unknown_arity(self) -> MethodIdent<'vir, UnknownArity<'vir>> {
-        MethodIdent(self.name(), UnknownArity::new(self.1.args()))
+        MethodIdent(self.name(), UnknownArity::new(self.1.args()), self.debug_info())
     }
 }
 
@@ -364,7 +370,15 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> StmtGenData<'vir, Curr, Next> {
-        assert!(self.1.types_match(args));
+        if !self.1.types_match(args) {
+            panic!(
+                "Method {} could not be applied. Expected arg types: {:?}, Actual arg types: {:?}, Debug info: {}",
+                self.name(),
+                self.arity(),
+                args.iter().map(|a| a.ty()).collect::<Vec<_>>(),
+                self.debug_info()
+            );
+        }
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
             method: self.name(),

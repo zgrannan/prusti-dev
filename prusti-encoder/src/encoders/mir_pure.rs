@@ -10,7 +10,7 @@ use task_encoder::{
 };
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::encoders::{ViperTupleEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
+use crate::encoders::{lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, MirFunctionEnc, ViperTupleEnc};
 use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
@@ -447,11 +447,36 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         ).unwrap_or_default();
                         if is_pure {
                             let pure_func = self.deps.require_ref::<MirFunctionEnc>(
-                                (def_id, arg_tys, self.def_id)
+                                (def_id, self.def_id)
                             ).unwrap().function_ref;
-                            let encoded_args = args.iter()
-                                .map(|oper| self.encode_operand(&new_curr_ver, oper))
+                            let fn_arg_tys = if let Some(local_def_id) = def_id.as_local() {
+                                let body = self.vcx.body.borrow_mut().get_impure_fn_body_identity(local_def_id);
+                                (1..body.arg_count + 1).map(|arg| body.local_decls[arg.into()].ty).collect::<Vec<_>>()
+                            } else {
+                                let sig = self.vcx.tcx.fn_sig(def_id);
+                                sig.skip_binder().inputs().iter().map(|i| i.skip_binder()).copied().collect::<Vec<_>>()
+                            };
+
+                            let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
+                                arg_tys
+                            ).unwrap();
+
+                            // Initial arguments are lifted type parameters
+                            let mut encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx)).collect::<Vec<_>>();
+
+                            let mut encoded_fn_args = fn_arg_tys.into_iter().zip(args.iter())
+                                .map(|(expected_ty, oper)| {
+                                    let base = self.encode_operand(&new_curr_ver, oper);
+                                    let caster = self.deps.require_ref::<PureGenericCastEnc>(
+                                        CastArgs {
+                                            expected: expected_ty,
+                                            actual: oper.ty(self.body, self.vcx.tcx)
+                                        }
+                                    ).unwrap();
+                                    caster.apply_cast_if_necessary(self.vcx, base)
+                                })
                                 .collect::<Vec<_>>();
+                            encoded_args.append(&mut encoded_fn_args);
                             pure_func.apply(self.vcx, &encoded_args)
                         } else {
                             self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
@@ -522,9 +547,9 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                     .field_snaps_to_snap;
                 let (snap, place_ref) = self.encode_place_with_ref(curr_ver, place);
                 let place_ty = place.ty(self.body, self.vcx.tcx).ty;
-                let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty).unwrap();
+                let cast = self.deps.require_local::<RustTyGenericCastEnc>(place_ty).unwrap();
                 // The snapshot of the referenced value should be encoded as a generic `Param`
-                let snap = cast_ref.cast.cast_to_generic_if_necessary(self.vcx, snap);
+                let snap = cast.cast_to_generic_if_necessary(self.vcx, snap);
                 if kind.mutability().is_mut() {
                     // We want to distinguish if `place` is a value that lives
                     // in pure code or not. If it lives in impure (the only way
@@ -725,8 +750,8 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 let place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
                 // Since the `expr` is the target of a reference, it is encoded as a `Param`.
                 // If it is not a type parameter, we cast it to its concrete Snapshot.
-                let cast_ref = self.deps.require_ref::<RustTyGenericCastEnc>(place_ty.ty).unwrap();
-                let expr = cast_ref.cast.cast_to_concrete_if_possible(self.vcx, expr);
+                let cast = self.deps.require_local::<RustTyGenericCastEnc>(place_ty.ty).unwrap();
+                let expr = cast.cast_to_concrete_if_possible(self.vcx, expr);
                 (expr, place_ref)
             }
             mir::ProjectionElem::Field(field_idx, _) => {
