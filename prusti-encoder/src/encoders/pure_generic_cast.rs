@@ -7,13 +7,21 @@ use super::{generic_cast::GenericCastOutputRef, lifted::LiftedTy};
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {
+    /// The argument expected by a function or data constructor signature
     pub expected: ty::Ty<'tcx>,
+    /// The type of the expression passed to the function or data constructor
     pub actual: ty::Ty<'tcx>,
 }
 
+/// Holds the necessary information to cast a snapshot to a generic or concrete
+/// version.
 #[derive(Copy, Clone)]
 pub struct PureCast<'vir> {
+
+    /// The function that performs the cast. The first argument is the expression to
+    /// cast, followed by the type arguments.
     cast_function: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
+
     ty_args: &'vir [LiftedTy<'vir>],
 }
 
@@ -27,6 +35,8 @@ impl<'vir> PureCast<'vir> {
             ty_args,
         }
     }
+
+    /// Returns the result of the cast
     pub fn apply<Curr: 'vir, Next: 'vir>(
         &self,
         vcx: &'vir VirCtxt,

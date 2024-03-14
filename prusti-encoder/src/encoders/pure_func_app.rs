@@ -13,16 +13,35 @@ use crate::encoders::{
 };
 
 use super::MirFunctionEnc;
+
+/// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
+/// applications of Rust functions annotated as pure.
 pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
+
+    /// Extra arguments required for the encoder to encode an argument to the
+    /// function (in mir this is an `Operand`)
     type EncodeOperandArgs;
+
+    /// The `Curr` in the resulting `ExprGen<'vir, Curr, Next>` type
     type Curr;
+
+    /// The `Next` in the resulting `ExprGen<'vir, Curr, Next>` type
     type Next;
 
+    /// The type of the data source that can provide local declarations; this is used
+    /// when getting the type of the function.
     type LocalDeclsSrc: ?Sized + HasLocalDecls<'tcx>;
 
+    /// Task encoder dependencies are required for encoding Viper casts between
+    /// generic and concrete types.
     fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir>;
+
+    /// The data source that can provide local declarations, necesary for determining
+    /// the function type
     fn local_decls_src(&self) -> &Self::LocalDeclsSrc;
     fn vcx(&self) -> &'vir vir::VirCtxt<'tcx>;
+
+    /// Returns input and output types of a function
     fn get_pure_func_sig(&self, def_id: DefId) -> (Vec<ty::Ty<'tcx>>, ty::Ty<'tcx>) {
         if let Some(local_def_id) = def_id.as_local() {
             let body = self
@@ -48,6 +67,8 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             (arg_tys, result_ty)
         }
     }
+
+    /// Encodes an operand (an argument to a function) as a pure Viper expression.
     fn encode_operand(
         &mut self,
         args: &Self::EncodeOperandArgs,
@@ -64,6 +85,10 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             _ => todo!(),
         }
     }
+
+    /// Encodes the arguments to the function. The first arguments are the lifted
+    /// type parameters, followed by the actual arguments. Appropriate casts
+    /// are inserted to convert from/to generic and concrete arguments as necessary.
     fn encode_fn_args(
         &mut self,
         func: &mir::Operand<'tcx>,
@@ -104,6 +129,8 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         encoded_args
     }
 
+    /// Encodes the function application. The resulting application is casted
+    /// to the appropriate generic/concrete type to match the type of `destination`.
     fn encode_pure_func_app(
         &mut self,
         func: &mir::Operand<'tcx>,

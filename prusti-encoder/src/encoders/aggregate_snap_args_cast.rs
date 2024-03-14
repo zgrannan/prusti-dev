@@ -107,7 +107,7 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
                         .map(|ty| {
                             let cast_functions =
                                 deps.require_local::<RustTyGenericCastEnc>(*ty).unwrap();
-                            cast_functions.to_generic_caster()
+                            cast_functions.to_generic_cast()
                         })
                         .collect::<Vec<_>>(),
                     AggregateType::Adt {

@@ -12,7 +12,13 @@ use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
 use crate::encoders::{ConstEnc, MirBuiltinEnc, ViperTupleEnc};
-use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, pure_func_app::PureFuncAppEnc, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{
+    aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask},
+    pure_func_app::PureFuncAppEnc,
+    rust_ty_generic_cast::RustTyGenericCastEnc,
+    rust_ty_predicates::RustTyPredicatesEnc,
+    rust_ty_snapshots::RustTySnapshotsEnc
+};
 
 pub struct MirPureEnc;
 
@@ -49,7 +55,6 @@ pub struct MirPureEncTask<'tcx> {
     pub kind: PureKind,
     pub parent_def_id: DefId, // ID of the function
     pub param_env: ty::ParamEnv<'tcx>, // param environment at the usage site
-    pub substs: ty::GenericArgsRef<'tcx>, // type substitutions at the usage site
     pub caller_def_id: DefId, // Caller/Use DefID
 }
 
@@ -62,7 +67,6 @@ impl TaskEncoder for MirPureEnc {
         usize, // encoding depth
         PureKind, // encoding a pure function?
         DefId, // ID of the function
-        ty::GenericArgsRef<'tcx>, // ? this should be the "signature", after applying the env/substs
         DefId, // Caller/Use DefID
     );
 
@@ -76,7 +80,6 @@ impl TaskEncoder for MirPureEnc {
             task.encoding_depth,
             task.kind,
             task.parent_def_id,
-            task.substs,
             task.caller_def_id,
         )
     }
@@ -93,7 +96,7 @@ impl TaskEncoder for MirPureEnc {
     )> {
         deps.emit_output_ref::<Self>(*task_key, ());
 
-        let (_, kind, def_id, substs, caller_def_id) = *task_key;
+        let (_, kind, def_id, caller_def_id) = *task_key;
 
         tracing::debug!("encoding {def_id:?}");
         let expr = vir::with_vcx(move |vcx| {
@@ -892,7 +895,6 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         kind: PureKind::Closure,
                         parent_def_id: cl_def_id,
                         param_env: self.vcx.tcx.param_env(cl_def_id),
-                        substs: ty::List::identity_for_item(self.vcx.tcx, cl_def_id),
                         caller_def_id: self.def_id,
                     }
                 ).unwrap().expr

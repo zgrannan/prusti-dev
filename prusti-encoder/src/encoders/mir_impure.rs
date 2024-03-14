@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 //    SsaAnalysis,
 //};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{add_debug_note, MethodIdent, UnknownArity};
+use vir::{MethodIdent, UnknownArity};
 
 pub struct MirImpureEnc;
 
@@ -30,7 +30,10 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, lifted_func_app_generics::LiftedFuncAppGenericsEnc, most_generic_ty::{extract_type_params, MostGenericTy}, pure_generic_cast::{CastArgs, PureGenericCastEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, MirLocalDefEnc, MirSpecEnc};
+use crate::encoders::{
+    aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask},
+    rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
+};
 
 use super::pure_func_app::PureFuncAppEnc;
 

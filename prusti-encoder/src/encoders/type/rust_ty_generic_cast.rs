@@ -22,12 +22,15 @@ pub struct RustTyGenericCastEncOutput<'vir> {
 
 impl<'vir> RustTyGenericCastEncOutput<'vir> {
 
-    pub fn to_generic_caster(
+    /// Returns the data to facilitate a cast from the concrete representation to
+    /// the generic representation, if the input type wasn't already a generic.
+    pub fn to_generic_cast(
         &self,
     ) -> Option<PureCast<'vir>> {
         self.cast.generic_option().map(|f| PureCast::new(f, self.ty_args))
     }
 
+    /// See `GenericCastOutputRef::cast_to_concrete_if_possible`.
     pub fn cast_to_concrete_if_possible<'tcx, Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
@@ -37,6 +40,7 @@ impl<'vir> RustTyGenericCastEncOutput<'vir> {
             .cast_to_concrete_if_possible(vcx, snap, self.ty_args)
     }
 
+    /// See `GenericCastOutputRef::cast_to_generic_if_necessary`.
     pub fn cast_to_generic_if_necessary<'tcx, Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,

@@ -4,7 +4,8 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    lifted_func_def_generics::LiftedFuncDefGenericsEnc, mir_pure::PureKind, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    lifted_func_def_generics::LiftedFuncDefGenericsEnc,
+    mir_pure::PureKind, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -101,7 +102,6 @@ impl TaskEncoder for MirFunctionEnc {
                         kind: PureKind::Pure,
                         parent_def_id: def_id,
                         param_env: vcx.tcx.param_env(def_id),
-                        substs,
                         caller_def_id,
                     })
                     .unwrap()
@@ -110,11 +110,6 @@ impl TaskEncoder for MirFunctionEnc {
 
 
                 let expr = expr.reify(vcx, (def_id, spec.pre_args));
-                eprintln!("{function_name}: {:?}", expr.ty());
-                if function_name == "f_test1_CALLER_0_8" {
-                    eprintln!("expr : {:?}", expr);
-                    eprintln!("expr : {}", expr.debug_info);
-                }
                 assert!(expr.ty() == return_type.snapshot, "expected {:?}, got {:?}", return_type.snapshot, expr.ty());
                 Some(expr)
             };

@@ -1,5 +1,5 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, FunctionIdent, UnaryArity, UnknownArity};
+use vir::{CallableIdent, FunctionIdent, UnknownArity};
 
 use crate::encoders::{domain::DomainEnc, GenericEnc};
 
@@ -15,22 +15,23 @@ pub struct GenericCastEnc;
 #[derive(Copy, Clone, Debug)]
 pub enum GenericCastOutputRef<'vir> {
     CastFunctions {
-        /// Casts a concrete type to a generic type
+        /// Casts a concrete expression to a generic expression (s_Param). The first
+        /// argument is the snapshot encoding of the expression. Remaining
+        /// arguments are type parameters.
         make_generic: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
-        /// Casts a generic type to a concrete type
+        /// Casts a generic expression to a concrete expression. The first
+        /// argument is the snapshot encoding of the expresion (an s_Param).
+        /// Remaining arguments are type parameters.
         make_concrete: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
     },
     AlreadyGeneric,
 }
 
 impl<'vir> GenericCastOutputRef<'vir> {
-    pub fn concrete_option(&self) -> Option<vir::FunctionIdent<'vir, UnknownArity<'vir>>> {
-        match self {
-            GenericCastOutputRef::AlreadyGeneric => None,
-            GenericCastOutputRef::CastFunctions { make_concrete, .. } => Some(*make_concrete),
-        }
-    }
 
+    /// Returns the function that casts the concrete expression to a generic
+    /// expression (s_Param), if the input type wasn't already a generic
+    /// expression.
     pub fn generic_option(&self) -> Option<vir::FunctionIdent<'vir, UnknownArity<'vir>>> {
         match self {
             GenericCastOutputRef::AlreadyGeneric => None,
@@ -57,8 +58,8 @@ impl<'vir> GenericCastOutputRef<'vir> {
         }
     }
 
-    // Converts the snapshot `snap` to a concrete snapshot, if the concrete type
-    // is known.
+    /// Converts the snapshot `snap` to a concrete snapshot, if the concrete type
+    /// is known.
     pub fn cast_to_concrete_if_possible<'tcx, Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,

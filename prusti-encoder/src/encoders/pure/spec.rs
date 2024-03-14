@@ -100,7 +100,6 @@ impl TaskEncoder for MirSpecEnc {
                                 kind: PureKind::Spec,
                                 parent_def_id: *spec_def_id,
                                 param_env: vcx.tcx.param_env(spec_def_id),
-                                substs,
                                 // TODO: should this be `def_id` or `caller_def_id`
                                 caller_def_id: def_id,
                             },
@@ -133,7 +132,6 @@ impl TaskEncoder for MirSpecEnc {
                                 kind: PureKind::Spec,
                                 parent_def_id: *spec_def_id,
                                 param_env: vcx.tcx.param_env(spec_def_id),
-                                substs,
                                 // TODO: should this be `def_id` or `caller_def_id`
                                 caller_def_id: def_id,
                             },
