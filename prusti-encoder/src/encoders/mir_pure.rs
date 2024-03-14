@@ -1,6 +1,6 @@
 use prusti_rustc_interface::{
     index::IndexVec,
-    middle::{mir, ty},
+    middle::{mir::{self, Body}, ty},
     span::def_id::DefId,
     type_ir::sty::TyKind, ast,
 };
@@ -11,7 +11,7 @@ use task_encoder::{
 use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::encoders::{lifted_func_app_generics::LiftedFuncAppGenericsEnc, pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, MirFunctionEnc, ViperTupleEnc};
+use crate::encoders::{ConstEnc, MirBuiltinEnc, ViperTupleEnc};
 use super::{aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, pure_func_app::PureFuncAppEnc, rust_ty_generic_cast::RustTyGenericCastEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc};
 
 pub struct MirPureEnc;
@@ -181,6 +181,30 @@ struct Enc<'tcx, 'vir: 'enc, 'enc>
 impl <'tcx: 'vir, 'vir, 'enc> PureFuncAppEnc<'tcx, 'vir> for Enc<'tcx, 'vir, 'enc> {
     fn vcx(&self) -> &'vir vir::VirCtxt<'tcx> {
         self.vcx
+    }
+
+    type EncodeOperandArgs = HashMap<mir::Local, usize>;
+
+    type Curr = ExprInput<'vir>;
+
+    type Next = vir::ExprKind<'vir>;
+
+    type LocalDeclsSrc = Body<'tcx>;
+
+    fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir> {
+        self.deps
+    }
+
+    fn local_decls_src(&self) -> &Self::LocalDeclsSrc {
+        self.body
+    }
+
+    fn encode_operand(
+        &mut self,
+        args: &Self::EncodeOperandArgs,
+        operand: &mir::Operand<'tcx>,
+    ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
+        self.encode_operand(args, operand)
     }
 }
 
@@ -445,55 +469,19 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 target,
                 ..
             } => {
-                // TODO: extracting FnDef given func could be extracted? (duplication in impure)
-                let func_ty = func.ty(self.body, self.vcx.tcx);
-                let expr = match func_ty.kind() {
-                    &TyKind::FnDef(def_id, arg_tys) => {
-                        // A fn call in pure can only be one of two kinds: a
-                        // call to another pure function, or a call to a prusti
-                        // builtin function.
-                        let is_pure = crate::encoders::with_proc_spec(def_id, |def_spec|
-                            def_spec.kind.is_pure().unwrap_or_default()
-                        ).unwrap_or_default();
-                        if is_pure {
-                            let pure_func = self.deps.require_ref::<MirFunctionEnc>(
-                                (def_id, self.def_id)
-                            ).unwrap().function_ref;
-                            let (fn_arg_tys, fn_result_ty) = self.get_pure_func_sig(def_id);
-
-                            let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
-                                arg_tys
-                            ).unwrap();
-
-                            // Initial arguments are lifted type parameters
-                            let mut encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx)).collect::<Vec<_>>();
-
-                            let mut encoded_fn_args = fn_arg_tys.into_iter().zip(args.iter())
-                                .map(|(expected_ty, oper)| {
-                                    let base = self.encode_operand(&new_curr_ver, oper);
-                                    let caster = self.deps.require_ref::<PureGenericCastEnc>(
-                                        CastArgs {
-                                            expected: expected_ty,
-                                            actual: oper.ty(self.body, self.vcx.tcx)
-                                        }
-                                    ).unwrap();
-                                    caster.apply_cast_if_necessary(self.vcx, base)
-                                })
-                                .collect::<Vec<_>>();
-                            encoded_args.append(&mut encoded_fn_args);
-                            let call = pure_func.apply(self.vcx, &encoded_args);
-                            let result_cast = self.deps.require_ref::<PureGenericCastEnc>(
-                                CastArgs {
-                                    expected: destination.ty(self.body, self.vcx.tcx).ty,
-                                    actual: fn_result_ty
-                                }
-                            ).unwrap();
-                            result_cast.apply_cast_if_necessary(self.vcx, call)
-                        } else {
-                            self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
-                        }
+                let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
+                let expr = {
+                    // A fn call in pure can only be one of two kinds: a
+                    // call to another pure function, or a call to a prusti
+                    // builtin function.
+                    let is_pure = crate::encoders::with_proc_spec(def_id, |def_spec|
+                        def_spec.kind.is_pure().unwrap_or_default()
+                    ).unwrap_or_default();
+                    if is_pure {
+                        self.encode_pure_func_app(func, args, destination, self.def_id, &new_curr_ver)
+                    } else {
+                        self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
                     }
-                    _ => todo!(),
                 };
 
                 let mut term_update = Update::new();

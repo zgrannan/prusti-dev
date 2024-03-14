@@ -254,8 +254,28 @@ struct EncVisitor<'tcx, 'vir, 'enc>
 }
 
 impl<'tcx: 'vir, 'vir> PureFuncAppEnc<'tcx, 'vir> for EncVisitor<'tcx, 'vir, '_> {
+    type EncodeOperandArgs = ();
+    type Curr = !;
+    type Next = !;
+    type LocalDeclsSrc = mir::LocalDecls<'tcx>;
     fn vcx(&self) -> &'vir vir::VirCtxt<'tcx> {
         self.vcx
+    }
+
+    fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir> {
+        self.deps
+    }
+
+    fn local_decls_src(&self) -> &Self::LocalDeclsSrc {
+        self.local_decls
+    }
+
+    fn encode_operand(
+        &mut self,
+        args: &Self::EncodeOperandArgs,
+        operand: &mir::Operand<'tcx>,
+    ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
+        self.encode_operand_snap(operand)
     }
 }
 
@@ -843,14 +863,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 target,
                 ..
             } => {
-                // TODO: extracting FnDef given func could be extracted? (duplication in pure)
-                let func_ty = func.ty(self.local_decls, self.vcx.tcx);
-                let (func_def_id, arg_tys) = match func_ty.kind() {
-                    &ty::TyKind::FnDef(def_id, arg_tys) => {
-                        (def_id, arg_tys)
-                    }
-                    _ => todo!(),
-                };
+                let (func_def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
                 let is_pure = crate::encoders::with_proc_spec(func_def_id, |spec|
                     spec.kind.is_pure().unwrap_or_default()
                 ).unwrap_or_default();
@@ -861,33 +874,8 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                 let task = (func_def_id, self.def_id);
                 if is_pure {
-                    let pure_func = self.deps.require_ref::<MirFunctionEnc>(task).unwrap();
+                    let pure_func_app = self.encode_pure_func_app(func, args, destination, self.def_id, &());
 
-
-                    let encoded_ty_args = self.deps.require_local::<LiftedFuncAppGenericsEnc>(
-                        arg_tys
-                    ).unwrap();
-
-
-                    let encoded_ty_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx)).collect::<Vec<_>>();
-
-                    // Initial arguments are lifted type parameters
-                    let mut func_args = encoded_ty_args;
-
-                    func_args.extend(
-                        fn_arg_tys.into_iter().zip(args.iter())
-                            .map(|(expected_ty, op)| {
-                                let base = self.encode_operand_snap(op);
-                                let caster = self.deps.require_ref::<PureGenericCastEnc>(
-                                    CastArgs {
-                                        expected: expected_ty,
-                                        actual: op.ty(self.local_decls, self.vcx.tcx)
-                                    }
-                                ).unwrap();
-                                caster.apply_cast_if_necessary(self.vcx, base)
-                            })
-                    );
-                    let pure_func_app = pure_func.function_ref.apply(self.vcx, &func_args);
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
                     let method_assign = self
                         .deps
@@ -895,24 +883,6 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         .unwrap()
                         .generic_predicate
                         .method_assign;
-
-                    let func_return_ty = self.vcx.tcx.fn_sig(func_def_id).skip_binder().output();
-
-                    let pure_cast_args = CastArgs {
-                        expected: return_ty,
-                        actual: func_return_ty.skip_binder()
-                    };
-
-                    let cast = self.deps.require_ref::<PureGenericCastEnc>(pure_cast_args).unwrap();
-
-                    add_debug_note!(
-                        method_assign.debug_info(),
-                        "Pure function {:?}, debuginfo: {}",
-                        pure_func.function_ref,
-                        pure_func.function_ref.debug_info(),
-                    );
-
-                    let pure_func_app = cast.apply_cast_if_necessary(self.vcx, pure_func_app);
 
                     self.stmt(
                         self.vcx

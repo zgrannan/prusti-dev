@@ -1,6 +1,7 @@
 #![feature(rustc_private)]
 #![feature(associated_type_defaults)]
 #![feature(box_patterns)]
+#![feature(never_type)]
 
 extern crate rustc_middle;
 extern crate rustc_serialize;
