@@ -43,7 +43,7 @@ impl TaskEncoder for LiftedFuncDefGenericsEnc {
                 .filter_map(|arg| {
                     let ty = arg.as_type()?;
                     if let TyKind::Param(p) = ty.kind() {
-                        Some(deps.require_ref::<LiftedGenericEnc>(p).unwrap())
+                        Some(deps.require_ref::<LiftedGenericEnc>(*p).unwrap())
                     } else {
                         None
                     }

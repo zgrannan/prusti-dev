@@ -66,9 +66,11 @@ pub struct PredicateEncOutputRef<'vir> {
     pub ref_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
     /// Construct snapshot from an unreachable.
     pub unreachable_to_snap: FunctionIdent<'vir, NullaryArity<'vir>>,
-    /// Ref as first argument, snapshot as second. Ensures predicate
-    /// access to ref with snapshot value.
-    pub method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
+    /// Ref as first argument, followed by type parameters, followed by
+    /// snapshot. Ensures predicate access to ref with snapshot value. This
+    /// probably shouldn't be accessed directly, instead see
+    /// `RustTyPredicatesEncOutputRef::apply_method_assign`.
+    pub (super) method_assign: MethodIdent<'vir, UnknownArity<'vir>>,
     /// Always `TypeData::Domain`.
     pub snapshot: vir::Type<'vir>,
     //pub method_refold: &'vir str,
@@ -81,7 +83,7 @@ impl<'vir> PredicateEncOutputRef<'vir> {
     pub fn ref_to_args<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
-        instantiated_ty: LiftedTy<'vir>,
+        instantiated_ty: LiftedTy<'vir, LiftedGeneric<'vir>>,
         self_ref: vir::Expr<'vir>,
     ) -> &'vir [vir::Expr<'vir>] {
         assert!(self_ref.ty() == &TypeData::Ref);
@@ -356,7 +358,10 @@ impl TaskEncoder for PredicateEnc {
                     enc.output_ref(PredicateEncData::Ref(specifics)),
                 );
 
-                let lifted_ty = deps.require_local::<LiftedTyEnc>(inner).unwrap();
+                let lifted_ty =
+                    vir::with_vcx(|vcx|
+                        deps.require_local::<LiftedTyEnc>(inner).unwrap().instantiate_with_lifted_generics(vcx, deps)
+                    );
                 let inner = deps
                     .require_ref::<RustTyPredicatesEnc>(inner)
                     .unwrap()
@@ -653,7 +658,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
     pub fn mk_ref(
         mut self,
         inner: PredicateEncOutputRef<'vir>,
-        lifted_ty: LiftedTy<'vir>,
+        lifted_ty: LiftedTy<'vir, LiftedGeneric<'vir>>,
         data: PredicateEncDataRef<'vir>,
     ) -> PredicateEncOutput<'vir> {
         let self_field = self

@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use crate::data::*;
 use crate::gendata::*;
+use crate::DomainFunction;
 
 fn fmt_comma_sep_display<T: Display>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
     els.iter()
@@ -38,6 +39,8 @@ fn indent(s: String) -> String {
         .collect::<String>()
 }
 
+
+
 impl<'vir, Curr, Next> Debug for AccFieldGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "acc({:?}.{}", self.recv, self.field.name)?;
@@ -61,6 +64,7 @@ impl<'vir, Curr, Next> Debug for BinOpGenData<'vir, Curr, Next> {
             BinOpKind::CmpLe => "<=",
             BinOpKind::And => "&&",
             BinOpKind::Or => "||",
+            BinOpKind::Implies => "==>",
             BinOpKind::Add => "+",
             BinOpKind::Sub => "-",
             BinOpKind::Mul => "*",
@@ -93,18 +97,26 @@ impl Debug for ConstData {
     }
 }
 
+pub fn fmt_domain_with_extra_functions<'vir, Curr, Next>(
+    f: &mut Formatter<'_>,
+    domain: &DomainGenData<'vir, Curr, Next>,
+    extra_functions: &Vec<DomainFunction<'vir>>
+) -> FmtResult {
+    write!(f, "domain {}", domain.name)?;
+    if !domain.typarams.is_empty() {
+        write!(f, "[")?;
+        fmt_comma_sep_display(f, &domain.typarams)?;
+        write!(f, "]")?;
+    }
+    writeln!(f, " {{")?;
+    domain.axioms.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
+    domain.functions.iter().chain(extra_functions).map(|el| el.fmt(f)).collect::<FmtResult>()?;
+    writeln!(f, "}}")
+}
+
 impl<'vir, Curr, Next> Debug for DomainGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "domain {}", self.name)?;
-        if !self.typarams.is_empty() {
-            write!(f, "[")?;
-            fmt_comma_sep_display(f, &self.typarams)?;
-            write!(f, "]")?;
-        }
-        writeln!(f, " {{")?;
-        self.axioms.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
-        self.functions.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
-        writeln!(f, "}}")
+        fmt_domain_with_extra_functions(f, self, &vec![])
     }
 }
 

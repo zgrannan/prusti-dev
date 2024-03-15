@@ -60,11 +60,10 @@ impl TaskEncoder for SnapshotEnc {
             );
             let specifics = deps.require_dep::<DomainEnc>(*ty).unwrap();
             let generics = vcx.alloc_slice(
-                ty.generics()
-                    .iter()
+                &ty.generics()
+                    .into_iter()
                     .map(|g| deps.require_ref::<LiftedGenericEnc>(*g).unwrap())
                     .collect::<Vec<_>>()
-                    .as_slice(),
             );
             Ok((
                 SnapshotEncOutput {

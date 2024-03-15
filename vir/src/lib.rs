@@ -13,6 +13,7 @@ mod refs;
 mod reify;
 mod callable_idents;
 
+pub use debug::fmt_domain_with_extra_functions;
 pub use context::*;
 pub use data::*;
 pub use gendata::*;

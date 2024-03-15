@@ -9,7 +9,7 @@ use crate::encoders::GenericEnc;
 /// parameters will always correspond to a method or function parameter in the
 /// Viper encoding.
 #[derive(Clone, Copy, Debug)]
-pub struct LiftedGeneric<'vir>(vir::LocalDecl<'vir>);
+pub struct LiftedGeneric<'vir>(pub vir::LocalDecl<'vir>);
 
 impl <'vir> LiftedGeneric<'vir> {
     pub fn decl(&self) -> vir::LocalDecl<'vir> {
@@ -30,7 +30,7 @@ pub struct LiftedGenericEnc;
 impl TaskEncoder for LiftedGenericEnc {
     task_encoder::encoder_cache!(LiftedGenericEnc);
 
-    type TaskDescription<'tcx> = &'tcx ty::ParamTy;
+    type TaskDescription<'tcx> = ty::ParamTy;
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
 

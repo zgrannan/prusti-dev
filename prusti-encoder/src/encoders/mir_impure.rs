@@ -474,14 +474,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             }
         };
         let tmp_exp: vir::Expr<'vir> = self.new_tmp(&vir::TypeData::Ref).1;
-        self.stmt(
-            self.vcx.alloc(
-                ty_out
-                    .generic_predicate
-                    .method_assign
-                    .apply(self.vcx, &[tmp_exp, snap_val]),
-            ),
-        );
+        self.stmt(ty_out.apply_method_assign(self.vcx, tmp_exp, snap_val));
         tmp_exp
     }
 
@@ -871,8 +864,6 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     spec.kind.is_pure().unwrap_or_default()
                 ).unwrap_or_default();
 
-                let (fn_arg_tys, _) = self.get_pure_func_sig(func_def_id);
-
                 let dest = self.encode_place(Place::from(*destination));
 
                 let task = (func_def_id, self.def_id);
@@ -880,17 +871,13 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     let pure_func_app = self.encode_pure_func_app(func, args, destination, self.def_id, &());
 
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
-                    let method_assign = self
+                    let assign_stmt = self
                         .deps
                         .require_ref::<RustTyPredicatesEnc>(return_ty)
                         .unwrap()
-                        .generic_predicate
-                        .method_assign;
+                        .apply_method_assign(self.vcx, dest, pure_func_app);
 
-                    self.stmt(
-                        self.vcx
-                            .alloc(method_assign.apply(self.vcx, &[dest, pure_func_app])),
-                    );
+                    self.stmt(assign_stmt);
                 } else {
                     let func_out = self
                         .deps

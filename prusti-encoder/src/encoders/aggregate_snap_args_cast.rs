@@ -4,7 +4,6 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
 };
 use task_encoder::TaskEncoder;
-use vir::UnaryArity;
 
 use crate::encoders::{
     pure_generic_cast::{CastArgs, PureGenericCastEnc},

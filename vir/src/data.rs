@@ -45,6 +45,7 @@ pub enum BinOpKind {
     CmpLe,
     And,
     Or,
+    Implies,
     Add,
     Sub,
     Mul,

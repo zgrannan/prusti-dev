@@ -7,6 +7,7 @@ use crate::encoders::pure_generic_cast::PureCast;
 use super::{
     generic_cast::{GenericCastEnc, GenericCastOutputRef},
     lifted::{LiftedTy, LiftedTyEnc},
+    lifted_generic::LiftedGeneric,
     most_generic_ty::extract_type_params,
 };
 
@@ -17,17 +18,16 @@ pub struct RustTyGenericCastEnc;
 #[derive(Clone)]
 pub struct RustTyGenericCastEncOutput<'vir> {
     pub cast: GenericCastOutputRef<'vir>,
-    pub ty_args: &'vir [LiftedTy<'vir>],
+    pub ty_args: &'vir [LiftedTy<'vir, LiftedGeneric<'vir>>],
 }
 
 impl<'vir> RustTyGenericCastEncOutput<'vir> {
-
     /// Returns the data to facilitate a cast from the concrete representation to
     /// the generic representation, if the input type wasn't already a generic.
-    pub fn to_generic_cast(
-        &self,
-    ) -> Option<PureCast<'vir>> {
-        self.cast.generic_option().map(|f| PureCast::new(f, self.ty_args))
+    pub fn to_generic_cast(&self) -> Option<PureCast<'vir>> {
+        self.cast
+            .generic_option()
+            .map(|f| PureCast::new(f.as_unknown_arity(), &[]))
     }
 
     /// See `GenericCastOutputRef::cast_to_concrete_if_possible`.
@@ -46,8 +46,7 @@ impl<'vir> RustTyGenericCastEncOutput<'vir> {
         vcx: &'vir vir::VirCtxt<'tcx>,
         snap: vir::ExprGen<'vir, Curr, Next>,
     ) -> vir::ExprGen<'vir, Curr, Next> {
-        self.cast
-            .cast_to_generic_if_necessary(vcx, snap, self.ty_args)
+        self.cast.cast_to_generic_if_necessary(vcx, snap)
     }
 }
 
@@ -87,7 +86,11 @@ impl TaskEncoder for RustTyGenericCastEnc {
             let cast = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
             let ty_args = args
                 .iter()
-                .map(|a| deps.require_local::<LiftedTyEnc>(*a).unwrap())
+                .map(|a| {
+                    deps.require_local::<LiftedTyEnc>(*a)
+                        .unwrap()
+                        .instantiate_with_lifted_generics(vcx, deps)
+                })
                 .collect::<Vec<_>>();
             Ok((
                 RustTyGenericCastEncOutput {

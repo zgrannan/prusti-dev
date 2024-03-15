@@ -86,6 +86,9 @@ impl<'tcx> VirCtxt<'tcx> {
         src_args: &[ExprGen<'vir, Curr, Next>],
         result_ty: Type<'vir>,
     ) -> ExprGen<'vir, Curr, Next> {
+        // if target == "s_Tuple2_read_0" && format!("{:?}", src_args[0]) == "_0_4s_1" {
+        //     panic!()
+        // }
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::FuncApp(self.arena.alloc(FuncAppGenData {
             target,
             args: self.alloc_slice(src_args),

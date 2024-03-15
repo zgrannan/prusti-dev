@@ -3,6 +3,7 @@ pub mod generic_cast;
 pub mod predicate;
 pub mod snapshot;
 pub mod lifted;
+pub mod lifted_ty_function;
 pub mod lifted_generic;
 pub mod lifted_func_def_generics;
 pub mod lifted_func_app_generics;

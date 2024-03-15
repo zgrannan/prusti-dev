@@ -4,8 +4,11 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
+    lifted::{LiftedTy, LiftedTyEnc},
     lifted_func_def_generics::LiftedFuncDefGenericsEnc,
-    mir_pure::PureKind, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    mir_pure::PureKind,
+    rust_ty_generic_cast::RustTyGenericCastEnc,
+    util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -92,6 +95,7 @@ impl TaskEncoder for MirFunctionEnc {
                 ty: local_defs.locals[arg].ty.snapshot,
             })));
 
+
             let expr = if trusted {
                 None
             } else {
@@ -114,7 +118,42 @@ impl TaskEncoder for MirFunctionEnc {
                 Some(expr)
             };
 
+            let (input_tys, _) = get_func_sig(vcx, def_id);
+            let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
+            let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
+                let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
+                let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
+                let lifted_ty = deps.require_local::<LiftedTyEnc>(*ty).unwrap().instantiate_with_lifted_generics(vcx, deps);
+                match lifted_ty  {
+                    LiftedTy::Generic(generic) => {
+                        Some(
+                            vcx.mk_eq_expr(
+                                generic_enc.param_type_function.apply(vcx, [vir_arg]),
+                                generic.expr(vcx)
+                            )
+                        )
+                    },
+                    LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
+                        let to_generic = deps.require_local::<RustTyGenericCastEnc>(*ty).unwrap();
+                        Some(
+                            vcx.mk_eq_expr(
+                                generic_enc.param_type_function.apply(
+                                    vcx,
+                                    [to_generic.cast_to_generic_if_necessary(vcx, vir_arg)]
+                                ),
+                                lifted_ty.expr(vcx)
+                            )
+                        )
+                    }
+                    _ => None
+                }
+            });
+
+
             tracing::debug!("finished {def_id:?}");
+
+            let mut pres = spec.pres;
+            pres.extend(type_preconditions);
 
             Ok((
                 MirFunctionEncOutput {
@@ -122,7 +161,7 @@ impl TaskEncoder for MirFunctionEnc {
                         function_name,
                         vcx.alloc_slice(&func_args),
                         return_type.snapshot,
-                        vcx.alloc_slice(&spec.pres),
+                        vcx.alloc_slice(&pres),
                         vcx.alloc_slice(&spec.posts),
                         expr
                     ),

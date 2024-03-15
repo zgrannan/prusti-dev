@@ -12,7 +12,7 @@ use crate::encoders::{
     pure_generic_cast::{CastArgs, PureGenericCastEnc},
 };
 
-use super::MirFunctionEnc;
+use super::{util::get_func_sig, MirFunctionEnc};
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.
@@ -40,33 +40,6 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
     /// the function type
     fn local_decls_src(&self) -> &Self::LocalDeclsSrc;
     fn vcx(&self) -> &'vir vir::VirCtxt<'tcx>;
-
-    /// Returns input and output types of a function
-    fn get_pure_func_sig(&self, def_id: DefId) -> (Vec<ty::Ty<'tcx>>, ty::Ty<'tcx>) {
-        if let Some(local_def_id) = def_id.as_local() {
-            let body = self
-                .vcx()
-                .body
-                .borrow_mut()
-                .get_impure_fn_body_identity(local_def_id);
-            let arg_tys = (1..body.arg_count + 1)
-                .map(|arg| body.local_decls[arg.into()].ty)
-                .collect::<Vec<_>>();
-            let result_ty = body.local_decls[mir::RETURN_PLACE].ty;
-            (arg_tys, result_ty)
-        } else {
-            let sig = self.vcx().tcx.fn_sig(def_id);
-            let arg_tys = sig
-                .skip_binder()
-                .inputs()
-                .iter()
-                .map(|i| i.skip_binder())
-                .copied()
-                .collect::<Vec<_>>();
-            let result_ty = sig.skip_binder().output().skip_binder();
-            (arg_tys, result_ty)
-        }
-    }
 
     /// Encodes an operand (an argument to a function) as a pure Viper expression.
     fn encode_operand(
@@ -96,7 +69,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
         let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
-        let (fn_arg_tys, _) = self.get_pure_func_sig(def_id);
+        let (fn_arg_tys, _) = get_func_sig(self.vcx(), def_id);
         let encoded_ty_args = self
             .deps()
             .require_local::<LiftedFuncAppGenericsEnc>(arg_tys)
@@ -141,7 +114,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
         let vcx = self.vcx();
         let (def_id, _) = self.get_def_id_and_arg_tys(func);
-        let (_, fn_result_ty) = self.get_pure_func_sig(def_id);
+        let (_, fn_result_ty) = get_func_sig(vcx, def_id);
         let pure_func = self
             .deps()
             .require_ref::<MirFunctionEnc>((def_id, caller_def_id))

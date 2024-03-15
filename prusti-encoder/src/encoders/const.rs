@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    middle::{mir, ty},
+    middle::mir,
     span::def_id::DefId,
 };
 use rustc_middle::mir::interpret::{ConstValue, Scalar, GlobalAlloc};

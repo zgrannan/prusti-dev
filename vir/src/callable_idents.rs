@@ -330,10 +330,11 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
             vcx.mk_func_app(self.name(), args, self.result_ty())
         } else {
             panic!(
-                "Function {} could not be applied. Expected: {:?}, Actual: {:?} debug info: {}",
+                "Function {} could not be applied. Expected: {:?}, Actual Exprs: {:?}, Actual Types: {:?}, debug info: {}",
                 self.name(),
                 self.arity(),
                 args,
+                args.iter().map(|a| a.ty()).collect::<Vec<_>>(),
                 self.debug_info()
             );
         }

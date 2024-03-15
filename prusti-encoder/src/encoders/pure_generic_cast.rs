@@ -3,7 +3,7 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::VirCtxt;
 
-use super::{generic_cast::GenericCastOutputRef, lifted::LiftedTy};
+use super::{generic_cast::GenericCastOutputRef, lifted::LiftedTy, lifted_generic::LiftedGeneric};
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {
@@ -17,18 +17,17 @@ pub struct CastArgs<'tcx> {
 /// version.
 #[derive(Copy, Clone)]
 pub struct PureCast<'vir> {
-
     /// The function that performs the cast. The first argument is the expression to
     /// cast, followed by the type arguments.
     cast_function: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
 
-    ty_args: &'vir [LiftedTy<'vir>],
+    ty_args: &'vir [LiftedTy<'vir, LiftedGeneric<'vir>>],
 }
 
 impl<'vir> PureCast<'vir> {
     pub fn new(
         cast_function: vir::FunctionIdent<'vir, vir::UnknownArity<'vir>>,
-        ty_args: &'vir [LiftedTy<'vir>],
+        ty_args: &'vir [LiftedTy<'vir, LiftedGeneric<'vir>>],
     ) -> PureCast<'vir> {
         PureCast {
             cast_function,
@@ -49,7 +48,7 @@ impl<'vir> PureCast<'vir> {
                 .collect::<Vec<_>>(),
         )
     }
- }
+}
 
 #[derive(Clone)]
 pub enum PureGenericCastOutputRef<'vir> {
@@ -150,8 +149,8 @@ impl TaskEncoder for PureGenericCastEnc {
                 if let GenericCastOutputRef::CastFunctions { make_generic, .. } = generic_cast.cast
                 {
                     PureGenericCastOutputRef::Cast(PureCast::new(
-                        make_generic,
-                        generic_cast.ty_args,
+                        make_generic.as_unknown_arity(),
+                        &[],
                     ))
                 } else {
                     unreachable!()

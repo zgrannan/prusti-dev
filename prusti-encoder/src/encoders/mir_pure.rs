@@ -1,6 +1,7 @@
 use prusti_rustc_interface::{
+    abi,
     index::IndexVec,
-    middle::{mir::{self, Body}, ty},
+    middle::{mir::{self, Body}, ty::{self, GenericArgs}},
     span::def_id::DefId,
     type_ir::sty::TyKind, ast,
 };
@@ -11,7 +12,7 @@ use task_encoder::{
 use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::encoders::{ConstEnc, MirBuiltinEnc, ViperTupleEnc};
+use crate::encoders::{pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, ViperTupleEnc};
 use super::{
     aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask},
     pure_func_app::PureFuncAppEnc,
@@ -756,26 +757,48 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 let expr = cast.cast_to_concrete_if_possible(self.vcx, expr);
                 (expr, place_ref)
             }
-            mir::ProjectionElem::Field(field_idx, _) => {
-                let field_idx= field_idx.as_usize();
+            mir::ProjectionElem::Field(field_idx, ty) => {
+                eprintln!("Field type: {:?}", ty);
+                eprintln!("Place ty: {:?}", place_ty.ty.kind());
                 match place_ty.ty.kind() {
                     TyKind::Closure(_def_id, args) => {
                         let upvars = args.as_closure().upvar_tys().iter().collect::<Vec<_>>().len();
                         let tuple_ref = self.deps.require_local::<ViperTupleEnc>(
                             upvars,
                         ).unwrap();
-                       (tuple_ref.mk_elem(self.vcx, expr, field_idx), place_ref)
+                       (tuple_ref.mk_elem(self.vcx, expr, field_idx.as_usize()), place_ref)
                     }
-                    _ => {
+                    tykind => {
                         let e_ty = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
                         let struct_like = e_ty
                             .generic_predicate
                             .expect_variant_opt(place_ty.variant_index);
-                        let proj = struct_like.snap_data.field_access[field_idx].read;
+                        let proj = struct_like.snap_data.field_access[field_idx.as_usize()].read;
+                        let proj_app = proj.apply(self.vcx, [expr]);
+                        let proj_app = if let TyKind::Adt(def, _) = tykind {
+
+                            // The ADT type for the field might be generic, concretize if necessary
+                            let variant = def.variant(place_ty.variant_index.unwrap_or(
+                                abi::FIRST_VARIANT
+                            ));
+                            let generic_field_ty = variant.fields[field_idx].ty(
+                                self.vcx.tcx,
+                                GenericArgs::identity_for_item(self.vcx.tcx, def.did())
+                            );
+                            let cast_args = CastArgs {
+                                expected: ty,
+                                actual: generic_field_ty
+                            };
+                            self.deps.require_ref::<PureGenericCastEnc>(cast_args)
+                                .unwrap().apply_cast_if_necessary(self.vcx, proj_app)
+
+                        } else {
+                            proj_app
+                        };
                         let place_ref = place_ref.map(|pr| {
-                            struct_like.ref_to_field_refs[field_idx].apply(self.vcx, [pr])
+                            struct_like.ref_to_field_refs[field_idx.as_usize()].apply(self.vcx, [pr])
                         });
-                        (proj.apply(self.vcx, [expr]), place_ref)
+                        (proj_app, place_ref)
                     }
                 }
             }

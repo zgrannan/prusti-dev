@@ -29,7 +29,7 @@ impl<'vir, Curr, Next> BinOpGenData<'vir, Curr, Next> {
             | BinOpKind::CmpLt
             | BinOpKind::CmpGe
             | BinOpKind::CmpLe => &TypeData::Bool,
-            BinOpKind::And | BinOpKind::Or => &TypeData::Bool,
+            BinOpKind::And | BinOpKind::Or | BinOpKind::Implies => &TypeData::Bool,
             BinOpKind::Add | BinOpKind::Sub | BinOpKind::Mul | BinOpKind::Div | BinOpKind::Mod => self.lhs.ty(),
         }
     }
@@ -196,10 +196,10 @@ pub struct DomainAxiomGenData<'vir, Curr, Next> {
 
 #[derive(Reify)]
 pub struct DomainGenData<'vir, Curr, Next> {
-    #[reify_copy] pub(crate) name: &'vir str, // TODO: identifiers
+    #[reify_copy] pub name: &'vir str, // TODO: identifiers
     #[reify_copy] pub(crate) typarams: &'vir [DomainParamData<'vir>],
     pub(crate) axioms: &'vir [DomainAxiomGen<'vir, Curr, Next>],
-    #[reify_copy] pub(crate) functions: &'vir [DomainFunction<'vir>],
+    #[reify_copy] pub functions: &'vir [DomainFunction<'vir>],
 }
 
 #[derive(Reify)]

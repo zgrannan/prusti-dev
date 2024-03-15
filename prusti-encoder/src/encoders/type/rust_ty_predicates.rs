@@ -4,7 +4,7 @@ use vir::{with_vcx, Type, TypeData};
 
 use crate::encoders::{PredicateEnc, PredicateEncOutputRef};
 
-use super::{lifted::{LiftedTy, LiftedTyEnc}, most_generic_ty::extract_type_params};
+use super::{lifted::{LiftedTy, LiftedTyEnc}, lifted_generic::LiftedGeneric, most_generic_ty::extract_type_params};
 
 pub struct RustTyPredicatesEnc;
 
@@ -14,10 +14,12 @@ pub struct RustTyPredicatesEncOutputRef<'vir> {
     pub generic_predicate: PredicateEncOutputRef<'vir>,
 
     /// The lifted representation of the input type, as a Viper value
-    pub ty: LiftedTy<'vir>,
+    pub ty: LiftedTy<'vir, LiftedGeneric<'vir>>,
 }
 
 impl<'vir> RustTyPredicatesEncOutputRef<'vir> {
+    /// Generates a call to `method_assign`, which asserts that the snapshot of
+    /// `self_ref` is `self_new_snap`. Appropriate type arguments are used.
     pub fn apply_method_assign<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
@@ -98,7 +100,10 @@ impl TaskEncoder for RustTyPredicatesEnc {
         with_vcx(|vcx| {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let generic_predicate = deps.require_ref::<PredicateEnc>(generic_ty).unwrap();
-            let ty = deps.require_local::<LiftedTyEnc>(*task_key).unwrap();
+            let ty = deps
+                .require_local::<LiftedTyEnc>(*task_key)
+                .unwrap()
+                .instantiate_with_lifted_generics(vcx, deps);
             deps.emit_output_ref::<RustTyPredicatesEnc>(
                 *task_key,
                 RustTyPredicatesEncOutputRef {

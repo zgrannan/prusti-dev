@@ -13,7 +13,6 @@ pub enum GenericEncError {
 
 #[derive(Clone, Debug)]
 pub struct GenericEncOutputRef<'vir> {
-    pub base_name: String,
     pub type_snapshot: vir::Type<'vir>,
     pub param_snapshot: vir::Type<'vir>,
     pub param_type_function: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
@@ -88,7 +87,6 @@ impl TaskEncoder for GenericEnc {
 
 
         let output_ref = GenericEncOutputRef {
-            base_name: String::from("Param"),
             type_snapshot: &TYP_DOMAIN,
             param_snapshot: &SNAPSHOT_PARAM_DOMAIN,
             ref_to_pred,

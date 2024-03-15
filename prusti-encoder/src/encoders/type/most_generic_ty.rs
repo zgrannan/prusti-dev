@@ -2,6 +2,7 @@ use prusti_rustc_interface::{
     middle::ty::{self, TyKind},
     span::symbol,
 };
+use vir::{DomainParamData, NullaryArityAny};
 /// The "most generic" version of a type is one that uses "identity
 /// substitutions" for all type parameters. For example, the most generic
 /// version of `Vec<u32>` is `Vec<T>`, the most generic version of
@@ -11,7 +12,37 @@ use prusti_rustc_interface::{
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
+impl <'tcx: 'vir, 'vir> MostGenericTy<'tcx> {
+    pub fn get_vir_domain_ident(&self, vcx: &'vir vir::VirCtxt<'tcx>) ->
+        vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>> {
+        let base_name = self.get_vir_base_name(vcx);
+        vir::DomainIdent::nullary(vir::vir_format!(vcx, "s_{base_name}"))
+    }
+}
+
 impl<'tcx> MostGenericTy<'tcx> {
+
+    pub fn get_vir_base_name(&self, vcx: &vir::VirCtxt<'tcx>) -> String {
+        match self.kind() {
+            TyKind::Bool => String::from("Bool"),
+            TyKind::Int(kind) => format!("Int_{}", kind.name_str()),
+            TyKind::Uint(kind) => format!("UInt_{}", kind.name_str()),
+            TyKind::Adt(adt, _) => vcx.tcx.item_name(adt.did()).to_ident_string(),
+            TyKind::Tuple(params) => format!("{}_Tuple", params.len()),
+            TyKind::Never => String::from("Never"),
+            TyKind::Ref(_, _, m) => {
+                if m.is_mut() {
+                    String::from("Ref_mutable")
+                } else {
+                    String::from("Ref_immutable")
+                }
+            },
+            TyKind::Param(_) => String::from("Param"),
+            other => unimplemented!("get_domain_base_name for {:?}", other),
+        }
+    }
+
+
     pub fn is_generic(&self) -> bool {
         match self.kind() {
             TyKind::Param(_) => true,

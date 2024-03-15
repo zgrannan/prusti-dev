@@ -3,20 +3,13 @@ use prusti_rustc_interface::{
     abi,
     span::symbol,
 };
+use rustc_middle::ty::ParamTy;
 use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
 };
 use vir::{
-    BinaryArity,
-    CallableIdent,
-    DomainParamData,
-    FunctionIdent,
-    KnownArityAny,
-    NullaryArityAny,
-    ToKnownArity,
-    UnaryArity,
-    UnknownArity
+    Arity, BinaryArity, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, ToKnownArity, UnaryArity, UnknownArity
 };
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
@@ -84,16 +77,19 @@ pub enum DomainEncSpecifics<'vir> {
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
-
-    /// Takes as input the generics for this type (if any),
-    /// and returns the resulting type. Used for generics
-    pub type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
+    pub generic_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::encoders::GenericEnc;
 
-use super::{most_generic_ty::MostGenericTy, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{
+    generic_cast::{GenericCastEnc, GenericCastOutputRef, MakeGenericCastFunction},
+    lifted::{LiftedTy, LiftedTyEnc},
+    lifted_ty_function::LiftedTyFunctionEnc,
+    most_generic_ty::{extract_type_params, MostGenericTy},
+    rust_ty_snapshots::RustTySnapshotsEnc
+};
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
     DomainEnc::all_outputs()
@@ -125,124 +121,135 @@ impl TaskEncoder for DomainEnc {
         Self::EncodingError,
         Option<Self::OutputFullDependency<'vir>>,
     )> {
-        vir::with_vcx(|vcx| match task_key.kind() {
-            TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_)  => {
-                let (base_name, prim_type) = match task_key.kind() {
-                    TyKind::Bool => (String::from("Bool"), &vir::TypeData::Bool),
-                    TyKind::Int(kind) => (
-                        format!("Int_{}", kind.name_str()),
-                        &vir::TypeData::Int,
-                    ),
-                    TyKind::Uint(kind) => (
-                        format!("Uint_{}", kind.name_str()),
-                        &vir::TypeData::Int,
-                    ),
-                    _ => todo!(),
-                };
+        vir::with_vcx(|vcx| {
+            let base_name = task_key.get_vir_base_name(vcx);
+            match task_key.kind() {
+                TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_)  => {
+                    let prim_type = match task_key.kind() {
+                        TyKind::Bool => &vir::TypeData::Bool,
+                        TyKind::Int(_) => &vir::TypeData::Int,
+                        TyKind::Uint(_) => &vir::TypeData::Int,
+                        _ => todo!(),
+                    };
 
-                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter(), deps);
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
-                let specifics = enc.mk_prim_specifics(task_key.ty(), prim_type);
-                Ok((enc.finalize(), specifics))
-            }
-            TyKind::Adt(adt, params) => {
-                let base_name = vcx.tcx.item_name(adt.did()).to_ident_string();
-                let ty_params = params.iter().flat_map(ty::GenericArg::as_type);
-                let (mut enc, _) = DomainEncData::new(vcx, &base_name, ty_params, deps);
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
-                match adt.adt_kind() {
-                    ty::AdtKind::Struct => {
-                        let fields = if !adt.is_box() {
-                            let variant = adt.non_enum_variant();
-                            enc.mk_field_tys(deps, variant, params)
-                        } else {
-                            // Box special case (this should be replaced by an
-                            // extern spec in the future)
-                            vec![
-                                deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
-                            ]
-                        };
-                        let specifics = enc.mk_struct_specifics(fields);
-                        Ok((enc.finalize(), specifics))
-                    }
-                    ty::AdtKind::Enum => {
-                        let variants: Vec<_> = adt.discriminants(vcx.tcx).map(|(v, d)| {
-                            let variant = adt.variant(v);
-                            let field_tys = enc.mk_field_tys(deps, variant, params);
-                            (variant.name, v, field_tys, d)
-                        }).collect();
-                        let variants = if variants.is_empty() {
-                            None
-                        } else {
-                            let has_explicit = adt
-                                .variants()
-                                .iter()
-                                .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
-                            let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
-                            let discr_ty = deps
-                                .require_local::<RustTySnapshotsEnc>(discr_ty)
-                                .unwrap()
-                                .generic_snapshot;
-                            Some(VariantData {
-                                discr_ty: discr_ty.snapshot,
-                                discr_prim: discr_ty.specifics.expect_primitive(),
-                                has_explicit,
-                                variants,
-                            })
-                        };
-                        let specifics = enc.mk_enum_specifics(variants);
-                        Ok((enc.finalize(), specifics))
-                    }
-                    ty::AdtKind::Union => todo!(),
+                    let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
+                    let specifics = enc.mk_prim_specifics(
+                        task_key.ty(),
+                        prim_type
+                    );
+                    Ok((enc.finalize(), specifics))
                 }
-            }
-            TyKind::Tuple(params) => {
-                let base_name = format!("{}_Tuple", params.len());
-                let (mut enc, ty_params) = DomainEncData::new(vcx, &base_name, params.iter(), deps);
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
-                let specifics = enc.mk_struct_specifics(ty_params);
-                Ok((enc.finalize(), specifics))
-            }
-            TyKind::Never => {
-                let base_name = String::from("Never");
-                let (mut enc, _) = DomainEncData::new(vcx, &base_name, [].into_iter(), deps);
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
-                let specifics = enc.mk_enum_specifics(None);
-                Ok((enc.finalize(), specifics))
-            }
-            &TyKind::Ref(_, inner, m) => {
-                let base_name = if m.is_mut() {
-                    "Ref_mutable"
-                } else {
-                    "Ref_immutable"
-                };
-                let (mut enc, mut ty_params) =
-                    DomainEncData::new(vcx, &base_name, [inner].into_iter(), deps);
-                deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
-                if m.is_mut() {
-                    ty_params.push(&vir::TypeData::Ref);
+                TyKind::Adt(adt, params) => {
+                    let generics =
+                        params
+                            .iter()
+                            .filter_map(|p| p.as_type())
+                            .map(|ty| deps.require_local::<LiftedTyEnc>(ty).unwrap().expect_generic())
+                            .collect();
+                    let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
+                    match adt.adt_kind() {
+                        ty::AdtKind::Struct => {
+                            let fields = if !adt.is_box() {
+                                let variant = adt.non_enum_variant();
+                                enc.mk_field_tys(variant, params)
+                            } else {
+                                // Box special case (this should be replaced by an
+                                // extern spec in the future)
+                                vec![
+                                    FieldTy {
+                                        ty: enc.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
+                                        lifted: None
+                                    }
+                                ]
+                            };
+                            let specifics = enc.mk_struct_specifics(fields);
+                            Ok((enc.finalize(), specifics))
+                        }
+                        ty::AdtKind::Enum => {
+                            let variants: Vec<_> = adt.discriminants(vcx.tcx).map(|(v, d)| {
+                                let variant = adt.variant(v);
+                                let field_tys = enc.mk_field_tys(variant, params);
+                                (variant.name, v, field_tys, d)
+                            }).collect();
+                            let variants = if variants.is_empty() {
+                                None
+                            } else {
+                                let has_explicit = adt
+                                    .variants()
+                                    .iter()
+                                    .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
+                                let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
+                                let discr_ty = enc.deps
+                                    .require_local::<RustTySnapshotsEnc>(discr_ty)
+                                    .unwrap()
+                                    .generic_snapshot;
+                                Some(VariantData {
+                                    discr_ty: discr_ty.snapshot,
+                                    discr_prim: discr_ty.specifics.expect_primitive(),
+                                    has_explicit,
+                                    variants,
+                                })
+                            };
+                            let make_generic_function =
+                                enc.deps.require_ref::<GenericCastEnc>(*task_key)
+                                    .unwrap().generic_option().unwrap();
+                            let type_function = enc.deps.require_ref::<LiftedTyFunctionEnc>(*task_key).unwrap().function;
+                            let specifics = enc.mk_enum_specifics(type_function, make_generic_function, variants);
+                            Ok((enc.finalize(), specifics))
+                        }
+                        ty::AdtKind::Union => todo!(),
+                    }
                 }
-                let specifics = enc.mk_struct_specifics(ty_params);
-                Ok((enc.finalize(), specifics))
+                TyKind::Tuple(params) => {
+                    let generics = params
+                        .iter()
+                        .map(|ty| deps.require_local::<LiftedTyEnc>(ty).unwrap().expect_generic())
+                        .collect();
+                    let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
+                    let field_tys = params.iter().map(|ty| FieldTy::from_ty(vcx, enc.deps, ty)).collect();
+                    let specifics = enc.mk_struct_specifics(field_tys);
+                    Ok((enc.finalize(), specifics))
+                }
+                TyKind::Never => {
+                    let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
+                    let make_generic_function =
+                        enc.deps.require_ref::<GenericCastEnc>(*task_key)
+                            .unwrap().generic_option().unwrap();
+                    let type_function = enc.deps.require_ref::<LiftedTyFunctionEnc>(*task_key).unwrap().function;
+                    let specifics = enc.mk_enum_specifics(type_function, make_generic_function, None);
+                    Ok((enc.finalize(), specifics))
+                }
+                &TyKind::Ref(_, inner, _) => {
+                    let generics = vec![deps.require_local::<LiftedTyEnc>(inner).unwrap().expect_generic()];
+                    let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
+                    let field_tys = vec![FieldTy::from_ty(vcx, enc.deps, inner)];
+                    let specifics = enc.mk_struct_specifics(field_tys);
+                    Ok((enc.finalize(), specifics))
+                }
+                &TyKind::Param(_) => {
+                    let out = deps.require_ref::<GenericEnc>(()).unwrap();
+                    deps.emit_output_ref::<Self>(
+                        *task_key,
+                        DomainEncOutputRef {
+                            base_name,
+                            domain: out.domain_param_name,
+                            generic_accessors: vcx.alloc_slice(&[out.param_type_function]),
+                        },
+                    );
+                    Ok((
+                        deps.require_local::<GenericEnc>(())
+                            .map(|enc| enc.param_snapshot)
+                            .unwrap(),
+                        DomainEncSpecifics::Param,
+                    ))
+                }
+                kind => todo!("{kind:?}"),
             }
-            &TyKind::Param(_) => {
-                let out = deps.require_ref::<GenericEnc>(()).unwrap();
-                deps.emit_output_ref::<Self>(
-                    *task_key,
-                    DomainEncOutputRef {
-                        base_name: out.base_name,
-                        domain: out.domain_param_name,
-                        type_function: out.param_type_function.as_unknown_arity(),
-                    },
-                );
-                Ok((
-                    deps.require_local::<GenericEnc>(())
-                        .map(|enc| enc.param_snapshot)
-                        .unwrap(),
-                    DomainEncSpecifics::Param,
-                ))
-            }
-            kind => todo!("{kind:?}"),
         })
     }
 }
@@ -252,83 +259,78 @@ pub struct VariantData<'vir, 'tcx>  {
     discr_prim: DomainDataPrim<'vir>,
     /// Do any of the variants have an explicit discriminant value?
     has_explicit: bool,
-    variants: Vec<(symbol::Symbol, abi::VariantIdx, Vec<vir::Type<'vir>>, ty::util::Discr<'tcx>)>,
+    variants: Vec<(symbol::Symbol, abi::VariantIdx, Vec<FieldTy<'vir>>, ty::util::Discr<'tcx>)>,
 }
 
-struct DomainEncData<'vir, 'tcx> {
+struct DomainEncData<'vir, 'tcx, 'enc> {
     vcx: &'vir vir::VirCtxt<'tcx>,
-    domain: vir::DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>>,
+    domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
+    generics: Vec<(ParamTy, vir::FunctionIdent<'vir, UnaryArity<'vir>>)>,
     self_ty: vir::Type<'vir>,
     self_ex: vir::Expr<'vir>,
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
-    type_function: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
     axioms: Vec<vir::DomainAxiom<'vir>>,
     functions: Vec<vir::DomainFunction<'vir>>,
+    deps: &'enc mut TaskEncoderDependencies<'vir>,
 }
-impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
+impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     // Creation
     fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
-        base_name: &str,
-        params: impl Iterator<Item = ty::Ty<'tcx>>,
-        deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> (Self, Vec<vir::Type<'vir>>) {
-        let domain = vir::DomainIdent::nullary(vir::vir_format!(vcx, "s_{base_name}"));
+        ty: &MostGenericTy<'tcx>,
+        generics: Vec<ParamTy>,
+        deps: &'enc mut TaskEncoderDependencies<'vir>,
+    ) -> Self {
+        let domain = ty.get_vir_domain_ident(vcx);
         let self_ty = domain.apply(vcx, []);
-
-        let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
-        let num_params = params.count();
-        let param_snaps = vec![generic_ref.param_snapshot; num_params];
-        let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; num_params]);
-
-        let type_function_ident = FunctionIdent::new(
-            vir::vir_format!(vcx, "s_{base_name}_type"),
-            UnknownArity::new(&type_function_args),
-            generic_ref.type_snapshot,
-        );
-        let type_function = vcx.mk_domain_function(
-            false,
-            type_function_ident.name(),
-            &type_function_args,
-            generic_ref.type_snapshot,
-        );
 
         let self_local = vcx.mk_local("self", self_ty);
         let self_ex = vcx.mk_local_ex_local(self_local);
         let self_decl = vcx.alloc_array(&[vcx.mk_local_decl_local(self_local)]);
 
-        (
-            Self {
-                vcx,
-                domain,
-                self_ty,
-                self_ex,
-                self_decl,
-                axioms: Vec::new(),
-                functions: vec![type_function],
-                type_function: type_function_ident
-            },
-            param_snaps,
-        )
+        let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
+
+        let generics: Vec<_> = generics.into_iter().map(|g|
+            (g, vir::FunctionIdent::new(
+                vir::vir_format!(vcx, "typaram_{}", g.name),
+                UnaryArity::new(vcx.alloc_array(&[self_ty])),
+                generic_enc.type_snapshot
+            ))
+        ).collect();
+
+        let functions = generics.iter().map(
+                |(_, ident)| vcx.mk_domain_function(
+                    false,
+                    ident.name(),
+                    ident.arity().args(),
+                    ident.result_ty())
+            ).collect();
+
+        Self {
+            vcx,
+            domain,
+            self_ty,
+            self_ex,
+            self_decl,
+            generics,
+            axioms: Vec::new(),
+            functions,
+            deps
+        }
     }
+
 
     // Intermediate values
     pub fn mk_field_tys(
-        &self,
-        deps: &mut TaskEncoderDependencies<'vir>,
+        &mut self,
         variant: &ty::VariantDef,
         params: ty::GenericArgsRef<'tcx>,
-    ) -> Vec<vir::Type<'vir>> {
+    ) -> Vec<FieldTy<'vir>> {
         variant
             .fields
             .iter()
             .map(|f| f.ty(self.vcx.tcx, params))
-            .map(|ty| {
-                deps.require_local::<RustTySnapshotsEnc>(ty)
-                    .unwrap()
-                    .generic_snapshot
-                    .snapshot
-            })
+            .map(|ty| FieldTy::from_ty(self.vcx, self.deps, ty))
             .collect()
     }
 
@@ -338,8 +340,15 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         ty: ty::Ty<'tcx>,
         prim_type: vir::Type<'vir>,
     ) -> DomainEncSpecifics<'vir> {
-        let prim_type_args = self.vcx.alloc_array(&[prim_type]);
-        let data = self.mk_field_functions(prim_type_args, None, ty.is_integral());
+        let prim_type_args = vec![FieldTy {
+                ty: prim_type,
+                lifted: None,
+        }];
+        let data = self.mk_field_functions(
+            &prim_type_args,
+            None,
+            ty.is_integral()
+        );
         // TODO: what to do about write?
         let snap_to_prim = data.field_access[0].read;
         let specifics = DomainDataPrim {
@@ -356,13 +365,15 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
     }
     pub fn mk_struct_specifics(
         &mut self,
-        fields: Vec<vir::Type<'vir>>,
+        fields: Vec<FieldTy<'vir>>,
     ) -> DomainEncSpecifics<'vir> {
-        let specifics = self.mk_field_functions(self.vcx.alloc_slice(&fields), None, false);
+        let specifics = self.mk_field_functions(&fields, None, false);
         DomainEncSpecifics::StructLike(specifics)
     }
     pub fn mk_enum_specifics(
         &mut self,
+        type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
+        make_generic_function: MakeGenericCastFunction<'vir>,
         data: Option<VariantData<'vir, 'tcx>>,
     ) -> DomainEncSpecifics<'vir> {
         let specifics = data.map(|data| {
@@ -370,7 +381,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             let snap_to_discr_snap = self.mk_discr_function(data.discr_ty);
             let variants = self.vcx.alloc_slice(&data.variants.iter().enumerate().map(|(idx, (name, vid, fields, _))| {
                 let discr = (snap_to_discr_snap, data.discr_prim.prim_to_snap.apply(self.vcx, [discr_vals[idx]]), *name);
-                let fields = self.mk_field_functions(self.vcx.alloc_slice(fields), Some(discr), false);
+                let fields = self.mk_field_functions(fields, Some(discr), false);
                 DomainDataVariant { name: *name, vid: *vid, discr: discr_vals[idx], fields }
             }).collect::<Vec<_>>());
             let discr_bounds = self.mk_discr_bounds_axioms(data.discr_prim, snap_to_discr_snap, discr_vals, data.has_explicit);
@@ -394,7 +405,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
     // Helper functions
     fn mk_field_functions(
         &mut self,
-        field_tys: &'vir [vir::Type<'vir>],
+        field_tys: &Vec<FieldTy<'vir>>,
         discr: Option<(FunctionIdent<'vir, UnaryArity<'vir>>, vir::Expr<'vir>, symbol::Symbol)>,
         stronger_cons_axiom: bool,
     ) -> DomainDataStruct<'vir> {
@@ -403,12 +414,19 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
         // Constructor
         let field_snaps_to_snap = {
             let name = vir::vir_format!(self.vcx, "{base}_cons");
-            self.push_function(self.vcx.mk_domain_function(false, name, field_tys, self.self_ty))
+            self.push_function(
+                self.vcx.mk_domain_function(
+                    false,
+                    name,
+                    self.vcx.alloc_slice(&field_tys.iter().map(|fty| fty.ty).collect::<Vec<_>>()),
+                    self.self_ty
+                )
+            )
         };
 
         // Variables and definitions useful for axioms
         let fnames = field_tys.iter().enumerate().map(|(idx, ty)|
-            self.vcx.mk_local(vir::vir_format!(self.vcx, "f{idx}"), ty)
+            self.vcx.mk_local(vir::vir_format!(self.vcx, "f{idx}"), ty.ty)
         ).collect::<Vec<_>>();
         let cons_qvars: Vec<_> = field_tys.iter().enumerate().map(|(idx, _)|
             self.vcx.mk_local_decl_local(fnames[idx])
@@ -434,6 +452,8 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             ));
         }
 
+        let generic_enc = self.deps.require_ref::<GenericEnc>(()).unwrap();
+
         // Accessors
         let field_access = {
             field_tys.iter().enumerate().map(|(idx, field_ty)| {
@@ -443,9 +463,41 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
                 let read = FunctionIdent::new(
                     name,
                     UnaryArity::new(args),
-                    field_ty
+                    field_ty.ty
                 );
-                self.functions.push(self.vcx.mk_domain_function(false, name, args, field_ty));
+
+                if let Some(lifted) = &field_ty.lifted {
+                    let mut generic_to_getter = |p: ParamTy|
+                        self.generics.iter()
+                            .find_map(
+                                |(g, ident)| if g == &p { Some(ident) } else { None }
+                            ).unwrap()
+                            .apply(self.vcx, [self.self_ex]);
+                    self.axioms.push(
+                        self.vcx.mk_domain_axiom(
+                            vir::vir_format!(self.vcx, "ax_{base}_read_{idx}_type"),
+                            self.vcx.mk_forall_expr(
+                                self.vcx.alloc_slice(self.self_decl),
+                                self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[read.apply(self.vcx, [self.self_ex])])]),
+                                self.vcx.mk_eq_expr(
+                                    generic_enc.param_type_function.apply(
+                                        self.vcx,
+                                        [
+                                            lifted.cast_functions.cast_to_generic_if_necessary(
+                                                self.vcx,
+                                                read.apply(self.vcx, [self.self_ex])
+                                            )
+                                        ]
+                                    ),
+                                    lifted.lifted_ty.map(self.vcx, &mut generic_to_getter).expr(self.vcx)
+                                )
+                            )
+                        )
+                    );
+
+                }
+
+                self.functions.push(self.vcx.mk_domain_function(false, name, args, field_ty.ty));
 
                 let cons_read = read.apply(self.vcx, [cons_call_with_qvars]);
                 self.axioms.push(self.vcx.mk_domain_axiom(
@@ -459,7 +511,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
 
                 // Write
                 let name = vir::vir_format!(self.vcx, "{base}_write_{idx}");
-                let args = self.vcx.alloc_array(&[self.self_ty, field_ty]);
+                let args = self.vcx.alloc_array(&[self.self_ty, field_ty.ty]);
                 let write = FunctionIdent::new(
                     name,
                     BinaryArity::new(args),
@@ -499,7 +551,7 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
             // Write and read to different fields change nothing, write and read to
             // the same field sees the new value.
             for (wi, write) in field_access.iter().enumerate() {
-                let val_local = self.vcx.mk_local("val", field_tys[wi]);
+                let val_local = self.vcx.mk_local("val", field_tys[wi].ty);
                 let val = self.vcx.mk_local_ex_local(val_local);
                 let decl = self.vcx.mk_local_decl_local(val_local);
                 let write = write.write.apply(self.vcx, [self.self_ex, val]);
@@ -582,11 +634,17 @@ impl<'vir, 'tcx> DomainEncData<'vir, 'tcx> {
     }
 
     // Final results
-    fn output_ref(&self, base_name: String) -> DomainEncOutputRef<'vir> {
+    fn output_ref(
+        &self,
+        base_name: String,
+    ) -> DomainEncOutputRef<'vir> {
         DomainEncOutputRef {
             base_name,
             domain: self.domain,
-            type_function: self.type_function,
+            generic_accessors:
+                self.vcx.alloc_slice(
+                    &self.generics.iter().map(|(_, ident)| *ident).collect::<Vec<_>>()
+                ),
         }
     }
     fn finalize(self) -> vir::Domain<'vir> {
@@ -664,5 +722,46 @@ impl<'vir> DomainDataPrim<'vir> {
             },
             ref k => todo!("{k:?}"),
         }
+    }
+}
+
+/// Data for encoding field access functions and axioms
+#[derive(Clone)]
+struct FieldTy<'vir> {
+    /// The type of encoded field
+    ty: vir::Type<'vir>,
+
+    /// Information about the Rust type, only defined for fields that correspond
+    /// to actual Rust types. For example, this will be `None` for a Viper
+    /// `Bool` field.
+    lifted: Option<LiftedRustTyData<'vir>>
+}
+
+#[derive(Clone)]
+struct LiftedRustTyData<'vir> {
+    /// The representation of the Rust type of the field
+    lifted_ty: LiftedTy<'vir, ParamTy>,
+    /// Data for casting the field to a generic type
+    cast_functions: GenericCastOutputRef<'vir>,
+    /// The type arguments for the field
+    cast_args: &'vir [LiftedTy<'vir, ParamTy>]
+}
+
+impl <'vir> FieldTy<'vir> {
+    fn from_ty<'tcx: 'vir>(vcx: &'vir vir::VirCtxt<'tcx>, deps: &mut TaskEncoderDependencies, ty: ty::Ty<'tcx>) -> FieldTy<'vir> {
+        let vir_ty = deps.require_local::<RustTySnapshotsEnc>(ty)
+            .unwrap()
+            .generic_snapshot
+            .snapshot;
+        let lifted_ty = deps.require_local::<LiftedTyEnc>(ty)
+            .unwrap();
+        let (generic_ty, ty_params) = extract_type_params(vcx.tcx, ty);
+        let cast_functions = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
+        let cast_args = vcx.alloc_slice(
+            &ty_params.iter()
+                .map(|ty| deps.require_local::<LiftedTyEnc>(*ty).unwrap())
+                .collect::<Vec<_>>()
+        );
+        FieldTy {ty: vir_ty, lifted: Some(LiftedRustTyData {lifted_ty, cast_functions, cast_args})}
     }
 }

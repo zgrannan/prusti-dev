@@ -14,6 +14,10 @@ use prusti_rustc_interface::{
     middle::ty,
     hir,
 };
+use vir::{fmt_domain_with_extra_functions, CallableIdent, DomainFunction};
+use std::fmt::{self, Debug, Formatter};
+
+use crate::encoders::lifted_ty_function::LiftedTyFunctionEnc;
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -92,7 +96,22 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "snapshots");
     for output in crate::encoders::DomainEnc_all_outputs() {
-        viper_code.push_str(&format!("{:?}\n", output));
+        let type_functions =
+            LiftedTyFunctionEnc::all_outputs().iter()
+                .filter(|f_output| f_output.domain.name() == output.name)
+                .map(|f_output| f_output.function)
+                .collect();
+        struct DomainWithExtraFunctions<'a>(
+            vir::Domain<'a>,
+            Vec<DomainFunction<'a>>
+        );
+
+        impl <'a> Debug for DomainWithExtraFunctions<'a> {
+            fn fmt<'b>(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                fmt_domain_with_extra_functions(f, self.0, &self.1)
+            }
+        }
+        viper_code.push_str(&format!("{:?}\n", DomainWithExtraFunctions(output, type_functions)));
     }
 
     header(&mut viper_code, "types");

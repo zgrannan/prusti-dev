@@ -9,6 +9,7 @@ mod pure;
 mod pure_generic_cast;
 mod pure_func_app;
 mod local_def;
+mod util;
 mod r#type;
 mod r#const;
 
