@@ -1,4 +1,3 @@
-mod aggregate_snap_args_cast;
 mod generic;
 mod mir_builtin;
 mod mir_impure;
@@ -6,7 +5,6 @@ mod mir_pure;
 mod spec;
 mod mir_pure_function;
 mod pure;
-mod pure_generic_cast;
 mod pure_func_app;
 mod local_def;
 mod util;
@@ -32,7 +30,7 @@ pub use spec::{
     SpecEncOutput,
     SpecEncTask,
 };
-pub(super) use spec::{init_def_spec, with_def_spec, with_proc_spec};
+pub(super) use spec::{init_def_spec, with_proc_spec};
 pub use snapshot::SnapshotEnc;
 pub use predicate::{
     PredicateEnc,

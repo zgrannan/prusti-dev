@@ -12,13 +12,9 @@ use task_encoder::{
 use vir::add_debug_note;
 use std::collections::HashMap;
 // TODO: replace uses of `PredicateEnc` with `SnapshotEnc`
-use crate::encoders::{pure_generic_cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, ViperTupleEnc};
+use crate::encoders::{lifted::cast::{CastArgs, PureGenericCastEnc}, ConstEnc, MirBuiltinEnc, ViperTupleEnc};
 use super::{
-    aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask},
-    pure_func_app::PureFuncAppEnc,
-    rust_ty_generic_cast::RustTyGenericCastEnc,
-    rust_ty_predicates::RustTyPredicatesEnc,
-    rust_ty_snapshots::RustTySnapshotsEnc
+    lifted::{aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_cast::RustTyGenericCastEnc}, pure_func_app::PureFuncAppEnc, rust_ty_predicates::RustTyPredicatesEnc, rust_ty_snapshots::RustTySnapshotsEnc
 };
 
 pub struct MirPureEnc;

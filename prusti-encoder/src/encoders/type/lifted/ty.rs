@@ -2,12 +2,10 @@ use prusti_rustc_interface::middle::ty::{self, ParamTy, TyKind};
 use task_encoder::{OutputRefAny, TaskEncoder, TaskEncoderDependencies};
 use vir::{with_vcx, FunctionIdent, UnknownArity};
 
-use crate::encoders::lifted_ty_function::LiftedTyFunctionEnc;
-
-use super::{
-    lifted_generic::{LiftedGeneric, LiftedGenericEnc},
-    most_generic_ty::extract_type_params,
-};
+use crate::encoders::lifted::generic::LiftedGeneric;
+use crate::encoders::lifted::generic::LiftedGenericEnc;
+use crate::encoders::lifted::ty_constructor::LiftedTyFunctionEnc;
+use crate::encoders::most_generic_ty::extract_type_params;
 
 /// Representation of a Rust type as a Viper expression. The expression T
 /// is used to represent a generic; this enables different encodings / substitutions

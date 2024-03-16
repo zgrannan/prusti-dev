@@ -17,7 +17,7 @@ use prusti_rustc_interface::{
 use vir::{fmt_domain_with_extras, CallableIdent, DomainFunction, DomainAxiom};
 use std::fmt::{self, Debug, Formatter};
 
-use crate::encoders::lifted_ty_function::LiftedTyFunctionEnc;
+use crate::encoders::lifted::ty_constructor::LiftedTyFunctionEnc;
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -88,7 +88,7 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "generic casts");
-    for output in crate::encoders::generic_cast::GenericCastEnc::all_outputs() {
+    for output in crate::encoders::lifted::cast_functions::GenericCastEnc::all_outputs() {
         for cast_function in output {
             viper_code.push_str(&format!("{:?}\n", cast_function));
         }

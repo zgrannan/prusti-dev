@@ -1,9 +1,8 @@
-use crate::encoders::rust_ty_generic_cast::RustTyGenericCastEnc;
 use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::VirCtxt;
 
-use super::{generic_cast::GenericCastOutputRef, lifted::LiftedTy, lifted_generic::LiftedGeneric};
+use super::{cast_functions::GenericCastOutputRef, generic::LiftedGeneric, rust_ty_cast::RustTyGenericCastEnc, ty::LiftedTy};
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {

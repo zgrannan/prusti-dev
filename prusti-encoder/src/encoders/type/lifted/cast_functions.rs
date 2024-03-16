@@ -1,13 +1,9 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, UnaryArity, UnknownArity};
 
-use crate::encoders::{domain::DomainEnc, lifted_ty_function::LiftedTyFunctionEnc, GenericEnc};
+use crate::encoders::{domain::DomainEnc, lifted::{ty::LiftedTyEnc, ty_constructor::LiftedTyFunctionEnc}, most_generic_ty::MostGenericTy, GenericEnc};
 
-use super::{
-    lifted::{LiftedTy, LiftedTyEnc},
-    lifted_generic::LiftedGeneric,
-    most_generic_ty::MostGenericTy,
-};
+use super::{generic::LiftedGeneric, ty::LiftedTy};
 
 pub type MakeGenericCastFunction<'vir> = FunctionIdent<'vir, UnaryArity<'vir>>;
 

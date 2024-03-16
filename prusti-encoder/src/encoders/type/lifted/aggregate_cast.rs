@@ -5,12 +5,9 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoder;
 
-use crate::encoders::{
-    pure_generic_cast::{CastArgs, PureGenericCastEnc},
-    rust_ty_generic_cast::RustTyGenericCastEnc,
-};
+use crate::encoders::lifted::cast::{CastArgs, PureGenericCastEnc};
 
-use super::pure_generic_cast::PureCast;
+use super::{cast::PureCast, rust_ty_cast::RustTyGenericCastEnc};
 
 /// Casts arguments to the snapshot constructor for an aggregate type (e.g.
 /// Tuples, ADTs) to appropriate (generic or concrete) Viper representations,

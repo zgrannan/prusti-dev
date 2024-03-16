@@ -1,9 +1,7 @@
 use task_encoder::{OutputRefAny, TaskEncoder};
-use vir::{CallableIdent, DomainParamData, FunctionIdent, KnownArityAny, NullaryArityAny, UnaryArity, UnknownArity};
+use vir::{CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity};
 
-use crate::encoders::{most_generic_ty::extract_type_params, GenericEnc};
-
-use super::most_generic_ty::MostGenericTy;
+use crate::encoders::{most_generic_ty::{extract_type_params, MostGenericTy}, GenericEnc};
 
 #[derive(Clone)]
 pub struct LiftedTyFunctionEncOutputRef<'vir> {

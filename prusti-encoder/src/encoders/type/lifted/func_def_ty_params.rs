@@ -4,9 +4,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoder;
 
-use crate::encoders::lifted_generic::LiftedGenericEnc;
-
-use super::lifted_generic::LiftedGeneric;
+use super::generic::{LiftedGeneric, LiftedGenericEnc};
 
 /// Encodes the generic arguments of a function definition.
 pub struct LiftedFuncDefGenericsEnc;

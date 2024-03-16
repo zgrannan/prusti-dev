@@ -1,5 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
+use super::{domain::{DomainEnc, DomainEncSpecifics}, lifted::generic::{LiftedGeneric, LiftedGenericEnc}, most_generic_ty::MostGenericTy};
+
 /// Takes a Rust `Ty` and returns a Viper `Type`. The returned type is always a
 /// domain type. To get specifics such as constructors for the domain, use the
 /// full encoding: this is generally the one to use as it also includes the type.
@@ -18,11 +20,6 @@ pub struct SnapshotEncOutput<'vir> {
     pub generics: &'vir [LiftedGeneric<'vir>],
     pub specifics: DomainEncSpecifics<'vir>,
 }
-
-use super::{
-    domain::{DomainEnc, DomainEncSpecifics},
-    lifted_generic::{LiftedGeneric, LiftedGenericEnc}, most_generic_ty::MostGenericTy,
-};
 
 impl TaskEncoder for SnapshotEnc {
     task_encoder::encoder_cache!(SnapshotEnc);

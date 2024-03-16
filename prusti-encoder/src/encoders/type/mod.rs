@@ -1,14 +1,8 @@
 pub mod domain;
-pub mod generic_cast;
 pub mod predicate;
 pub mod snapshot;
 pub mod lifted;
-pub mod lifted_ty_function;
-pub mod lifted_generic;
-pub mod lifted_func_def_generics;
-pub mod lifted_func_app_generics;
 pub mod most_generic_ty;
-pub mod rust_ty_generic_cast;
 pub mod rust_ty_predicates;
 pub mod rust_ty_snapshots;
 pub mod viper_tuple;

@@ -31,8 +31,7 @@ pub struct MirImpureEncOutput<'vir> {
 }
 
 use crate::encoders::{
-    aggregate_snap_args_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask},
-    rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
+    lifted::aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
 };
 
 use super::pure_func_app::PureFuncAppEnc;

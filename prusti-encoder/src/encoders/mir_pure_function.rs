@@ -4,7 +4,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    domain::DomainEnc, lifted::{LiftedTy, LiftedTyEnc}, lifted_func_def_generics::LiftedFuncDefGenericsEnc, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefGenericsEnc, ty::{LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;

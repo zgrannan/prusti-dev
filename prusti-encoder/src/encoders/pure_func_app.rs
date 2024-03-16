@@ -7,12 +7,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use crate::encoders::{
-    lifted_func_app_generics::LiftedFuncAppGenericsEnc,
-    pure_generic_cast::{CastArgs, PureGenericCastEnc},
-};
-
-use super::{util::get_func_sig, MirFunctionEnc};
+use super::{lifted::{cast::{CastArgs, PureGenericCastEnc}, func_app_ty_params::LiftedFuncAppGenericsEnc}, util::get_func_sig, MirFunctionEnc};
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.

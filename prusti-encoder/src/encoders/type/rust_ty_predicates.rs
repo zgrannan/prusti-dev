@@ -4,7 +4,7 @@ use vir::{with_vcx, Type, TypeData};
 
 use crate::encoders::{PredicateEnc, PredicateEncOutputRef};
 
-use super::{lifted::{LiftedTy, LiftedTyEnc}, lifted_generic::LiftedGeneric, most_generic_ty::extract_type_params};
+use super::{lifted::{generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}}, most_generic_ty::extract_type_params};
 
 pub struct RustTyPredicatesEnc;
 

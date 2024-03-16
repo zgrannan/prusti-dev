@@ -1,10 +1,8 @@
 use prusti_rustc_interface::middle::ty::GenericArgsRef;
 use task_encoder::TaskEncoder;
 
-use super::{
-    lifted::{LiftedTy, LiftedTyEnc},
-    lifted_generic::LiftedGeneric,
-};
+use super::{generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
+
 /// Encodes the generic arguments to a function application.
 pub struct LiftedFuncAppGenericsEnc;
 

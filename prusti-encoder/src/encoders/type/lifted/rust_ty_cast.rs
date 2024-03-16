@@ -2,14 +2,9 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
-use crate::encoders::pure_generic_cast::PureCast;
+use crate::encoders::most_generic_ty::extract_type_params;
 
-use super::{
-    generic_cast::{GenericCastEnc, GenericCastOutputRef},
-    lifted::{LiftedTy, LiftedTyEnc},
-    lifted_generic::LiftedGeneric,
-    most_generic_ty::extract_type_params,
-};
+use super::{cast::PureCast, cast_functions::{GenericCastEnc, GenericCastOutputRef}, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
 
 /// Generates Viper functions to cast between generic and non-generic Viper
 /// representations of a Rust value. See `GenericCastEnc` for more details.
