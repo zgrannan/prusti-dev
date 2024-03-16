@@ -178,7 +178,7 @@ impl TaskEncoder for GenericCastEnc {
                 .iter()
                 .enumerate()
                 .map(|(idx, _)|
-                    domain_ref.get_typaram_from_snap(vcx, idx, make_generic_expr)
+                    domain_ref.ty_param_from_snap(vcx, idx, make_generic_expr)
                 )
                 .collect::<Vec<_>>();
 

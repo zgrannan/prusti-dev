@@ -77,18 +77,21 @@ pub enum DomainEncSpecifics<'vir> {
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
-    generic_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
+    ty_param_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
+    /// Returns the Viper representation of the type of a snapshot-encoded value
     pub typeof_function: FunctionIdent<'vir, UnaryArity<'vir>>,
 }
 
 impl <'vir> DomainEncOutputRef<'vir> {
-    pub fn get_typaram_from_snap(
+    /// Takes as input a snapshot encoding of a rust value, and returns
+    /// the `idx`th type parameter of it's type.
+    pub fn ty_param_from_snap(
         &self,
         vcx: &'vir vir::VirCtxt,
         idx: usize,
         snap: vir::Expr<'vir>
     ) -> vir::Expr<'vir> {
-        self.generic_accessors[idx].apply(
+        self.ty_param_accessors[idx].apply(
             vcx,
             [self.typeof_function.apply(vcx, [snap])]
         )
@@ -172,7 +175,7 @@ impl TaskEncoder for DomainEnc {
                                 vec![
                                     FieldTy {
                                         ty: enc.deps.require_ref::<GenericEnc>(()).unwrap().param_snapshot,
-                                        lifted: None
+                                        rust_ty_data: None
                                     }
                                 ]
                             };
@@ -242,7 +245,7 @@ impl TaskEncoder for DomainEnc {
                         DomainEncOutputRef {
                             base_name,
                             domain: out.domain_param_name,
-                            generic_accessors: &[],
+                            ty_param_accessors: &[],
                             typeof_function: out.param_type_function,
                         },
                     );
@@ -298,8 +301,8 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
         let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
 
-        let generic_accessors = deps.require_ref::<LiftedTyFunctionEnc>(*ty).unwrap().inv_functions;
-        let generics: Vec<_> = generics.into_iter().zip(generic_accessors.into_iter().map(|t| *t)).collect();
+        let ty_param_accessors = deps.require_ref::<LiftedTyFunctionEnc>(*ty).unwrap().inv_functions;
+        let generics: Vec<_> = generics.into_iter().zip(ty_param_accessors.into_iter().map(|t| *t)).collect();
 
         let mut functions = vec![];
 
@@ -356,7 +359,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     ) -> DomainEncSpecifics<'vir> {
         let prim_type_args = vec![FieldTy {
                 ty: prim_type,
-                lifted: None,
+                rust_ty_data: None,
         }];
         let data = self.mk_field_functions(
             &prim_type_args,
@@ -473,14 +476,20 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     field_ty.ty
                 );
 
+                // Add axiom that connects the type of the field to the type of `self`
+                // e.g type of (t: (T1,T2)).0 should be T1
                 let self_ty = self.typeof_function.apply(self.vcx, [self.self_ex]);
-                if let Some(lifted) = &field_ty.lifted {
+
+                if let Some(lifted) = &field_ty.rust_ty_data {
+
+                    // Lookup the encoding of the generic from a rust `ParamTy`
                     let mut generic_to_getter = |p: ParamTy|
                         self.generics.iter()
                             .find_map(
                                 |(g, ident)| if g == &p { Some(ident) } else { None }
                             ).unwrap()
                             .apply(self.vcx, [self_ty]);
+
                     self.axioms.push(
                         self.vcx.mk_domain_axiom(
                             vir::vir_format!(self.vcx, "ax_{base}_read_{idx}_type"),
@@ -488,15 +497,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                                 self.vcx.alloc_slice(self.self_decl),
                                 self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[read.apply(self.vcx, [self.self_ex])])]),
                                 self.vcx.mk_eq_expr(
-                                    self.generic_enc.param_type_function.apply(
-                                        self.vcx,
-                                        [
-                                            lifted.cast_functions.cast_to_generic_if_necessary(
-                                                self.vcx,
-                                                read.apply(self.vcx, [self.self_ex])
-                                            )
-                                        ]
-                                    ),
+                                    lifted.typeof_function.apply(self.vcx, [read.apply(self.vcx, [self.self_ex])]),
                                     lifted.lifted_ty.map(self.vcx, &mut generic_to_getter).expr(self.vcx)
                                 )
                             )
@@ -650,7 +651,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             base_name,
             domain: self.domain,
             typeof_function: self.typeof_function,
-            generic_accessors:
+            ty_param_accessors:
                 self.vcx.alloc_slice(
                     &self.generics.iter().map(|(_, ident)| *ident).collect::<Vec<_>>()
                 ),
@@ -760,16 +761,17 @@ struct FieldTy<'vir> {
 
     /// Information about the Rust type, only defined for fields that correspond
     /// to actual Rust types. For example, this will be `None` for a Viper
-    /// `Bool` field.
-    lifted: Option<LiftedRustTyData<'vir>>
+    /// `Bool` field encoded as part of the snapshot encoding of the rust bool
+    /// type.
+    rust_ty_data: Option<LiftedRustTyData<'vir>>
 }
 
 #[derive(Clone)]
 struct LiftedRustTyData<'vir> {
     /// The representation of the Rust type of the field
     lifted_ty: LiftedTy<'vir, ParamTy>,
-    /// Data for casting the field to a generic type
-    cast_functions: GenericCastOutputRef<'vir>,
+    /// Data for getting the field of the type
+    typeof_function: FunctionIdent<'vir, UnaryArity<'vir>>
 }
 
 impl <'vir> FieldTy<'vir> {
@@ -778,10 +780,12 @@ impl <'vir> FieldTy<'vir> {
             .unwrap()
             .generic_snapshot
             .snapshot;
+        let typeof_function =
+            deps.require_ref::<DomainEnc>(
+                extract_type_params(vcx.tcx, ty).0
+            ).unwrap().typeof_function;
         let lifted_ty = deps.require_local::<LiftedTyEnc>(ty)
             .unwrap();
-        let (generic_ty, _) = extract_type_params(vcx.tcx, ty);
-        let cast_functions = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
-        FieldTy {ty: vir_ty, lifted: Some(LiftedRustTyData {lifted_ty, cast_functions})}
+        FieldTy {ty: vir_ty, rust_ty_data: Some(LiftedRustTyData {lifted_ty, typeof_function})}
     }
 }
