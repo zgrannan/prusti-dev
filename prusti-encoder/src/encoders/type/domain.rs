@@ -9,7 +9,7 @@ use task_encoder::{
     TaskEncoderDependencies,
 };
 use vir::{
-    Arity, BinaryArity, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, ToKnownArity, UnaryArity, UnknownArity
+    BinaryArity, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, ToKnownArity, UnaryArity, UnknownArity
 };
 
 /// You probably never want to use this, use `SnapshotEnc` instead.
@@ -77,18 +77,30 @@ pub enum DomainEncSpecifics<'vir> {
 pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
-    pub generic_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
+    generic_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
     pub typeof_function: FunctionIdent<'vir, UnaryArity<'vir>>,
 }
+
+impl <'vir> DomainEncOutputRef<'vir> {
+    pub fn get_typaram_from_snap(
+        &self,
+        vcx: &'vir vir::VirCtxt,
+        idx: usize,
+        snap: vir::Expr<'vir>
+    ) -> vir::Expr<'vir> {
+        self.generic_accessors[idx].apply(
+            vcx,
+            [self.typeof_function.apply(vcx, [snap])]
+        )
+    }
+}
+
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
 use crate::encoders::{generic::GenericEncOutputRef, GenericEnc};
 
 use super::{
-    generic_cast::{GenericCastEnc, GenericCastOutputRef},
-    lifted::{LiftedTy, LiftedTyEnc},
-    most_generic_ty::{extract_type_params, MostGenericTy},
-    rust_ty_snapshots::RustTySnapshotsEnc
+    generic_cast::{GenericCastEnc, GenericCastOutputRef}, lifted::{LiftedTy, LiftedTyEnc}, lifted_ty_function::LiftedTyFunctionEnc, most_generic_ty::{extract_type_params, MostGenericTy}, rust_ty_snapshots::RustTySnapshotsEnc
 };
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
@@ -230,7 +242,7 @@ impl TaskEncoder for DomainEnc {
                         DomainEncOutputRef {
                             base_name,
                             domain: out.domain_param_name,
-                            generic_accessors: vcx.alloc_slice(&[out.param_type_function]),
+                            generic_accessors: &[],
                             typeof_function: out.param_type_function,
                         },
                     );
@@ -286,17 +298,10 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
         let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
 
-        let generics: Vec<_> = generics.into_iter().map(|g|
-            (g, vir::FunctionIdent::new(
-                vir::vir_format!(vcx, "typaram_{}_{}", domain.name(), g.name),
-                UnaryArity::new(vcx.alloc_array(&[self_ty])),
-                generic_enc.type_snapshot
-            ))
-        ).collect();
+        let generic_accessors = deps.require_ref::<LiftedTyFunctionEnc>(*ty).unwrap().inv_functions;
+        let generics: Vec<_> = generics.into_iter().zip(generic_accessors.into_iter().map(|t| *t)).collect();
 
-        let mut functions = generics.iter().map(
-                |(_, ident)| vcx.mk_domain_function(*ident, false)
-            ).collect::<Vec<_>>();
+        let mut functions = vec![];
 
         let typeof_function = if !ty.is_generic() {
             let typeof_function = vir::FunctionIdent::new(
@@ -468,13 +473,14 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     field_ty.ty
                 );
 
+                let self_ty = self.typeof_function.apply(self.vcx, [self.self_ex]);
                 if let Some(lifted) = &field_ty.lifted {
                     let mut generic_to_getter = |p: ParamTy|
                         self.generics.iter()
                             .find_map(
                                 |(g, ident)| if g == &p { Some(ident) } else { None }
                             ).unwrap()
-                            .apply(self.vcx, [self.self_ex]);
+                            .apply(self.vcx, [self_ty]);
                     self.axioms.push(
                         self.vcx.mk_domain_axiom(
                             vir::vir_format!(self.vcx, "ax_{base}_read_{idx}_type"),

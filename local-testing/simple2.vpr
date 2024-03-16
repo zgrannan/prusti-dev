@@ -1,0 +1,27 @@
+domain IntPair {
+    function pair(x: Int, y:Int) : IntPair
+    function fst(p: IntPair) : Int
+    function snd(p: IntPair) : Int
+    // axiom fst_defn {
+    //     forall x:Int, y:Int :: {pair(x,y)} (fst(pair(x,y)) == x)
+    // }
+    // axiom snd_defn {
+    //     forall x:Int, y:Int :: {pair(x,y)} (snd(pair(x,y)) == y)
+    // }
+    axiom bijection {
+        forall p: IntPair :: {fst(p)}{snd(p)} pair(fst(p),snd(p))==p
+    }
+}
+
+
+method baz(
+    x: Int,
+    y: Int,
+    p: IntPair
+)
+    requires p == pair(x, 1)
+    requires p == pair(y, 1)
+    ensures x == y
+{
+
+}

@@ -119,7 +119,7 @@ impl TaskEncoder for GenericCastEnc {
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
             let lifted_ty = deps.require_local::<LiftedTyEnc>(ty.ty()).unwrap();
             let self_ty = domain_ref.domain.apply(vcx, []);
-            let base_name = domain_ref.base_name;
+            let base_name = &domain_ref.base_name;
             let type_function = deps
                 .require_ref::<LiftedTyFunctionEnc>(*ty)
                 .unwrap()
@@ -180,8 +180,10 @@ impl TaskEncoder for GenericCastEnc {
                 .expect_instantiated()
                 .1
                 .iter()
-                .zip(domain_ref.generic_accessors.iter())
-                .map(|(_, accessor)| accessor.apply(vcx, [make_generic_expr]))
+                .enumerate()
+                .map(|(idx, _)|
+                    domain_ref.get_typaram_from_snap(vcx, idx, make_generic_expr)
+                )
                 .collect::<Vec<_>>();
 
             let make_generic = vcx.mk_function(

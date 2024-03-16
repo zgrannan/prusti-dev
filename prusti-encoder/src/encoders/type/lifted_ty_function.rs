@@ -10,6 +10,9 @@ pub struct LiftedTyFunctionEncOutputRef<'vir> {
     /// Takes as input the generics for this type (if any),
     /// and returns the resulting type
     pub function: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
+
+    /// Inv functions
+    pub inv_functions: &'vir [vir::FunctionIdent<'vir, UnaryArity<'vir>>],
 }
 
 impl<'vir> OutputRefAny for LiftedTyFunctionEncOutputRef<'vir> {}
@@ -58,16 +61,14 @@ impl TaskEncoder for LiftedTyFunctionEnc {
         let mut functions = vec![];
         let mut axioms = vec![];
         vir::with_vcx(|vcx| {
-            let (ty_constructor, args) = extract_type_params(vcx.tcx, task_key.ty());
+            let (ty_constructor, _) = extract_type_params(vcx.tcx, task_key.ty());
+            let args = ty_constructor.generics();
             let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; args.len()]);
             let type_function_ident = FunctionIdent::new(
                 vir::vir_format!(vcx, "s_{}_type", ty_constructor.get_vir_base_name(vcx)),
                 UnknownArity::new(&type_function_args),
                 generic_ref.type_snapshot,
             );
-            deps.emit_output_ref::<Self>(*task_key, LiftedTyFunctionEncOutputRef {
-                function: type_function_ident,
-            });
             functions.push(vcx.mk_domain_function(
                 type_function_ident,
                 false,
@@ -82,11 +83,20 @@ impl TaskEncoder for LiftedTyFunctionEnc {
             let inv_function_args = vcx.alloc_array(&[generic_ref.type_snapshot]);
             let inv_functions = args.iter().enumerate().map(|(idx, arg)| {
                 FunctionIdent::new(
-                    vir::vir_format!(vcx, "s_{}_type_arg_{}", ty_constructor.get_vir_base_name(vcx), idx),
+                    vir::vir_format!(
+                        vcx,
+                        "s_{}_type_typaram{}",
+                        ty_constructor.get_vir_base_name(vcx),
+                        arg.name
+                    ),
                     UnaryArity::new(inv_function_args),
                     generic_ref.type_snapshot,
                 )
             }).collect::<Vec<_>>();
+            deps.emit_output_ref::<Self>(*task_key, LiftedTyFunctionEncOutputRef {
+                function: type_function_ident,
+                inv_functions: vcx.alloc_slice(&inv_functions)
+            });
 
             let axiom_qvars = vcx.alloc_slice(&ty_arg_decls);
             let axiom_triggers = vcx.alloc_slice(&[vcx.alloc_slice(&[func_app])]);
