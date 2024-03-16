@@ -4,11 +4,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    lifted::{LiftedTy, LiftedTyEnc},
-    lifted_func_def_generics::LiftedFuncDefGenericsEnc,
-    mir_pure::PureKind,
-    rust_ty_generic_cast::RustTyGenericCastEnc,
-    util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    domain::DomainEnc, lifted::{LiftedTy, LiftedTyEnc}, lifted_func_def_generics::LiftedFuncDefGenericsEnc, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -134,13 +130,10 @@ impl TaskEncoder for MirFunctionEnc {
                         )
                     },
                     LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
-                        let to_generic = deps.require_local::<RustTyGenericCastEnc>(*ty).unwrap();
+                        let domain_ref = deps.require_ref::<DomainEnc>(extract_type_params(vcx.tcx, *ty).0).unwrap();
                         Some(
                             vcx.mk_eq_expr(
-                                generic_enc.param_type_function.apply(
-                                    vcx,
-                                    [to_generic.cast_to_generic_if_necessary(vcx, vir_arg)]
-                                ),
+                                domain_ref.typeof_function.apply(vcx, [vir_arg]),
                                 lifted_ty.expr(vcx)
                             )
                         )

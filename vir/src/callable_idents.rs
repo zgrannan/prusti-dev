@@ -1,6 +1,5 @@
 use crate::{
-    debug_info::DebugInfo, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen,
-    PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt,
+    debug_info::DebugInfo, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
 };
 use sealed::sealed;
 

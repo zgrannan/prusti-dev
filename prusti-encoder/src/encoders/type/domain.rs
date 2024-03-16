@@ -78,15 +78,15 @@ pub struct DomainEncOutputRef<'vir> {
     pub base_name: String,
     pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
     pub generic_accessors: &'vir [FunctionIdent<'vir, UnaryArity<'vir>>],
+    pub typeof_function: FunctionIdent<'vir, UnaryArity<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 
-use crate::encoders::GenericEnc;
+use crate::encoders::{generic::GenericEncOutputRef, GenericEnc};
 
 use super::{
-    generic_cast::{GenericCastEnc, GenericCastOutputRef, MakeGenericCastFunction},
+    generic_cast::{GenericCastEnc, GenericCastOutputRef},
     lifted::{LiftedTy, LiftedTyEnc},
-    lifted_ty_function::LiftedTyFunctionEnc,
     most_generic_ty::{extract_type_params, MostGenericTy},
     rust_ty_snapshots::RustTySnapshotsEnc
 };
@@ -138,7 +138,7 @@ impl TaskEncoder for DomainEnc {
                         task_key.ty(),
                         prim_type
                     );
-                    Ok((enc.finalize(), specifics))
+                    Ok((enc.finalize(task_key), specifics))
                 }
                 TyKind::Adt(adt, params) => {
                     let generics =
@@ -165,7 +165,7 @@ impl TaskEncoder for DomainEnc {
                                 ]
                             };
                             let specifics = enc.mk_struct_specifics(fields);
-                            Ok((enc.finalize(), specifics))
+                            Ok((enc.finalize(task_key), specifics))
                         }
                         ty::AdtKind::Enum => {
                             let variants: Vec<_> = adt.discriminants(vcx.tcx).map(|(v, d)| {
@@ -192,12 +192,8 @@ impl TaskEncoder for DomainEnc {
                                     variants,
                                 })
                             };
-                            let make_generic_function =
-                                enc.deps.require_ref::<GenericCastEnc>(*task_key)
-                                    .unwrap().generic_option().unwrap();
-                            let type_function = enc.deps.require_ref::<LiftedTyFunctionEnc>(*task_key).unwrap().function;
-                            let specifics = enc.mk_enum_specifics(type_function, make_generic_function, variants);
-                            Ok((enc.finalize(), specifics))
+                            let specifics = enc.mk_enum_specifics(variants);
+                            Ok((enc.finalize(task_key), specifics))
                         }
                         ty::AdtKind::Union => todo!(),
                     }
@@ -211,17 +207,13 @@ impl TaskEncoder for DomainEnc {
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                     let field_tys = params.iter().map(|ty| FieldTy::from_ty(vcx, enc.deps, ty)).collect();
                     let specifics = enc.mk_struct_specifics(field_tys);
-                    Ok((enc.finalize(), specifics))
+                    Ok((enc.finalize(task_key), specifics))
                 }
                 TyKind::Never => {
                     let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
-                    let make_generic_function =
-                        enc.deps.require_ref::<GenericCastEnc>(*task_key)
-                            .unwrap().generic_option().unwrap();
-                    let type_function = enc.deps.require_ref::<LiftedTyFunctionEnc>(*task_key).unwrap().function;
-                    let specifics = enc.mk_enum_specifics(type_function, make_generic_function, None);
-                    Ok((enc.finalize(), specifics))
+                    let specifics = enc.mk_enum_specifics(None);
+                    Ok((enc.finalize(task_key), specifics))
                 }
                 &TyKind::Ref(_, inner, _) => {
                     let generics = vec![deps.require_local::<LiftedTyEnc>(inner).unwrap().expect_generic()];
@@ -229,7 +221,7 @@ impl TaskEncoder for DomainEnc {
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                     let field_tys = vec![FieldTy::from_ty(vcx, enc.deps, inner)];
                     let specifics = enc.mk_struct_specifics(field_tys);
-                    Ok((enc.finalize(), specifics))
+                    Ok((enc.finalize(task_key), specifics))
                 }
                 &TyKind::Param(_) => {
                     let out = deps.require_ref::<GenericEnc>(()).unwrap();
@@ -239,6 +231,7 @@ impl TaskEncoder for DomainEnc {
                             base_name,
                             domain: out.domain_param_name,
                             generic_accessors: vcx.alloc_slice(&[out.param_type_function]),
+                            typeof_function: out.param_type_function,
                         },
                     );
                     Ok((
@@ -266,12 +259,15 @@ struct DomainEncData<'vir, 'tcx, 'enc> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
     generics: Vec<(ParamTy, vir::FunctionIdent<'vir, UnaryArity<'vir>>)>,
+    typeof_function: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
     self_ty: vir::Type<'vir>,
     self_ex: vir::Expr<'vir>,
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
     axioms: Vec<vir::DomainAxiom<'vir>>,
     functions: Vec<vir::DomainFunction<'vir>>,
+    generic_enc: GenericEncOutputRef<'vir>,
     deps: &'enc mut TaskEncoderDependencies<'vir>,
+    is_param_ty: bool
 }
 impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     // Creation
@@ -292,19 +288,29 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
         let generics: Vec<_> = generics.into_iter().map(|g|
             (g, vir::FunctionIdent::new(
-                vir::vir_format!(vcx, "typaram_{}", g.name),
+                vir::vir_format!(vcx, "typaram_{}_{}", domain.name(), g.name),
                 UnaryArity::new(vcx.alloc_array(&[self_ty])),
                 generic_enc.type_snapshot
             ))
         ).collect();
 
-        let functions = generics.iter().map(
-                |(_, ident)| vcx.mk_domain_function(
-                    false,
-                    ident.name(),
-                    ident.arity().args(),
-                    ident.result_ty())
-            ).collect();
+        let mut functions = generics.iter().map(
+                |(_, ident)| vcx.mk_domain_function(*ident, false)
+            ).collect::<Vec<_>>();
+
+        let typeof_function = if !ty.is_generic() {
+            let typeof_function = vir::FunctionIdent::new(
+                vir::vir_format!(vcx, "typeof_{}", domain.name()),
+                UnaryArity::new(vcx.alloc_array(&[self_ty])),
+                generic_enc.type_snapshot
+            );
+            functions.push(
+                vcx.mk_domain_function(typeof_function, false)
+            );
+            typeof_function
+        } else {
+            generic_enc.param_type_function
+        };
 
         Self {
             vcx,
@@ -315,7 +321,10 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             generics,
             axioms: Vec::new(),
             functions,
-            deps
+            deps,
+            typeof_function,
+            generic_enc,
+            is_param_ty: ty.is_generic(),
         }
     }
 
@@ -372,8 +381,6 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     }
     pub fn mk_enum_specifics(
         &mut self,
-        type_function: FunctionIdent<'vir, UnknownArity<'vir>>,
-        make_generic_function: MakeGenericCastFunction<'vir>,
         data: Option<VariantData<'vir, 'tcx>>,
     ) -> DomainEncSpecifics<'vir> {
         let specifics = data.map(|data| {
@@ -396,10 +403,8 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         DomainEncSpecifics::EnumLike(specifics)
     }
 
-    fn push_function(&mut self, func: vir::DomainFunction<'vir>) -> FunctionIdent<'vir, UnknownArity<'vir>> {
-        let ident = func.ident();
-        self.functions.push(func);
-        ident
+    fn push_function(&mut self, func: FunctionIdent<'vir, UnknownArity<'vir>>, unique: bool) {
+        self.functions.push(self.vcx.mk_domain_function(func, unique));
     }
 
     // Helper functions
@@ -414,14 +419,13 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         // Constructor
         let field_snaps_to_snap = {
             let name = vir::vir_format!(self.vcx, "{base}_cons");
-            self.push_function(
-                self.vcx.mk_domain_function(
-                    false,
-                    name,
-                    self.vcx.alloc_slice(&field_tys.iter().map(|fty| fty.ty).collect::<Vec<_>>()),
-                    self.self_ty
-                )
-            )
+            let ident = FunctionIdent::new(
+                name,
+                UnknownArity::new(self.vcx.alloc_slice(&field_tys.iter().map(|fty| fty.ty).collect::<Vec<_>>())),
+                self.self_ty
+            );
+            self.push_function(ident, false);
+            ident
         };
 
         // Variables and definitions useful for axioms
@@ -452,8 +456,6 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             ));
         }
 
-        let generic_enc = self.deps.require_ref::<GenericEnc>(()).unwrap();
-
         // Accessors
         let field_access = {
             field_tys.iter().enumerate().map(|(idx, field_ty)| {
@@ -480,7 +482,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                                 self.vcx.alloc_slice(self.self_decl),
                                 self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[read.apply(self.vcx, [self.self_ex])])]),
                                 self.vcx.mk_eq_expr(
-                                    generic_enc.param_type_function.apply(
+                                    self.generic_enc.param_type_function.apply(
                                         self.vcx,
                                         [
                                             lifted.cast_functions.cast_to_generic_if_necessary(
@@ -497,7 +499,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
                 }
 
-                self.functions.push(self.vcx.mk_domain_function(false, name, args, field_ty.ty));
+                self.functions.push(self.vcx.mk_domain_function(read, false));
 
                 let cons_read = read.apply(self.vcx, [cons_call_with_qvars]);
                 self.axioms.push(self.vcx.mk_domain_axiom(
@@ -517,7 +519,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     BinaryArity::new(args),
                     self.self_ty
                 );
-                self.functions.push(self.vcx.mk_domain_function(false, name, args, self.self_ty));
+                self.functions.push(self.vcx.mk_domain_function(write, false));
                 FieldFunctions { read, write }
             }).collect::<Vec<_>>()
         };
@@ -582,7 +584,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         let types = self.vcx.alloc_array(&[self.self_ty]);
         let snap_to_discr_snap = FunctionIdent::new(name, UnaryArity::new(types), discr_ty);
         self.functions
-            .push(self.vcx.mk_domain_function(false, name, types, discr_ty));
+            .push(self.vcx.mk_domain_function(snap_to_discr_snap, false));
         snap_to_discr_snap
     }
     fn mk_discr_bounds_axioms(
@@ -641,13 +643,32 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         DomainEncOutputRef {
             base_name,
             domain: self.domain,
+            typeof_function: self.typeof_function,
             generic_accessors:
                 self.vcx.alloc_slice(
                     &self.generics.iter().map(|(_, ident)| *ident).collect::<Vec<_>>()
                 ),
         }
     }
-    fn finalize(self) -> vir::Domain<'vir> {
+    fn finalize(mut self, ty: &MostGenericTy<'tcx>) -> vir::Domain<'vir> {
+        if !self.is_param_ty {
+            let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
+            let generic_cast = self.deps.require_ref::<GenericCastEnc>(*ty).unwrap();
+            let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
+            self.axioms.push(
+                self.vcx.mk_domain_axiom(
+                    vir::vir_format!(self.vcx, "ax_typeof_{}", self.domain.name()),
+                    self.vcx.mk_forall_expr(
+                        self.self_decl,
+                        self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[typeof_applied_to_self])]),
+                        self.vcx.mk_eq_expr(
+                            typeof_applied_to_self,
+                            self.generic_enc.param_type_function.apply(self.vcx, [as_param])
+                        )
+                    )
+                )
+            );
+        }
         self.vcx.mk_domain(
             self.domain.name(),
             &[],
@@ -743,8 +764,6 @@ struct LiftedRustTyData<'vir> {
     lifted_ty: LiftedTy<'vir, ParamTy>,
     /// Data for casting the field to a generic type
     cast_functions: GenericCastOutputRef<'vir>,
-    /// The type arguments for the field
-    cast_args: &'vir [LiftedTy<'vir, ParamTy>]
 }
 
 impl <'vir> FieldTy<'vir> {
@@ -755,13 +774,8 @@ impl <'vir> FieldTy<'vir> {
             .snapshot;
         let lifted_ty = deps.require_local::<LiftedTyEnc>(ty)
             .unwrap();
-        let (generic_ty, ty_params) = extract_type_params(vcx.tcx, ty);
+        let (generic_ty, _) = extract_type_params(vcx.tcx, ty);
         let cast_functions = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
-        let cast_args = vcx.alloc_slice(
-            &ty_params.iter()
-                .map(|ty| deps.require_local::<LiftedTyEnc>(*ty).unwrap())
-                .collect::<Vec<_>>()
-        );
-        FieldTy {ty: vir_ty, lifted: Some(LiftedRustTyData {lifted_ty, cast_functions, cast_args})}
+        FieldTy {ty: vir_ty, lifted: Some(LiftedRustTyData {lifted_ty, cast_functions})}
     }
 }

@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use crate::data::*;
 use crate::gendata::*;
+use crate::DomainAxiomGen;
 use crate::DomainFunction;
 
 fn fmt_comma_sep_display<T: Display>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
@@ -97,10 +98,11 @@ impl Debug for ConstData {
     }
 }
 
-pub fn fmt_domain_with_extra_functions<'vir, Curr, Next>(
+pub fn fmt_domain_with_extras<'vir, Curr, Next>(
     f: &mut Formatter<'_>,
     domain: &DomainGenData<'vir, Curr, Next>,
-    extra_functions: &Vec<DomainFunction<'vir>>
+    extra_functions: &Vec<DomainFunction<'vir>>,
+    extra_axioms: &Vec<DomainAxiomGen<'vir, Curr, Next>>
 ) -> FmtResult {
     write!(f, "domain {}", domain.name)?;
     if !domain.typarams.is_empty() {
@@ -109,14 +111,14 @@ pub fn fmt_domain_with_extra_functions<'vir, Curr, Next>(
         write!(f, "]")?;
     }
     writeln!(f, " {{")?;
-    domain.axioms.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
+    domain.axioms.iter().chain(extra_axioms).map(|el| el.fmt(f)).collect::<FmtResult>()?;
     domain.functions.iter().chain(extra_functions).map(|el| el.fmt(f)).collect::<FmtResult>()?;
     writeln!(f, "}}")
 }
 
 impl<'vir, Curr, Next> Debug for DomainGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        fmt_domain_with_extra_functions(f, self, &vec![])
+        fmt_domain_with_extras(f, self, &vec![], &vec![])
     }
 }
 

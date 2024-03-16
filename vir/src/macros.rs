@@ -1,6 +1,6 @@
 //#[macro_export]
 //macro_rules! vir_expr_nopos {
-//    
+//
 //}
 
 //#[macro_export]
@@ -179,18 +179,22 @@ macro_rules! vir_domain_axiom {
 macro_rules! vir_domain_func {
     ($vcx:expr; unique function $name:tt ( $( $args:tt )* ): $ret:tt ) => {{
         $vcx.mk_domain_function(
-            true,
-            $name.name(),
-            $crate::vir_type_list!($vcx; $($args)*),
-            $crate::vir_type!($vcx; $ret),
+            FunctionIdent::new(
+                $name.name(),
+                vir::UnknownArity::new($crate::vir_type_list!($vcx; $($args)*)),
+                $crate::vir_type!($vcx; $ret),
+            ),
+            true
         )
     }};
     ($vcx:expr; function $name:tt ( $( $args:tt )* ): $ret:tt ) => {{
         $vcx.mk_domain_function(
-            false,
-            $name.name(),
-            $crate::vir_type_list!($vcx; $($args)*),
-            $crate::vir_type!($vcx; $ret),
+            FunctionIdent::new(
+                $name.name(),
+                vir::UnknownArity::new($crate::vir_type_list!($vcx; $($args)*)),
+                $crate::vir_type!($vcx; $ret),
+            ),
+            false
         )
     }};
 }

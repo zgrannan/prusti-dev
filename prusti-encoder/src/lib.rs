@@ -14,7 +14,7 @@ use prusti_rustc_interface::{
     middle::ty,
     hir,
 };
-use vir::{fmt_domain_with_extra_functions, CallableIdent, DomainFunction};
+use vir::{fmt_domain_with_extras, CallableIdent, DomainFunction, DomainAxiom};
 use std::fmt::{self, Debug, Formatter};
 
 use crate::encoders::lifted_ty_function::LiftedTyFunctionEnc;
@@ -96,22 +96,26 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "snapshots");
     for output in crate::encoders::DomainEnc_all_outputs() {
-        let type_functions =
-            LiftedTyFunctionEnc::all_outputs().iter()
-                .filter(|f_output| f_output.domain.name() == output.name)
-                .map(|f_output| f_output.function)
-                .collect();
-        struct DomainWithExtraFunctions<'a>(
+        let lifted_ty_func_outputs = LiftedTyFunctionEnc::all_outputs();
+        let lifted_ty_func_output = lifted_ty_func_outputs.iter()
+            .find(|f_output| f_output.domain.name() == output.name);
+        let (type_functions, type_axioms) = if let Some(f_output) = lifted_ty_func_output {
+            (f_output.functions.iter().map(|a| *a).collect(), f_output.axioms.iter().map(|a| *a).collect())
+        } else {
+            (vec![], vec![])
+        };
+        struct DomainWithExtras<'a>(
             vir::Domain<'a>,
-            Vec<DomainFunction<'a>>
+            Vec<DomainFunction<'a>>,
+            Vec<DomainAxiom<'a>>
         );
 
-        impl <'a> Debug for DomainWithExtraFunctions<'a> {
+        impl <'a> Debug for DomainWithExtras<'a> {
             fn fmt<'b>(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                fmt_domain_with_extra_functions(f, self.0, &self.1)
+                fmt_domain_with_extras(f, self.0, &self.1, &self.2)
             }
         }
-        viper_code.push_str(&format!("{:?}\n", DomainWithExtraFunctions(output, type_functions)));
+        viper_code.push_str(&format!("{:?}\n", DomainWithExtras(output, type_functions, type_axioms)));
     }
 
     header(&mut viper_code, "types");

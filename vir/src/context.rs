@@ -3,7 +3,7 @@ use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 use std::fmt::Debug;
 
-use crate::{data::*, gendata::*, genrefs::*, refs::*, debug_info::DEBUGINFO_NONE, PredicateIdent, CallableIdent, CheckTypes, Arity, MethodIdent};
+use crate::{data::*, debug_info::DEBUGINFO_NONE, gendata::*, genrefs::*, refs::*, Arity, CallableIdent, CheckTypes, FunctionIdent, MethodIdent, PredicateIdent};
 
 macro_rules! const_expr {
     ($expr_kind:expr) => {
@@ -295,18 +295,16 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
-    pub fn mk_domain_function<'vir>(
+    pub fn mk_domain_function<'vir, A: Arity<'vir, Arg = Type<'vir>>>(
         &'vir self,
+        ident: FunctionIdent<'vir, A>,
         unique: bool,
-        name: &'vir str,
-        args: &'vir [Type<'vir>],
-        ret: Type<'vir>,
     ) -> DomainFunction<'vir> {
         self.alloc(DomainFunctionData {
             unique,
-            name,
-            args,
-            ret,
+            name: ident.name(),
+            args: ident.arity().args(),
+            ret: ident.result_ty(),
         })
     }
 
