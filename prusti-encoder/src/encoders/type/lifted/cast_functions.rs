@@ -1,11 +1,9 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, UnaryArity, UnknownArity};
 
-use prusti_rustc_interface::middle::ty::ParamTy;
-
 use crate::encoders::{
     domain::DomainEnc,
-    lifted::{ty::LiftedTyEnc, ty_constructor::TyConstructorEnc},
+    lifted::ty_constructor::TyConstructorEnc,
     most_generic_ty::MostGenericTy,
     GenericEnc,
 };

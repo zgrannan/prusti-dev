@@ -13,6 +13,8 @@ mod refs;
 mod reify;
 mod callable_idents;
 
+// `fmt_domain_with_extras` can be removed once we're encoding the Viper AST via
+// JNI
 pub use debug::fmt_domain_with_extras;
 pub use context::*;
 pub use data::*;

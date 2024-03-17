@@ -274,7 +274,7 @@ impl<'tcx: 'vir, 'vir> PureFuncAppEnc<'tcx, 'vir> for EncVisitor<'tcx, 'vir, '_>
 
     fn encode_operand(
         &mut self,
-        args: &Self::EncodeOperandArgs,
+        _args: &Self::EncodeOperandArgs,
         operand: &mir::Operand<'tcx>,
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
         self.encode_operand_snap(operand)

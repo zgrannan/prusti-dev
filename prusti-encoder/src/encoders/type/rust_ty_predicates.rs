@@ -1,11 +1,13 @@
 use prusti_rustc_interface::middle::ty::{self};
-use rustc_middle::ty::ParamTy;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{with_vcx, Type, TypeData};
 
 use crate::encoders::{PredicateEnc, PredicateEncOutputRef};
 
-use super::{lifted::{generic::LiftedGeneric, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}}, most_generic_ty::extract_type_params};
+use super::{
+    lifted::{generic::LiftedGeneric, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}},
+    most_generic_ty::extract_type_params
+};
 
 pub struct RustTyPredicatesEnc;
 
