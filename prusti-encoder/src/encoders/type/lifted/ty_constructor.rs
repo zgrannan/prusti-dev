@@ -1,7 +1,12 @@
 use task_encoder::{OutputRefAny, TaskEncoder};
-use vir::{CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity};
+use vir::{
+    CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity,
+};
 
-use crate::encoders::{most_generic_ty::{extract_type_params, MostGenericTy}, GenericEnc};
+use crate::encoders::{
+    most_generic_ty::{extract_type_params, MostGenericTy},
+    GenericEnc,
+};
 
 #[derive(Clone)]
 pub struct TyConstructorEncOutputRef<'vir> {
@@ -71,57 +76,59 @@ impl TaskEncoder for TyConstructorEnc {
                 UnknownArity::new(&type_function_args),
                 generic_ref.type_snapshot,
             );
-            functions.push(vcx.mk_domain_function(
-                type_function_ident,
-                false,
-            ));
-            let ty_arg_decls: Vec<vir::LocalDecl<'vir>> = args.iter().enumerate().map(
-                |(idx, _)|
-                    vcx.mk_local_decl(vcx.alloc_str(&format!("arg_{}", idx)), generic_ref.type_snapshot)
-            ).collect();
-            let ty_arg_exprs: Vec<vir::Expr<'vir>> = ty_arg_decls.iter().map(|decl| vcx.mk_local_ex(decl.name, decl.ty)).collect::<Vec<_>>();
+            functions.push(vcx.mk_domain_function(type_function_ident, false));
+            let ty_arg_decls: Vec<vir::LocalDecl<'vir>> = args
+                .iter()
+                .enumerate()
+                .map(|(idx, _)| {
+                    vcx.mk_local_decl(
+                        vcx.alloc_str(&format!("arg_{}", idx)),
+                        generic_ref.type_snapshot,
+                    )
+                })
+                .collect();
+            let ty_arg_exprs: Vec<vir::Expr<'vir>> = ty_arg_decls
+                .iter()
+                .map(|decl| vcx.mk_local_ex(decl.name, decl.ty))
+                .collect::<Vec<_>>();
             let func_app = type_function_ident.apply(vcx, &ty_arg_exprs);
 
-            let inv_function_args = vcx.alloc_array(&[generic_ref.type_snapshot]);
-            let inv_functions = args.iter().enumerate().map(|(idx, arg)| {
-                FunctionIdent::new(
-                    vir::vir_format!(
-                        vcx,
-                        "s_{}_type_typaram{}",
-                        ty_constructor.get_vir_base_name(vcx),
-                        arg.name
-                    ),
-                    UnaryArity::new(inv_function_args),
-                    generic_ref.type_snapshot,
-                )
-            }).collect::<Vec<_>>();
-            deps.emit_output_ref::<Self>(*task_key, TyConstructorEncOutputRef {
-                ty_constructor: type_function_ident,
-                ty_param_accessors: vcx.alloc_slice(&inv_functions)
-            });
+            let ty_accessor_args = vcx.alloc_array(&[generic_ref.type_snapshot]);
+            let ty_accessor_functions = args
+                .iter()
+                .map(|arg| {
+                    FunctionIdent::new(
+                        vir::vir_format!(
+                            vcx,
+                            "s_{}_typaram_{}",
+                            ty_constructor.get_vir_base_name(vcx),
+                            arg.name
+                        ),
+                        UnaryArity::new(ty_accessor_args),
+                        generic_ref.type_snapshot,
+                    )
+                })
+                .collect::<Vec<_>>();
+            deps.emit_output_ref::<Self>(
+                *task_key,
+                TyConstructorEncOutputRef {
+                    ty_constructor: type_function_ident,
+                    ty_param_accessors: vcx.alloc_slice(&ty_accessor_functions),
+                },
+            );
 
             let axiom_qvars = vcx.alloc_slice(&ty_arg_decls);
             let axiom_triggers = vcx.alloc_slice(&[vcx.alloc_slice(&[func_app])]);
-            for (inv_function, ty_arg) in inv_functions.iter().zip(ty_arg_exprs.iter()) {
-                functions.push(
-                    vcx.mk_domain_function(
-                        *inv_function,
-                        false,
-                    )
-                );
-                axioms.push(
-                    vcx.mk_domain_axiom(
-                        vir::vir_format!(vcx, "ax_{}", inv_function.name()),
-                        vcx.mk_forall_expr(
-                            axiom_qvars,
-                            axiom_triggers,
-                            vcx.mk_eq_expr(
-                                inv_function.apply(vcx, [func_app]),
-                                ty_arg
-                            )
-                        )
-                    )
-                )
+            for (accessor_function, ty_arg) in ty_accessor_functions.iter().zip(ty_arg_exprs.iter()) {
+                functions.push(vcx.mk_domain_function(*accessor_function, false));
+                axioms.push(vcx.mk_domain_axiom(
+                    vir::vir_format!(vcx, "ax_{}", accessor_function.name()),
+                    vcx.mk_forall_expr(
+                        axiom_qvars,
+                        axiom_triggers,
+                        vcx.mk_eq_expr(accessor_function.apply(vcx, [func_app]), ty_arg),
+                    ),
+                ))
             }
             let result = TyConstructorEncOutput {
                 domain: task_key.get_vir_domain_ident(vcx),

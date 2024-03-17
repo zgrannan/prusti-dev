@@ -7,7 +7,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use super::{lifted::{cast::{CastArgs, PureGenericCastEnc}, func_app_ty_params::LiftedFuncAppGenericsEnc}, util::get_func_sig, MirFunctionEnc};
+use super::{lifted::{cast::{CastArgs, PureGenericCastEnc}, func_app_ty_params::LiftedFuncAppTyParamsEnc}, util::get_func_sig, MirFunctionEnc};
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.
@@ -67,7 +67,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         let (fn_arg_tys, _) = get_func_sig(self.vcx(), def_id);
         let encoded_ty_args = self
             .deps()
-            .require_local::<LiftedFuncAppGenericsEnc>(arg_tys)
+            .require_local::<LiftedFuncAppTyParamsEnc>(arg_tys)
             .unwrap();
 
         // Initial arguments are lifted type parameters

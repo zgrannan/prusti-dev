@@ -1,16 +1,21 @@
 use std::marker::PhantomData;
 
 use prusti_rustc_interface::middle::ty::{self, ParamTy, TyKind};
-use task_encoder::{OutputRefAny, TaskEncoder};
+use task_encoder::TaskEncoder;
 use vir::{with_vcx, FunctionIdent, UnknownArity};
 
-use crate::encoders::lifted::generic::LiftedGeneric;
-use crate::encoders::lifted::generic::LiftedGenericEnc;
-use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
-use crate::encoders::most_generic_ty::extract_type_params;
+use crate::encoders::{
+    lifted::{
+        generic::{LiftedGeneric, LiftedGenericEnc},
+        ty_constructor::TyConstructorEnc,
+    },
+    most_generic_ty::extract_type_params,
+};
 
-/// Representation of a Rust type as a Viper expression. The expression T
-/// is used to represent a generic; this enables different encodings / substitutions
+/// Representation of a Rust type as a Viper expression. Generics are
+/// represented with values of type `T`. In the usual case `T` should be
+/// [`LiftedGeneric`], but in some cases alternative types are useful (see
+/// usages in [`crate::encoders::domain::DomainEnc`])
 #[derive(Clone, Copy, Debug)]
 pub enum LiftedTy<'vir, T> {
     /// Uninstantiated generic type parameter
@@ -37,28 +42,14 @@ impl<'vir, 'tcx, T: Copy> LiftedTy<'vir, T> {
                 ty_constructor,
                 args,
             } => {
-                let args: Vec<LiftedTy<'vir, U>> = args.iter().map(|a| a.map(vcx, f)).collect::<Vec<_>>();
+                let args: Vec<LiftedTy<'vir, U>> =
+                    args.iter().map(|a| a.map(vcx, f)).collect::<Vec<_>>();
                 LiftedTy::Instantiated {
                     ty_constructor: *ty_constructor,
-                    args: vcx.alloc_slice(&args)
+                    args: vcx.alloc_slice(&args),
                 }
             }
             LiftedTy::Generic(g) => LiftedTy::Generic(f(*g)),
-        }
-    }
-
-    pub fn expect_instantiated(
-        &self,
-    ) -> (
-        FunctionIdent<'vir, UnknownArity<'vir>>,
-        &'vir [LiftedTy<'vir, T>],
-    ) {
-        match self {
-            LiftedTy::Instantiated {
-                ty_constructor,
-                args,
-            } => (*ty_constructor, *args),
-            _ => panic!("Expected instantiated type"),
         }
     }
 
@@ -116,20 +107,38 @@ impl<'vir, 'tcx> LiftedTy<'vir, LiftedGeneric<'vir>> {
         }
     }
 
-    pub fn arg_exprs<Curr, Next>(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> Vec<vir::ExprGen<'vir, Curr, Next>> {
+    pub fn arg_exprs<Curr, Next>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+    ) -> Vec<vir::ExprGen<'vir, Curr, Next>> {
         self.map(vcx, &mut |g| g.expr(vcx)).arg_exprs(vcx)
     }
 
-    pub fn expr<Curr, Next>(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::ExprGen<'vir, Curr, Next> {
+    pub fn expr<Curr, Next>(
+        &self,
+        vcx: &'vir vir::VirCtxt<'tcx>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
         self.map(vcx, &mut |g| g.expr(vcx)).expr(vcx)
     }
 }
 
-impl<'vir> OutputRefAny for LiftedTy<'vir, ParamTy> {}
+pub struct EncodeGenericsAsLifted;
+pub struct EncodeGenericsAsParamTy;
+
+/// Encodes the Viper representation of a Rust type ([`LiftedTy`]). The type
+/// parameter `T` determines how Rust generic types are encoded; different
+/// encoder implementations are used for different types of generic types. The
+/// type parameter enables different implementations to also differin their
+/// result types.
 pub struct LiftedTyEnc<T>(PhantomData<T>);
 
-impl TaskEncoder for LiftedTyEnc<LiftedGeneric<'static>> {
-    task_encoder::encoder_cache!(LiftedTyEnc<LiftedGeneric<'static>>);
+/// This encoder represents Rust generics as [`LiftedGeneric`] values. This is
+/// suitable for cases where the generic is represented in Viper as an argument
+/// of type `Type` (the usual case). The 'static type parameter is only
+/// necessary to define the encoder; the the result of this encoder uses the
+/// appropriate 'vir lifetime.
+impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsLifted> {
+    task_encoder::encoder_cache!(LiftedTyEnc<EncodeGenericsAsLifted>);
 
     type TaskDescription<'tcx> = ty::Ty<'tcx>;
 
@@ -158,15 +167,19 @@ impl TaskEncoder for LiftedTyEnc<LiftedGeneric<'static>> {
     > {
         deps.emit_output_ref::<Self>(*task_key, ());
         with_vcx(|vcx| {
-            let result = deps.require_local::<LiftedTyEnc<ParamTy>>(*task_key).unwrap();
-            let result = result.map(vcx, &mut |g| deps.require_ref::<LiftedGenericEnc>(g).unwrap());
+            let result = deps
+                .require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(*task_key)
+                .unwrap();
+            let result = result.map(vcx, &mut |g| {
+                deps.require_ref::<LiftedGenericEnc>(g).unwrap()
+            });
             Ok((result, ()))
         })
     }
 }
 
-impl TaskEncoder for LiftedTyEnc<ParamTy> {
-    task_encoder::encoder_cache!(LiftedTyEnc<ParamTy>);
+impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsParamTy> {
+    task_encoder::encoder_cache!(LiftedTyEnc<EncodeGenericsAsParamTy>);
 
     type TaskDescription<'tcx> = ty::Ty<'tcx>;
 

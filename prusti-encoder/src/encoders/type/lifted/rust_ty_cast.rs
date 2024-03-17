@@ -1,19 +1,19 @@
 use prusti_rustc_interface::middle::ty;
-use rustc_middle::ty::ParamTy;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
 use crate::encoders::most_generic_ty::extract_type_params;
 
-use super::{cast::PureCast, cast_functions::{CastFunctionsEnc, CastFunctionsOutputRef}, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
+use super::{cast::PureCast, cast_functions::{CastFunctionsEnc, CastFunctionsOutputRef}, generic::LiftedGeneric, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}};
 
 /// Generates Viper functions to cast between generic and non-generic Viper
-/// representations of a Rust value. See `GenericCastEnc` for more details.
+/// representations of a Rust value. See [`CastFunctionsEnc`] for more details.
 pub struct RustTyGenericCastEnc;
 
 #[derive(Clone)]
 pub struct RustTyGenericCastEncOutput<'vir> {
     pub cast: CastFunctionsOutputRef<'vir>,
+    // Type arguments required by the cast function
     pub ty_args: &'vir [LiftedTy<'vir, LiftedGeneric<'vir>>],
 }
 
@@ -83,7 +83,7 @@ impl TaskEncoder for RustTyGenericCastEnc {
             let ty_args = args
                 .iter()
                 .map(|a| {
-                    deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*a)
+                    deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(*a)
                         .unwrap()
                 })
                 .collect::<Vec<_>>();

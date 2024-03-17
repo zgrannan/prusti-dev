@@ -6,11 +6,11 @@ use task_encoder::TaskEncoder;
 
 use super::generic::{LiftedGeneric, LiftedGenericEnc};
 
-/// Encodes the generic arguments of a function definition.
-pub struct LiftedFuncDefGenericsEnc;
+/// Encodes the type parameters of a function definition.
+pub struct LiftedFuncDefTyParamsEnc;
 
-impl TaskEncoder for LiftedFuncDefGenericsEnc {
-    task_encoder::encoder_cache!(LiftedFuncDefGenericsEnc);
+impl TaskEncoder for LiftedFuncDefTyParamsEnc {
+    task_encoder::encoder_cache!(LiftedFuncDefTyParamsEnc);
     type TaskDescription<'tcx> = DefId;
 
     type OutputFullLocal<'vir> = &'vir [LiftedGeneric<'vir>];

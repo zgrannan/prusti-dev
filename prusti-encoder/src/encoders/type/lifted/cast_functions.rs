@@ -122,7 +122,6 @@ impl TaskEncoder for CastFunctionsEnc {
         vir::with_vcx(|vcx| {
             let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
-            let lifted_ty = deps.require_local::<LiftedTyEnc<ParamTy>>(ty.ty()).unwrap();
             let self_ty = domain_ref.domain.apply(vcx, []);
             let base_name = &domain_ref.base_name;
             let ty_constructor = deps
@@ -172,9 +171,7 @@ impl TaskEncoder for CastFunctionsEnc {
             let make_generic_result = vcx.mk_local_ex("result", generic_ref.param_snapshot);
 
             // Type parameters obtained from the snapshot-encoded value of the type,
-            let ty_params_from_snap = lifted_ty
-                .expect_instantiated()
-                .1
+            let ty_params_from_snap = ty.generics()
                 .iter()
                 .enumerate()
                 .map(|(idx, _)| domain_ref.ty_param_from_snap(vcx, idx, make_generic_expr))
@@ -207,23 +204,21 @@ impl TaskEncoder for CastFunctionsEnc {
                 None,
             );
 
-            let make_concrete_arg_decl = vcx.mk_local_decl("snap", generic_ref.param_snapshot);
+            let make_concrete_snap_arg_decl = vcx.mk_local_decl("snap", generic_ref.param_snapshot);
             let make_concrete_arg_decls = vcx.alloc_slice(
-                &std::iter::once(make_concrete_arg_decl)
+                &std::iter::once(make_concrete_snap_arg_decl)
                     .chain(make_concrete_ty_params.iter().map(|t| t.decl()))
                     .collect::<Vec<_>>(),
             );
 
             let make_concrete_pre = mk_type_spec(
-                vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
+                vcx.mk_local_ex(make_concrete_snap_arg_decl.name, make_concrete_snap_arg_decl.ty),
                 &make_concrete_ty_param_exprs,
             );
 
-            let make_generic_args = [vcx.mk_local_ex("result", self_ty)];
-
             let make_concrete_post = vcx.mk_eq_expr(
-                make_generic_ident.apply(vcx, make_generic_args),
-                vcx.mk_local_ex(make_concrete_arg_decl.name, make_concrete_arg_decl.ty),
+                make_generic_ident.apply(vcx, [vcx.mk_local_ex("result", self_ty)]),
+                vcx.mk_local_ex(make_concrete_snap_arg_decl.name, make_concrete_snap_arg_decl.ty),
             );
 
             let make_concrete = vcx.mk_function(

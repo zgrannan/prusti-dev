@@ -4,7 +4,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefGenericsEnc, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefTyParamsEnc, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -70,7 +70,7 @@ impl TaskEncoder for MirFunctionEnc {
 
             let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
             let function_name = vir::vir_format!(vcx, "f_{}_CALLER_{krate}_{index}", vcx.tcx.item_name(def_id));
-            let ty_arg_decls = deps.require_local::<LiftedFuncDefGenericsEnc>(def_id).unwrap();
+            let ty_arg_decls = deps.require_local::<LiftedFuncDefTyParamsEnc>(def_id).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
             ident_args.extend((1..=local_defs.arg_count)
                 .map(mir::Local::from)
@@ -119,7 +119,7 @@ impl TaskEncoder for MirFunctionEnc {
             let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
                 let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
                 let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
-                let lifted_ty = deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*ty).unwrap();
+                let lifted_ty = deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(*ty).unwrap();
                 match lifted_ty  {
                     LiftedTy::Generic(generic) => {
                         Some(

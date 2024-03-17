@@ -5,7 +5,7 @@ use vir::{with_vcx, Type, TypeData};
 
 use crate::encoders::{PredicateEnc, PredicateEncOutputRef};
 
-use super::{lifted::{generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}}, most_generic_ty::extract_type_params};
+use super::{lifted::{generic::LiftedGeneric, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}}, most_generic_ty::extract_type_params};
 
 pub struct RustTyPredicatesEnc;
 
@@ -102,7 +102,7 @@ impl TaskEncoder for RustTyPredicatesEnc {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let generic_predicate = deps.require_ref::<PredicateEnc>(generic_ty).unwrap();
             let ty = deps
-                .require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*task_key)
+                .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(*task_key)
                 .unwrap();
             deps.emit_output_ref::<RustTyPredicatesEnc>(
                 *task_key,

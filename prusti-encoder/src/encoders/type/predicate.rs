@@ -1,6 +1,6 @@
 use prusti_rustc_interface::{
     abi,
-    middle::ty::{self, TyKind, ParamTy},
+    middle::ty::{self, TyKind},
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
@@ -175,7 +175,7 @@ pub struct PredicateEncOutput<'vir> {
 use crate::encoders::GenericEnc;
 
 use super::{
-    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, lifted::{generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}}, most_generic_ty::MostGenericTy, rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef}, snapshot::SnapshotEnc
+    domain::{DiscrBounds, DomainDataEnum, DomainDataPrim, DomainDataStruct}, lifted::{generic::LiftedGeneric, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}}, most_generic_ty::MostGenericTy, rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef}, snapshot::SnapshotEnc
 };
 
 impl TaskEncoder for PredicateEnc {
@@ -358,10 +358,7 @@ impl TaskEncoder for PredicateEnc {
                     enc.output_ref(PredicateEncData::Ref(specifics)),
                 );
 
-                let lifted_ty =
-                    vir::with_vcx(|vcx|
-                        deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(inner).unwrap()
-                    );
+                let lifted_ty = deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(inner).unwrap();
                 let inner = deps
                     .require_ref::<RustTyPredicatesEnc>(inner)
                     .unwrap()
