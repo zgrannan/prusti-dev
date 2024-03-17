@@ -103,7 +103,7 @@ impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 use crate::encoders::{generic::GenericEncOutputRef, GenericEnc};
 
 use super::{
-    lifted::{cast_functions::{GenericCastEnc, GenericCastOutputRef}, ty::{LiftedTy, LiftedTyEnc}, ty_constructor::LiftedTyFunctionEnc}, most_generic_ty::{extract_type_params, MostGenericTy}, rust_ty_snapshots::RustTySnapshotsEnc
+    lifted::{cast_functions::CastFunctionsEnc, ty::{LiftedTy, LiftedTyEnc}, ty_constructor::TyConstructorEnc}, most_generic_ty::{extract_type_params, MostGenericTy}, rust_ty_snapshots::RustTySnapshotsEnc
 };
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
@@ -301,7 +301,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
         let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
 
-        let ty_param_accessors = deps.require_ref::<LiftedTyFunctionEnc>(*ty).unwrap().inv_functions;
+        let ty_param_accessors = deps.require_ref::<TyConstructorEnc>(*ty).unwrap().ty_param_accessors;
         let generics: Vec<_> = generics.into_iter().zip(ty_param_accessors.into_iter().map(|t| *t)).collect();
 
         let mut functions = vec![];
@@ -658,9 +658,12 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         }
     }
     fn finalize(mut self, ty: &MostGenericTy<'tcx>) -> vir::Domain<'vir> {
+        // If we're not encoding a type parameter, add an axiom relating
+        // the `typeof` function for this type to the type accessor of its casted version
         if !self.is_param_ty {
             let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
-            let generic_cast = self.deps.require_ref::<GenericCastEnc>(*ty).unwrap();
+            let generic_cast = self.deps.require_ref::<CastFunctionsEnc>(*ty).unwrap();
+            // This will always actually perform the cast
             let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
             self.axioms.push(
                 self.vcx.mk_domain_axiom(
@@ -770,7 +773,7 @@ struct FieldTy<'vir> {
 struct LiftedRustTyData<'vir> {
     /// The representation of the Rust type of the field
     lifted_ty: LiftedTy<'vir, ParamTy>,
-    /// Data for getting the field of the type
+    /// Takes as input the value of the field, and returns its type
     typeof_function: FunctionIdent<'vir, UnaryArity<'vir>>
 }
 

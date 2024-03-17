@@ -17,7 +17,7 @@ use prusti_rustc_interface::{
 use vir::{fmt_domain_with_extras, CallableIdent, DomainFunction, DomainAxiom};
 use std::fmt::{self, Debug, Formatter};
 
-use crate::encoders::lifted::ty_constructor::LiftedTyFunctionEnc;
+use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -88,7 +88,7 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "generic casts");
-    for output in crate::encoders::lifted::cast_functions::GenericCastEnc::all_outputs() {
+    for output in crate::encoders::lifted::cast_functions::CastFunctionsEnc::all_outputs() {
         for cast_function in output {
             viper_code.push_str(&format!("{:?}\n", cast_function));
         }
@@ -96,7 +96,7 @@ pub fn test_entrypoint<'tcx>(
 
     header(&mut viper_code, "snapshots");
     for output in crate::encoders::DomainEnc_all_outputs() {
-        let lifted_ty_func_outputs = LiftedTyFunctionEnc::all_outputs();
+        let lifted_ty_func_outputs = TyConstructorEnc::all_outputs();
         let lifted_ty_func_output = lifted_ty_func_outputs.iter()
             .find(|f_output| f_output.domain.name() == output.name);
         let (type_functions, type_axioms) = if let Some(f_output) = lifted_ty_func_output {

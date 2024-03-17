@@ -4,35 +4,39 @@ use vir::{CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryA
 use crate::encoders::{most_generic_ty::{extract_type_params, MostGenericTy}, GenericEnc};
 
 #[derive(Clone)]
-pub struct LiftedTyFunctionEncOutputRef<'vir> {
+pub struct TyConstructorEncOutputRef<'vir> {
     /// Takes as input the generics for this type (if any),
     /// and returns the resulting type
-    pub function: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
+    pub ty_constructor: vir::FunctionIdent<'vir, UnknownArity<'vir>>,
 
-    /// Inv functions
-    pub inv_functions: &'vir [vir::FunctionIdent<'vir, UnaryArity<'vir>>],
+    /// Accessors of the arguments to an instantiation of the type constructor.
+    /// Each function takes as input an instantiated type. The `i`th function in
+    /// this list returns the `i`th argument to the type constructor.
+    pub ty_param_accessors: &'vir [vir::FunctionIdent<'vir, UnaryArity<'vir>>],
 }
 
-impl<'vir> OutputRefAny for LiftedTyFunctionEncOutputRef<'vir> {}
+impl<'vir> OutputRefAny for TyConstructorEncOutputRef<'vir> {}
 
 #[derive(Clone)]
-pub struct LiftedTyFunctionEncOutput<'vir> {
+pub struct TyConstructorEncOutput<'vir> {
     pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
     pub functions: &'vir [vir::DomainFunction<'vir>],
     pub axioms: &'vir [vir::DomainAxiom<'vir>],
 }
 
-pub struct LiftedTyFunctionEnc;
+/// Encodes the lifted representation of a Rust type constructor (e.g. Option,
+/// Vec, user-defined ADTs).
+pub struct TyConstructorEnc;
 
-impl TaskEncoder for LiftedTyFunctionEnc {
-    task_encoder::encoder_cache!(LiftedTyFunctionEnc);
+impl TaskEncoder for TyConstructorEnc {
+    task_encoder::encoder_cache!(TyConstructorEnc);
     type TaskDescription<'tcx> = MostGenericTy<'tcx>;
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
 
-    type OutputRef<'vir> = LiftedTyFunctionEncOutputRef<'vir>;
+    type OutputRef<'vir> = TyConstructorEncOutputRef<'vir>;
 
-    type OutputFullLocal<'vir> = LiftedTyFunctionEncOutput<'vir>;
+    type OutputFullLocal<'vir> = TyConstructorEncOutput<'vir>;
 
     type OutputFullDependency<'vir> = ();
 
@@ -91,9 +95,9 @@ impl TaskEncoder for LiftedTyFunctionEnc {
                     generic_ref.type_snapshot,
                 )
             }).collect::<Vec<_>>();
-            deps.emit_output_ref::<Self>(*task_key, LiftedTyFunctionEncOutputRef {
-                function: type_function_ident,
-                inv_functions: vcx.alloc_slice(&inv_functions)
+            deps.emit_output_ref::<Self>(*task_key, TyConstructorEncOutputRef {
+                ty_constructor: type_function_ident,
+                ty_param_accessors: vcx.alloc_slice(&inv_functions)
             });
 
             let axiom_qvars = vcx.alloc_slice(&ty_arg_decls);
@@ -119,7 +123,7 @@ impl TaskEncoder for LiftedTyFunctionEnc {
                     )
                 )
             }
-            let result = LiftedTyFunctionEncOutput {
+            let result = TyConstructorEncOutput {
                 domain: task_key.get_vir_domain_ident(vcx),
                 functions: vcx.alloc_slice(&functions),
                 axioms: vcx.alloc_slice(&axioms),

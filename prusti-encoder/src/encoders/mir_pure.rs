@@ -754,8 +754,6 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 (expr, place_ref)
             }
             mir::ProjectionElem::Field(field_idx, ty) => {
-                eprintln!("Field type: {:?}", ty);
-                eprintln!("Place ty: {:?}", place_ty.ty.kind());
                 match place_ty.ty.kind() {
                     TyKind::Closure(_def_id, args) => {
                         let upvars = args.as_closure().upvar_tys().iter().collect::<Vec<_>>().len();

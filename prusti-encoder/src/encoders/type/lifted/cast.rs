@@ -2,7 +2,7 @@ use prusti_rustc_interface::middle::ty;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::VirCtxt;
 
-use super::{cast_functions::GenericCastOutputRef, generic::LiftedGeneric, rust_ty_cast::RustTyGenericCastEnc, ty::LiftedTy};
+use super::{cast_functions::CastFunctionsOutputRef, generic::LiftedGeneric, rust_ty_cast::RustTyGenericCastEnc, ty::LiftedTy};
 
 #[derive(Copy, Hash, PartialEq, Eq, Clone, Debug)]
 pub struct CastArgs<'tcx> {
@@ -131,7 +131,7 @@ impl TaskEncoder for PureGenericCastEnc {
                 let generic_cast = deps
                     .require_local::<RustTyGenericCastEnc>(task_key.expected)
                     .unwrap();
-                if let GenericCastOutputRef::CastFunctions { make_concrete, .. } = generic_cast.cast
+                if let CastFunctionsOutputRef::CastFunctions { make_concrete, .. } = generic_cast.cast
                 {
                     PureGenericCastOutputRef::Cast(PureCast::new(
                         make_concrete,
@@ -145,7 +145,7 @@ impl TaskEncoder for PureGenericCastEnc {
                 let generic_cast = deps
                     .require_local::<RustTyGenericCastEnc>(task_key.actual)
                     .unwrap();
-                if let GenericCastOutputRef::CastFunctions { make_generic, .. } = generic_cast.cast
+                if let CastFunctionsOutputRef::CastFunctions { make_generic, .. } = generic_cast.cast
                 {
                     PureGenericCastOutputRef::Cast(PureCast::new(
                         make_generic.as_unknown_arity(),

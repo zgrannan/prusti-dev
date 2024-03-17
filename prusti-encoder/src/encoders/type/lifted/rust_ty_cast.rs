@@ -4,7 +4,7 @@ use vir::with_vcx;
 
 use crate::encoders::most_generic_ty::extract_type_params;
 
-use super::{cast::PureCast, cast_functions::{GenericCastEnc, GenericCastOutputRef}, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
+use super::{cast::PureCast, cast_functions::{CastFunctionsEnc, CastFunctionsOutputRef}, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
 
 /// Generates Viper functions to cast between generic and non-generic Viper
 /// representations of a Rust value. See `GenericCastEnc` for more details.
@@ -12,7 +12,7 @@ pub struct RustTyGenericCastEnc;
 
 #[derive(Clone)]
 pub struct RustTyGenericCastEncOutput<'vir> {
-    pub cast: GenericCastOutputRef<'vir>,
+    pub cast: CastFunctionsOutputRef<'vir>,
     pub ty_args: &'vir [LiftedTy<'vir, LiftedGeneric<'vir>>],
 }
 
@@ -25,7 +25,7 @@ impl<'vir> RustTyGenericCastEncOutput<'vir> {
             .map(|f| PureCast::new(f.as_unknown_arity(), &[]))
     }
 
-    /// See `GenericCastOutputRef::cast_to_concrete_if_possible`.
+    /// See [`CastFunctionsOutputRef::cast_to_concrete_if_possible`].
     pub fn cast_to_concrete_if_possible<'tcx, Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
@@ -78,7 +78,7 @@ impl TaskEncoder for RustTyGenericCastEnc {
         with_vcx(|vcx| {
             deps.emit_output_ref::<RustTyGenericCastEnc>(*task_key, ());
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
-            let cast = deps.require_ref::<GenericCastEnc>(generic_ty).unwrap();
+            let cast = deps.require_ref::<CastFunctionsEnc>(generic_ty).unwrap();
             let ty_args = args
                 .iter()
                 .map(|a| {

@@ -4,7 +4,7 @@ use vir::{with_vcx, FunctionIdent, UnknownArity};
 
 use crate::encoders::lifted::generic::LiftedGeneric;
 use crate::encoders::lifted::generic::LiftedGenericEnc;
-use crate::encoders::lifted::ty_constructor::LiftedTyFunctionEnc;
+use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
 use crate::encoders::most_generic_ty::extract_type_params;
 
 /// Representation of a Rust type as a Viper expression. The expression T
@@ -164,7 +164,6 @@ impl TaskEncoder for LiftedTyEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        eprintln!("Encode LiftedTy {:?}", task_key.kind());
         deps.emit_output_ref::<Self>(*task_key, ());
         with_vcx(|vcx| {
             if let TyKind::Param(p) = task_key.kind() {
@@ -172,9 +171,9 @@ impl TaskEncoder for LiftedTyEnc {
             }
             let (ty_constructor, args) = extract_type_params(vcx.tcx, *task_key);
             let ty_constructor = deps
-                .require_ref::<LiftedTyFunctionEnc>(ty_constructor)
+                .require_ref::<TyConstructorEnc>(ty_constructor)
                 .unwrap()
-                .function;
+                .ty_constructor;
             let args = args
                 .into_iter()
                 .map(|ty| deps.require_local::<Self>(ty).unwrap())
@@ -183,7 +182,6 @@ impl TaskEncoder for LiftedTyEnc {
                 ty_constructor,
                 args: vcx.alloc_slice(&args),
             };
-            eprintln!("Output LiftedTy {:?}", task_key.kind());
             Ok((result, ()))
         })
     }

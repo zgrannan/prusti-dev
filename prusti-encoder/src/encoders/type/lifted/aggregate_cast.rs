@@ -11,8 +11,7 @@ use super::{cast::PureCast, rust_ty_cast::RustTyGenericCastEnc};
 
 /// Casts arguments to the snapshot constructor for an aggregate type (e.g.
 /// Tuples, ADTs) to appropriate (generic or concrete) Viper representations,
-/// depending on what the aggregate constructor expects. See
-/// `RustTyGenericCastEnc` and `PureGenericCastEnc` for more details.
+/// depending on what the aggregate constructor expects.
 pub struct AggregateSnapArgsCastEnc;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
