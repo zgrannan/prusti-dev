@@ -1,4 +1,5 @@
 use prusti_rustc_interface::middle::ty::{self};
+use rustc_middle::ty::ParamTy;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{with_vcx, Type, TypeData};
 
@@ -101,9 +102,8 @@ impl TaskEncoder for RustTyPredicatesEnc {
             let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
             let generic_predicate = deps.require_ref::<PredicateEnc>(generic_ty).unwrap();
             let ty = deps
-                .require_local::<LiftedTyEnc>(*task_key)
-                .unwrap()
-                .instantiate_with_lifted_generics(vcx, deps);
+                .require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*task_key)
+                .unwrap();
             deps.emit_output_ref::<RustTyPredicatesEnc>(
                 *task_key,
                 RustTyPredicatesEncOutputRef {

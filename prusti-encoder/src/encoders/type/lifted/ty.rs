@@ -1,5 +1,7 @@
+use std::marker::PhantomData;
+
 use prusti_rustc_interface::middle::ty::{self, ParamTy, TyKind};
-use task_encoder::{OutputRefAny, TaskEncoder, TaskEncoderDependencies};
+use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{with_vcx, FunctionIdent, UnknownArity};
 
 use crate::encoders::lifted::generic::LiftedGeneric;
@@ -68,16 +70,6 @@ impl<'vir, 'tcx, T: Copy> LiftedTy<'vir, T> {
     }
 }
 
-impl<'vir, 'tcx> LiftedTy<'vir, ParamTy> {
-    pub fn instantiate_with_lifted_generics(
-        &self,
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        deps: &mut TaskEncoderDependencies,
-    ) -> LiftedTy<'vir, LiftedGeneric<'vir>> {
-        self.map(vcx, &mut |g| deps.require_ref::<LiftedGenericEnc>(g).unwrap())
-    }
-}
-
 impl<'vir, 'tcx, Curr, Next> LiftedTy<'vir, vir::ExprGen<'vir, Curr, Next>> {
     pub fn arg_exprs(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> Vec<vir::ExprGen<'vir, Curr, Next>> {
         match self {
@@ -134,10 +126,47 @@ impl<'vir, 'tcx> LiftedTy<'vir, LiftedGeneric<'vir>> {
 }
 
 impl<'vir> OutputRefAny for LiftedTy<'vir, ParamTy> {}
-pub struct LiftedTyEnc;
+pub struct LiftedTyEnc<T>(PhantomData<T>);
 
-impl TaskEncoder for LiftedTyEnc {
-    task_encoder::encoder_cache!(LiftedTyEnc);
+impl TaskEncoder for LiftedTyEnc<LiftedGeneric<'static>> {
+    task_encoder::encoder_cache!(LiftedTyEnc<LiftedGeneric<'static>>);
+
+    type TaskDescription<'tcx> = ty::Ty<'tcx>;
+
+    type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
+
+    type OutputFullLocal<'vir> = LiftedTy<'vir, LiftedGeneric<'vir>>;
+
+    type EncodingError = ();
+
+    fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
+        *task
+    }
+
+    fn do_encode_full<'tcx: 'vir, 'vir>(
+        task_key: &Self::TaskKey<'tcx>,
+        deps: &mut task_encoder::TaskEncoderDependencies<'vir>,
+    ) -> Result<
+        (
+            Self::OutputFullLocal<'vir>,
+            Self::OutputFullDependency<'vir>,
+        ),
+        (
+            Self::EncodingError,
+            Option<Self::OutputFullDependency<'vir>>,
+        ),
+    > {
+        deps.emit_output_ref::<Self>(*task_key, ());
+        with_vcx(|vcx| {
+            let result = deps.require_local::<LiftedTyEnc<ParamTy>>(*task_key).unwrap();
+            let result = result.map(vcx, &mut |g| deps.require_ref::<LiftedGenericEnc>(g).unwrap());
+            Ok((result, ()))
+        })
+    }
+}
+
+impl TaskEncoder for LiftedTyEnc<ParamTy> {
+    task_encoder::encoder_cache!(LiftedTyEnc<ParamTy>);
 
     type TaskDescription<'tcx> = ty::Ty<'tcx>;
 

@@ -1,6 +1,8 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, UnaryArity, UnknownArity};
 
+use prusti_rustc_interface::middle::ty::ParamTy;
+
 use crate::encoders::{
     domain::DomainEnc,
     lifted::{ty::LiftedTyEnc, ty_constructor::TyConstructorEnc},
@@ -8,7 +10,10 @@ use crate::encoders::{
     GenericEnc,
 };
 
-use super::{generic::LiftedGeneric, ty::LiftedTy};
+use super::{
+    generic::{LiftedGeneric, LiftedGenericEnc},
+    ty::LiftedTy,
+};
 
 pub type MakeGenericCastFunction<'vir> = FunctionIdent<'vir, UnaryArity<'vir>>;
 
@@ -117,7 +122,7 @@ impl TaskEncoder for CastFunctionsEnc {
         vir::with_vcx(|vcx| {
             let domain_ref = deps.require_ref::<DomainEnc>(*ty).unwrap();
             let generic_ref = deps.require_ref::<GenericEnc>(()).unwrap();
-            let lifted_ty = deps.require_local::<LiftedTyEnc>(ty.ty()).unwrap();
+            let lifted_ty = deps.require_local::<LiftedTyEnc<ParamTy>>(ty.ty()).unwrap();
             let self_ty = domain_ref.domain.apply(vcx, []);
             let base_name = &domain_ref.base_name;
             let ty_constructor = deps
@@ -132,13 +137,10 @@ impl TaskEncoder for CastFunctionsEnc {
                 generic_ref.param_snapshot,
             );
 
-            let make_concrete_ty_params = lifted_ty
-                .instantiate_with_lifted_generics(vcx, deps)
-                .expect_instantiated()
-                .1
-                .iter()
-                .map(|t| t.expect_generic())
-                .collect::<Vec<_>>();
+            let make_concrete_ty_params = ty.generics().into_iter().map(|g| {
+                deps.require_ref::<LiftedGenericEnc>(*g)
+                    .unwrap()
+            }).collect::<Vec<_>>();
 
             let make_concrete_arg_tys = std::iter::once(generic_ref.param_snapshot)
                 .chain(make_concrete_ty_params.iter().map(|t| t.ty()))

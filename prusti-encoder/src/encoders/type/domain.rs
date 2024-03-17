@@ -160,7 +160,7 @@ impl TaskEncoder for DomainEnc {
                         params
                             .iter()
                             .filter_map(|p| p.as_type())
-                            .map(|ty| deps.require_local::<LiftedTyEnc>(ty).unwrap().expect_generic())
+                            .map(|ty| deps.require_local::<LiftedTyEnc<ParamTy>>(ty).unwrap().expect_generic())
                             .collect();
                     let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
@@ -216,7 +216,7 @@ impl TaskEncoder for DomainEnc {
                 TyKind::Tuple(params) => {
                     let generics = params
                         .iter()
-                        .map(|ty| deps.require_local::<LiftedTyEnc>(ty).unwrap().expect_generic())
+                        .map(|ty| deps.require_local::<LiftedTyEnc<ParamTy>>(ty).unwrap().expect_generic())
                         .collect();
                     let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
@@ -231,7 +231,7 @@ impl TaskEncoder for DomainEnc {
                     Ok((enc.finalize(task_key), specifics))
                 }
                 &TyKind::Ref(_, inner, _) => {
-                    let generics = vec![deps.require_local::<LiftedTyEnc>(inner).unwrap().expect_generic()];
+                    let generics = vec![deps.require_local::<LiftedTyEnc<ParamTy>>(inner).unwrap().expect_generic()];
                     let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                     let field_tys = vec![FieldTy::from_ty(vcx, enc.deps, inner)];
@@ -787,7 +787,7 @@ impl <'vir> FieldTy<'vir> {
             deps.require_ref::<DomainEnc>(
                 extract_type_params(vcx.tcx, ty).0
             ).unwrap().typeof_function;
-        let lifted_ty = deps.require_local::<LiftedTyEnc>(ty)
+        let lifted_ty = deps.require_local::<LiftedTyEnc<ParamTy>>(ty)
             .unwrap();
         FieldTy {ty: vir_ty, rust_ty_data: Some(LiftedRustTyData {lifted_ty, typeof_function})}
     }

@@ -1,7 +1,10 @@
-use prusti_rustc_interface::middle::ty::GenericArgsRef;
+use prusti_rustc_interface::middle::ty::{GenericArgsRef, ParamTy};
 use task_encoder::TaskEncoder;
 
-use super::{generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}};
+use super::{
+    generic::LiftedGeneric,
+    ty::{LiftedTy, LiftedTyEnc},
+};
 
 /// Encodes the generic arguments to a function application.
 pub struct LiftedFuncAppGenericsEnc;
@@ -38,9 +41,8 @@ impl TaskEncoder for LiftedFuncAppGenericsEnc {
                 .filter_map(|arg| {
                     let ty = arg.as_type()?;
                     Some(
-                        deps.require_local::<LiftedTyEnc>(ty)
-                            .unwrap()
-                            .instantiate_with_lifted_generics(vcx, deps),
+                        deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(ty)
+                            .unwrap(),
                     )
                 })
                 .collect::<Vec<_>>();

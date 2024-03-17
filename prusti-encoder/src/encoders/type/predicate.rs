@@ -1,6 +1,6 @@
 use prusti_rustc_interface::{
     abi,
-    middle::ty::{self, TyKind},
+    middle::ty::{self, TyKind, ParamTy},
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
@@ -360,7 +360,7 @@ impl TaskEncoder for PredicateEnc {
 
                 let lifted_ty =
                     vir::with_vcx(|vcx|
-                        deps.require_local::<LiftedTyEnc>(inner).unwrap().instantiate_with_lifted_generics(vcx, deps)
+                        deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(inner).unwrap()
                     );
                 let inner = deps
                     .require_ref::<RustTyPredicatesEnc>(inner)

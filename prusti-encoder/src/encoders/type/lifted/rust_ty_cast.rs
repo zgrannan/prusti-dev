@@ -1,4 +1,5 @@
 use prusti_rustc_interface::middle::ty;
+use rustc_middle::ty::ParamTy;
 use task_encoder::TaskEncoder;
 use vir::with_vcx;
 
@@ -82,9 +83,8 @@ impl TaskEncoder for RustTyGenericCastEnc {
             let ty_args = args
                 .iter()
                 .map(|a| {
-                    deps.require_local::<LiftedTyEnc>(*a)
+                    deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*a)
                         .unwrap()
-                        .instantiate_with_lifted_generics(vcx, deps)
                 })
                 .collect::<Vec<_>>();
             Ok((

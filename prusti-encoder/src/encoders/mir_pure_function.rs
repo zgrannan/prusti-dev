@@ -4,7 +4,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefGenericsEnc, ty::{LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefGenericsEnc, generic::LiftedGeneric, ty::{LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -119,7 +119,7 @@ impl TaskEncoder for MirFunctionEnc {
             let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
                 let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
                 let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
-                let lifted_ty = deps.require_local::<LiftedTyEnc>(*ty).unwrap().instantiate_with_lifted_generics(vcx, deps);
+                let lifted_ty = deps.require_local::<LiftedTyEnc<LiftedGeneric<'_>>>(*ty).unwrap();
                 match lifted_ty  {
                     LiftedTy::Generic(generic) => {
                         Some(
