@@ -128,15 +128,13 @@ pub struct EncodeGenericsAsParamTy;
 /// Encodes the Viper representation of a Rust type ([`LiftedTy`]). The type
 /// parameter `T` determines how Rust generic types are encoded; different
 /// encoder implementations are used for different types of generic types. The
-/// type parameter enables different implementations to also differin their
+/// type parameter enables different implementations to also differ in their
 /// result types.
 pub struct LiftedTyEnc<T>(PhantomData<T>);
 
 /// This encoder represents Rust generics as [`LiftedGeneric`] values. This is
 /// suitable for cases where the generic is represented in Viper as an argument
-/// of type `Type` (the usual case). The 'static type parameter is only
-/// necessary to define the encoder; the the result of this encoder uses the
-/// appropriate 'vir lifetime.
+/// of type `Type` (the usual case).
 impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsLifted> {
     task_encoder::encoder_cache!(LiftedTyEnc<EncodeGenericsAsLifted>);
 
@@ -178,6 +176,8 @@ impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsLifted> {
     }
 }
 
+/// Generics are represented using  Rust [`ParamTy`] values. This allows for
+/// deferring the encoding of the generic type to a later point.
 impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsParamTy> {
     task_encoder::encoder_cache!(LiftedTyEnc<EncodeGenericsAsParamTy>);
 
