@@ -53,7 +53,7 @@ impl<'vir> AggregateSnapArgsCastEncOutput<'vir> {
     pub fn apply_casts<Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'_>,
-        exprs: Vec<vir::ExprGen<'vir, Curr, Next>>,
+        exprs: impl Iterator<Item = vir::ExprGen<'vir, Curr, Next>>,
     ) -> Vec<vir::ExprGen<'vir, Curr, Next>> {
         self.0
             .iter()

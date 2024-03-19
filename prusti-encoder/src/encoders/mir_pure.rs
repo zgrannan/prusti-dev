@@ -632,11 +632,11 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                             aggregate_type: kind.into()
                         }
                     ).unwrap();
-                    let cons_args: Vec<_> = fields
+                    let cons_args = fields
                         .iter()
                         .map(|field| self.encode_operand(curr_ver, field))
-                        .collect();
-                    let casted_args = ty_caster.apply_casts(self.vcx, cons_args);
+                        .collect::<Vec<_>>();
+                    let casted_args = ty_caster.apply_casts(self.vcx, cons_args.into_iter());
                     sl.snap_data.field_snaps_to_snap.apply(self.vcx, self.vcx.alloc_slice(&casted_args))
                 }
                 _ => todo!("Unsupported Rvalue::AggregateKind: {kind:?}"),

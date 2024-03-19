@@ -33,6 +33,8 @@ pub struct MirBuiltinEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
+use crate::encoders::lifted::aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask, AggregateType};
+
 use super::rust_ty_snapshots::RustTySnapshotsEnc;
 
 impl TaskEncoder for MirBuiltinEnc {
@@ -343,8 +345,12 @@ impl MirBuiltinEnc {
         let overflowed = vcx.mk_bin_op_expr(vir::BinOpKind::CmpNe, wrapped_val, val);
         let overflowed_snap = bool_cons.apply(vcx, [overflowed]);
         // `tuple(prim_to_snap(wrapped_val), wrapped_val != val)`
+        let ty_caster = deps.require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
+            tys: vec![rvalue_pure_ty, bool_ty],
+            aggregate_type: AggregateType::Tuple,
+        }).unwrap();
         let tuple = e_res_ty.specifics.expect_structlike().field_snaps_to_snap.apply(vcx,
-            &[wrapped_val_snap, overflowed_snap]
+            &ty_caster.apply_casts(vcx, [wrapped_val_snap, overflowed_snap].into_iter())
         );
         // `let wrapped_val == (val ..) in $tuple`
         let inner_let = vcx.mk_let_expr(wrapped_val_str, wrapped_val_exp, tuple);

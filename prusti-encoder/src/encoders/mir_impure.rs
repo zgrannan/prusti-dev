@@ -712,7 +712,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                             }
                         ).unwrap();
                         let field_snaps = fields.iter().map(|field| self.encode_operand_snap(field)).collect::<Vec<_>>();
-                        let casted_args = ty_caster.apply_casts(self.vcx, field_snaps);
+                        let casted_args = ty_caster.apply_casts(self.vcx, field_snaps.into_iter());
                         sl.snap_data.field_snaps_to_snap.apply(self.vcx, self.vcx.alloc_slice(&casted_args))
                     }
                     mir::Rvalue::Discriminant(place) => {
