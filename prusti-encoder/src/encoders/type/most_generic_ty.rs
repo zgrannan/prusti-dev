@@ -8,7 +8,7 @@ use vir::{DomainParamData, NullaryArityAny};
 /// version of `Vec<u32>` is `Vec<T>`, the most generic version of
 /// `Option<Vec<U>>` is `Option<T>`, etc.
 ///
-/// To construct an instance, use `extract_type_params`.
+/// To construct an instance, use [`extract_type_params`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
 
@@ -141,9 +141,9 @@ pub fn extract_type_params<'tcx>(
             let ty = tcx.mk_ty_from_kind(TyKind::Slice(ty));
             (MostGenericTy(ty), vec![orig])
         }
-        TyKind::Ref(r, orig, m) => {
+        TyKind::Ref(_, orig, m) => {
             let ty = to_placeholder(tcx, None);
-            let ty = tcx.mk_ty_from_kind(TyKind::Ref(r, ty, m));
+            let ty = tcx.mk_ty_from_kind(TyKind::Ref(tcx.lifetimes.re_erased, ty, m));
             (MostGenericTy(ty), vec![orig])
         }
         TyKind::Param(_) => (MostGenericTy(to_placeholder(tcx, None)), Vec::new()),
