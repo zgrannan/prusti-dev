@@ -7,7 +7,6 @@ mod mir_pure_function;
 mod pure;
 mod pure_func_app;
 mod local_def;
-mod util;
 mod r#type;
 mod r#const;
 

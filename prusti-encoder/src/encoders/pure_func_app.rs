@@ -7,12 +7,17 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use super::{lifted::{cast::{CastArgs, PureGenericCastEnc}, func_app_ty_params::LiftedFuncAppTyParamsEnc}, util::get_func_sig, MirFunctionEnc};
+use super::{
+    lifted::{
+        cast::{CastArgs, PureGenericCastEnc},
+        func_app_ty_params::LiftedFuncAppTyParamsEnc,
+    },
+    MirFunctionEnc,
+};
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.
 pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
-
     /// Extra arguments required for the encoder to encode an argument to the
     /// function (in mir this is an `Operand`)
     type EncodeOperandArgs;
@@ -64,7 +69,16 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
         let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
-        let (fn_arg_tys, _) = get_func_sig(self.vcx(), def_id);
+        let fn_arg_tys = self
+            .vcx()
+            .tcx
+            .fn_sig(def_id)
+            .instantiate_identity()
+            .inputs()
+            .iter()
+            .map(|i| i.skip_binder())
+            .copied()
+            .collect::<Vec<_>>();
         let encoded_ty_args = self
             .deps()
             .require_local::<LiftedFuncAppTyParamsEnc>(arg_tys)
@@ -109,7 +123,12 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
         let vcx = self.vcx();
         let (def_id, _) = self.get_def_id_and_arg_tys(func);
-        let (_, fn_result_ty) = get_func_sig(vcx, def_id);
+        let fn_result_ty = vcx
+            .tcx
+            .fn_sig(def_id)
+            .instantiate_identity()
+            .output()
+            .skip_binder();
         let pure_func = self
             .deps()
             .require_ref::<MirFunctionEnc>((def_id, caller_def_id))

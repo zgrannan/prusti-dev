@@ -4,7 +4,14 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
 
 use crate::encoders::{
-    domain::DomainEnc, lifted::{func_def_ty_params::LiftedFuncDefTyParamsEnc, ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}}, mir_pure::PureKind, most_generic_ty::extract_type_params, util::get_func_sig, GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    domain::DomainEnc,
+    lifted::{
+        func_def_ty_params::LiftedFuncDefTyParamsEnc,
+        ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}
+    },
+    mir_pure::PureKind,
+    most_generic_ty::extract_type_params,
+    GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -114,7 +121,13 @@ impl TaskEncoder for MirFunctionEnc {
                 Some(expr)
             };
 
-            let (input_tys, _) = get_func_sig(vcx, def_id);
+            let input_tys = vcx.tcx.fn_sig(def_id)
+                .instantiate_identity()
+                .inputs()
+                .iter()
+                .map(|i| i.skip_binder())
+                .copied()
+                .collect::<Vec<_>>();
             let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
             let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
                 let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
