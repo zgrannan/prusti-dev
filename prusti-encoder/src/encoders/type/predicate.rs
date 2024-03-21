@@ -11,7 +11,7 @@ use vir::{BinaryArity, UnaryArity, NullaryArity, UnknownArity, FunctionIdent, Me
 
 /// Takes a Rust `Ty` and returns various Viper predicates and functions for
 /// working with the type.
-pub(super) struct PredicateEnc;
+pub struct PredicateEnc;
 
 #[derive(Clone, Debug)]
 pub enum PredicateEncError {
@@ -74,7 +74,8 @@ impl<'vir> RegionReferences<'vir> {
         let in_expr = vcx.mk_bin_op_expr(vir::BinOpKind::In, r_ex, set);
         let region_permission = self.region_permission.apply(vcx, [r_ex, perm]);
         let body = vcx.mk_bin_op_expr(vir::BinOpKind::If, in_expr, region_permission);
-        vcx.mk_forall_expr(vcx.alloc_slice(&[r]), vcx.alloc_slice(&[vcx.alloc_slice(&[in_expr])]), body)
+        // vcx.mk_forall_expr(vcx.alloc_slice(&[r]), vcx.alloc_slice(&[vcx.alloc_slice(&[in_expr])]), body)
+        todo!()
     }
 }
 
@@ -171,7 +172,7 @@ pub struct PredicateEncOutput<'vir> {
     pub ref_to_field_refs: Vec<vir::Function<'vir>>,
     pub ref_to_refs: Vec<vir::Function<'vir>>,
     pub method_assign: vir::Method<'vir>,
-    pub perms_macros: Vec<vir::Macro<'vir>>,
+    // pub perms_macros: Vec<vir::Macro<'vir>>,
 }
 
 use super::{snapshot::SnapshotEnc, domain::{DomainDataPrim, DomainDataStruct, DomainDataEnum, DiscrBounds, DomainDataRef}};
@@ -367,7 +368,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             snap_body: None, shallow_snap_body: None, fields: Vec::new(), predicates: Vec::new(), ref_to_field_refs: Vec::new(), ref_to_refs_body: FxHashMap::default(), region_permission: FxHashMap::default() }
     }
     pub fn tcx(&self) -> ty::TyCtxt<'tcx> {
-        self.vcx.tcx
+        self.vcx.tcx()
     }
 
     // Ref creation
@@ -646,10 +647,10 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             )
         }).collect();
 
-        let perms_macros = self.ref_to_region_refs.iter().map(|(r, f)| {
-            let args = self.vcx.alloc_array(&[self.vcx.mk_local("self", &vir::TypeData::Ref), self.vcx.mk_local("cap", &vir::TypeData::Perm)]);
-            self.vcx.mk_macro(f.region_permission.name(), args, self.region_permission[&r])
-        }).collect();
+        // let perms_macros = self.ref_to_region_refs.iter().map(|(r, f)| {
+        //     let args = self.vcx.alloc_array(&[self.vcx.mk_local("self", &vir::TypeData::Ref), self.vcx.mk_local("cap", &vir::TypeData::Perm)]);
+        //     self.vcx.mk_macro(f.region_permission.name(), args, self.region_permission[&r])
+        // }).collect();
         PredicateEncOutput {
             fields: self.fields,
             predicates: self.predicates,
@@ -659,7 +660,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             ref_to_field_refs: self.ref_to_field_refs,
             method_assign,
             ref_to_refs,
-            perms_macros,
+            // perms_macros
         }
     }
 }

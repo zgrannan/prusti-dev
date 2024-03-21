@@ -39,7 +39,7 @@ pub struct SymPureEncTask<'tcx> {
     pub parent_def_id: DefId,             // ID of the function
     pub param_env: ty::ParamEnv<'tcx>,    // param environment at the usage site
     pub substs: ty::GenericArgsRef<'tcx>, // type substitutions at the usage site
-    pub caller_def_id: Option<DefId>,             // Caller/Use DefID
+    pub caller_def_id: Option<DefId>,     // Caller/Use DefID
 }
 
 impl SymPureEnc {
@@ -51,29 +51,25 @@ impl SymPureEnc {
         vir::with_vcx(move |vcx| {
             let body = match kind {
                 PureKind::Closure => {
-                    vcx.body
-                        .borrow_mut()
+                    vcx.body_mut()
                         .get_closure_body(def_id, substs, caller_def_id.unwrap())
                 }
                 PureKind::Spec => {
-                    vcx.body
-                        .borrow_mut()
+                    vcx.body_mut()
                         .get_spec_body(def_id, substs, caller_def_id.unwrap())
                 }
-                PureKind::Pure => {
-                    vcx.body
-                        .borrow_mut()
-                        .get_pure_fn_body(def_id, substs, caller_def_id)
-                }
+                PureKind::Pure => vcx
+                    .body_mut()
+                    .get_pure_fn_body(def_id, substs, caller_def_id),
                 PureKind::Constant(promoted) => todo!(),
             };
             let body = &body.body();
-            let mut fpcs_analysis = mir_state_analysis::run_free_pcs(body, vcx.tcx);
+            let mut fpcs_analysis = mir_state_analysis::run_free_pcs(body, vcx.tcx());
             fpcs_analysis.analysis_for_bb(mir::START_BLOCK);
             let symbolic_execution = mir_state_analysis::run_symbolic_execution(
                 body,
-                vcx.tcx,
-                mir_state_analysis::run_free_pcs(body, vcx.tcx),
+                vcx.tcx(),
+                mir_state_analysis::run_free_pcs(body, vcx.tcx()),
             );
             symbolic_execution.paths.into_iter().next().unwrap().2 // TODO
         })

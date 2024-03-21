@@ -3,7 +3,7 @@ use prusti_rustc_interface::{middle::{mir, ty}, span::def_id::DefId};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
-use crate::encoders::{MirPureEnc, mir_pure::PureKind, CapabilityEnc};
+use crate::encoders::{mir_pure::PureKind, predicate::PredicateEnc, CapabilityEnc, MirPureEnc};
 pub struct MirSpecEnc;
 
 #[derive(Clone)]
@@ -79,8 +79,8 @@ impl TaskEncoder for MirSpecEnc {
                 all_args
             };
 
-            let to_bool = deps.require_ref::<CapabilityEnc>(
-                vcx.tcx.types.bool,
+            let to_bool = deps.require_ref::<PredicateEnc>(
+                vcx.tcx().types.bool,
             ).unwrap().expect_prim().snap_to_prim;
 
             let pres = specs.pres.iter().map(|spec_def_id| {
@@ -89,7 +89,7 @@ impl TaskEncoder for MirSpecEnc {
                         encoding_depth: 0,
                         kind: PureKind::Spec,
                         parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx.param_env(spec_def_id),
+                        param_env: vcx.tcx().param_env(spec_def_id),
                         substs,
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: def_id,
@@ -115,7 +115,7 @@ impl TaskEncoder for MirSpecEnc {
                         encoding_depth: 0,
                         kind: PureKind::Spec,
                         parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx.param_env(spec_def_id),
+                        param_env: vcx.tcx().param_env(spec_def_id),
                         substs,
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: def_id,

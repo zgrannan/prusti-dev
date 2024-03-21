@@ -78,11 +78,7 @@ impl<'vir, Curr, Next> Debug for BinOpGenData<'vir, Curr, Next> {
 
 impl Debug for CfgBlockLabelData {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::Start => write!(f, "start"),
-            Self::End => write!(f, "end"),
-            Self::BasicBlock(idx) => write!(f, "bb_{}", idx),
-        }
+        write!(f, "{}", self.name())
     }
 }
 
@@ -151,7 +147,7 @@ impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
             Self::Forall(e) => e.fmt(f),
             Self::FuncApp(e) => e.fmt(f),
             Self::Let(e) => e.fmt(f),
-            Self::Lazy(desc, _) => write!(f, "%%/*{desc}*/"),
+            Self::Lazy(e) => write!(f, "%%/*{}*/", e.name),
             Self::Local(e) => e.fmt(f),
             Self::Old(e) => write!(f, "old({:?})", e),
             Self::PredicateApp(e) => e.fmt(f),
@@ -175,9 +171,7 @@ impl<'vir, Curr, Next> Debug for ForallGenData<'vir, Curr, Next> {
         fmt_comma_sep(f, &self.qvars)?;
         write!(f, " ::")?;
         for trigger in self.triggers {
-            write!(f, " {{")?;
-            fmt_comma_sep(f, trigger)?;
-            write!(f, "}}")?;
+            write!(f, " {:?}", trigger)?;
         }
         write!(f, " {:?}", self.body)
     }
@@ -234,13 +228,13 @@ impl<'vir> Debug for LocalDeclData<'vir> {
     }
 }
 
-impl<'vir, Curr, Next> Debug for MacroGenData<'vir, Curr, Next> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        writeln!(f, "define {}(", self.name)?;
-        fmt_comma_sep_lines(f, &self.args)?;
-        writeln!(f, ") {:?}", self.expr)
-    }
-}
+// impl<'vir, Curr, Next> Debug for MacroGenData<'vir, Curr, Next> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+//         writeln!(f, "define {}(", self.name)?;
+//         fmt_comma_sep_lines(f, &self.args)?;
+//         writeln!(f, ") {:?}", self.expr)
+//     }
+// }
 
 impl<'vir, Curr, Next> Debug for MethodGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
@@ -255,9 +249,9 @@ impl<'vir, Curr, Next> Debug for MethodGenData<'vir, Curr, Next> {
         }
         self.pres.iter().map(|el| writeln!(f, "  requires {:?}", el)).collect::<FmtResult>()?;
         self.posts.iter().map(|el| writeln!(f, "  ensures {:?}", el)).collect::<FmtResult>()?;
-        if let Some(blocks) = self.blocks.as_ref() {
+        if let Some(body) = self.body.as_ref() {
             writeln!(f, "{{")?;
-            for block in blocks.iter() {
+            for block in body.blocks.iter() {
                 writeln!(f, "label {:?}", block.label)?;
                 for stmt in block.stmts {
                     writeln!(f, "  {:?}", stmt)?;
@@ -326,7 +320,17 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
             }
             Self::Comment(info) => write!(f, "// {}", info),
             Self::Dummy(info) => write!(f, "// {}", info),
-            StmtGenData::If(data) => write!(f, "if ({:?}) {{\n  {:?}\n}}", data.cond, data.then),
+            Self::If(data) => {
+                write!(f, "if ({:?}) {{\n", data.cond)?;
+                for stmt in data.then_statements {
+                    stmt.fmt(f)?;
+                }
+                write!(f, "}} else {{\n")?;
+                for stmt in data.else_statements {
+                    stmt.fmt(f)?;
+                }
+                write!(f, "}}")
+            }
         }
     }
 }
@@ -338,14 +342,17 @@ impl<'vir, Curr, Next> Debug for TerminatorStmtGenData<'vir, Curr, Next> {
             Self::Goto(target) => write!(f, "goto {:?}", target),
             Self::GotoIf(data) => {
                 if data.targets.is_empty() {
+                    for extra in data.otherwise_statements {
+                        write!(f, "{extra:?}")?;
+                    }
                     write!(f, "goto {:?}", data.otherwise)
                 } else {
                     for target in data.targets {
-                        write!(f, "if ({:?} == {:?}) {{", data.value, target.0)?;
-                        for extra in target.2 {
+                        write!(f, "if ({:?} == {:?}) {{", data.value, target.value)?;
+                        for extra in target.statements {
                             write!(f, "{extra:?}")?;
                         }
-                        write!(f, " goto {:?} }}\n  else", target.1)?;
+                        write!(f, " goto {:?} }}\n  else", target.label)?;
                     }
                     write!(f, " {{ ")?;
                     for extra in data.otherwise_statements {
@@ -369,6 +376,14 @@ impl<'vir, Curr, Next> Debug for TernaryGenData<'vir, Curr, Next> {
         let str_then = indent(format!("{:?}", self.then));
         let str_else = indent(format!("{:?}", self.else_));
         write!(f, "{:?}\n? {str_then}\n: {str_else}", self.cond)
+    }
+}
+
+impl<'vir, Curr, Next> Debug for TriggerGenData<'vir, Curr, Next> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{{")?;
+        fmt_comma_sep(f, self.exprs)?;
+        write!(f, "}}")
     }
 }
 

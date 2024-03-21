@@ -38,14 +38,14 @@ impl SymSpecEnc {
 
         vir::with_vcx(|vcx| {
             let panic_lang_items = [
-                vcx.tcx.lang_items().panic_fn().unwrap(),
-                vcx.tcx.lang_items().begin_panic_fn().unwrap(),
+                vcx.tcx().lang_items().panic_fn().unwrap(),
+                vcx.tcx().lang_items().begin_panic_fn().unwrap(),
             ];
             if panic_lang_items.contains(&def_id) {
                 let false_constant = mir::Constant {
                     span: DUMMY_SP,
                     user_ty: None,
-                    literal: mir::ConstantKind::from_bool(vcx.tcx, false),
+                    literal: mir::ConstantKind::from_bool(vcx.tcx(), false),
                 };
                 return SymSpecEncOutput {
                     pres: vec![SymValue::Constant(false_constant.into())],
@@ -63,7 +63,7 @@ impl SymSpecEnc {
                     SymPureEnc::encode(crate::encoders::SymPureEncTask {
                         kind: PureKind::Spec,
                         parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx.param_env(spec_def_id),
+                        param_env: vcx.tcx().param_env(spec_def_id),
                         substs,
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: Some(def_id),
@@ -78,7 +78,7 @@ impl SymSpecEnc {
                     SymPureEnc::encode(crate::encoders::SymPureEncTask {
                         kind: PureKind::Spec,
                         parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx.param_env(spec_def_id),
+                        param_env: vcx.tcx().param_env(spec_def_id),
                         substs,
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: Some(def_id),

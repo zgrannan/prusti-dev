@@ -71,9 +71,10 @@ impl TaskEncoder for MirFunctionEnc {
 
             let extra: String = substs.iter().map(|s| format!("_{s}")).collect();
             let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
-            let function_name = vir::vir_format!(vcx, "f_{}{extra}_CALLER_{krate}_{index}", vcx.tcx.item_name(def_id));
-            let args: Vec<_> = local_defs.inputs.iter()
-                .map(|input| input.ty.snapshot)
+            let function_name = vir::vir_format!(vcx, "f_{}{extra}_CALLER_{krate}_{index}", vcx.tcx().item_name(def_id));
+            let args: Vec<_> = (1..=local_defs.inputs.len())
+                .map(mir::Local::from)
+                .map(|def_idx| local_defs.locals.unwrap()[def_idx].ty.snapshot)
                 .collect();
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let function_ref = FunctionIdent::new(function_name, args, local_defs.output.ty.snapshot);
@@ -97,7 +98,7 @@ impl TaskEncoder for MirFunctionEnc {
                         encoding_depth: 0,
                         kind: PureKind::Pure,
                         parent_def_id: def_id,
-                        param_env: vcx.tcx.param_env(def_id),
+                        param_env: vcx.tcx().param_env(def_id),
                         substs,
                         caller_def_id,
                     })

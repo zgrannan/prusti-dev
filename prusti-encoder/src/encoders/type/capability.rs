@@ -36,7 +36,7 @@ impl TaskEncoder for CapabilityEnc {
     )> {
         vir::with_vcx(|vcx| {
             let mut folder = RegionRenumberVisitor {
-                tcx: vcx.tcx,
+                tcx: vcx.tcx(),
                 map: FxHashMap::default(),
             };
             let ty = task_key.fold_with(&mut folder);
