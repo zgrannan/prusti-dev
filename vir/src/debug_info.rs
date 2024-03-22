@@ -1,7 +1,4 @@
-use std::marker::PhantomData;
-
 use cfg_if::cfg_if;
-
 use crate::VirCtxt;
 
 // Imports
@@ -11,6 +8,8 @@ cfg_if! {
             backtrace::Backtrace,
             sync::Mutex,
         };
+    } else {
+        use std::marker::PhantomData;
     }
 }
 

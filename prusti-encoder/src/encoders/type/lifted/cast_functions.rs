@@ -166,7 +166,7 @@ impl TaskEncoder for CastFunctionsEnc {
                 .map(|t| t.expr(vcx))
                 .collect::<Vec<_>>();
 
-            let make_generic_result = vcx.mk_local_ex("result", generic_ref.param_snapshot);
+            let make_generic_result = vcx.mk_result(generic_ref.param_snapshot);
 
             // Type parameters obtained from the snapshot-encoded value of the type,
             let ty_params_from_snap = ty.generics()
@@ -215,7 +215,7 @@ impl TaskEncoder for CastFunctionsEnc {
             );
 
             let make_concrete_post = vcx.mk_eq_expr(
-                make_generic_ident.apply(vcx, [vcx.mk_local_ex("result", self_ty)]),
+                make_generic_ident.apply(vcx, [vcx.mk_result(self_ty)]),
                 vcx.mk_local_ex(make_concrete_snap_arg_decl.name, make_concrete_snap_arg_decl.ty),
             );
 

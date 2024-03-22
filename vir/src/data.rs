@@ -4,12 +4,13 @@ use serde::{Serialize, Deserialize};
 
 use prusti_rustc_interface::middle::mir;
 
-use crate::{refs::*, CallableIdent, FunctionIdent, UnknownArity};
+use crate::{debug_info::DebugInfo, refs::*, CallableIdent, FunctionIdent, UnknownArity};
 
 #[derive(Serialize, Deserialize, Hash)]
 pub struct LocalData<'vir> {
     #[serde(with = "crate::serde::serde_str")] pub name: &'vir str, // TODO: identifiers
     #[serde(with = "crate::serde::serde_ref")] pub ty: Type<'vir>,
+    pub debug_info: DebugInfo<'vir>
 }
 
 #[derive(Eq, PartialEq)]

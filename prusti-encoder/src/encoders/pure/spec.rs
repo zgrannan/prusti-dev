@@ -67,8 +67,13 @@ impl TaskEncoder for MirSpecEnc {
             let all_args: Vec<_> = if pure {
                 let result_ty = local_defs.locals[mir::RETURN_PLACE].ty;
                 local_iter
-                    .map(|local| local_defs.locals[local].local_ex)
-                    .chain([vcx.mk_local_ex(vir::vir_format!(vcx, "result"), result_ty.snapshot)])
+                    .map(|local| {
+                        vcx.mk_local_ex(
+                            local_defs.locals[local].local.name,
+                            local_defs.locals[local].ty.snapshot,
+                        )
+                    })
+                    .chain([vcx.mk_result(result_ty.snapshot)])
                     .collect()
             } else {
                 local_iter
@@ -101,7 +106,7 @@ impl TaskEncoder for MirSpecEnc {
                                 parent_def_id: *spec_def_id,
                                 param_env: vcx.tcx().param_env(spec_def_id),
                                 // TODO: should this be `def_id` or `caller_def_id`
-                                caller_def_id: def_id,
+                                caller_def_id: Some(def_id),
                             },
                         )
                         .unwrap()
@@ -133,7 +138,7 @@ impl TaskEncoder for MirSpecEnc {
                                 parent_def_id: *spec_def_id,
                                 param_env: vcx.tcx().param_env(spec_def_id),
                                 // TODO: should this be `def_id` or `caller_def_id`
-                                caller_def_id: def_id,
+                                caller_def_id: Some(def_id),
                             },
                         )
                         .unwrap()

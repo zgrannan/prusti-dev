@@ -64,7 +64,9 @@ impl<'vir> RustTyPredicatesEncOutputRef<'vir> {
         vcx: &'vir vir::VirCtxt<'tcx>,
         args: &[vir::Expr<'vir>],
     ) -> vir::Expr<'vir> {
-        self.generic_predicate.ref_to_snap.apply(vcx, args)
+        let expr = self.generic_predicate.ref_to_snap.apply(vcx, args);
+        assert!(expr.ty() == self.snapshot());
+        expr
     }
 
     /// Arguments to `ref_to_pred` and `ref_to_snap`.

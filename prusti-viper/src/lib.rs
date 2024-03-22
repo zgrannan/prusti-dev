@@ -1,5 +1,5 @@
 use rustc_hash::FxHashMap;
-use viper::{self, AstFactory};
+use viper::{self, AstFactory, Position};
 
 pub fn program_to_viper<'vir, 'v>(program: vir::Program<'vir>, ast: &'vir AstFactory<'v>) -> viper::Program<'vir> {
     let mut domains: FxHashMap<_, _> = Default::default();
@@ -352,10 +352,12 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Let<'vir> {
 impl<'vir, 'v> ToViper<'vir, 'v> for vir::LocalData<'vir> {
     type Output = viper::Expr<'v>;
     fn to_viper(&self, ctx: &ToViperContext<'vir, 'v>) -> Self::Output {
+        let pos_id = format!("{:?}{}", self.ty, self.debug_info);
         ctx.ast.local_var(
             self.name,
             self.ty.to_viper(ctx),
-            // TODO: position
+            // TODO: Use a real position here
+            ctx.ast.identifier_position(0, 0, pos_id)
         )
     }
 }
@@ -491,6 +493,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Stmt<'vir> {
                 ctx.ast.local_var(
                     decl.name,
                     decl.ty.to_viper(ctx),
+                    ctx.ast.no_position(),
                     // TODO: position
                 ),
                 expr.to_viper(ctx),
@@ -587,7 +590,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Type<'vir> {
             vir::TypeData::Perm => ctx.ast.perm_type(),
             //vir::TypeData::Predicate, // The type of a predicate application
             //vir::TypeData::Unsupported(UnsupportedType<'vir>)
-            _ => unimplemented!(),
+            other => unimplemented!("{:?}", other),
         }
     }
 }

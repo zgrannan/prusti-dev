@@ -96,6 +96,7 @@ impl TaskEncoder for GenericEnc {
             unreachable_to_snap,
             param_type_function,
         };
+
         deps.emit_output_ref::<Self>(
             *task_key,
             output_ref
@@ -121,7 +122,7 @@ impl TaskEncoder for GenericEnc {
                 ))]),
                 vcx.alloc_slice(&[vcx.mk_bin_op_expr(
                     vir::BinOpKind::CmpEq,
-                    typ.apply(vcx, [vcx.mk_local_ex("result", &SNAPSHOT_PARAM_DOMAIN)]),
+                    typ.apply(vcx, [vcx.mk_result(&SNAPSHOT_PARAM_DOMAIN)]),
                     t,
                 )]),
                 None,

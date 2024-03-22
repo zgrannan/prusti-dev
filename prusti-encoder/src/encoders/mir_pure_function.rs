@@ -42,11 +42,12 @@ impl TaskEncoder for MirFunctionEnc {
 
     type OutputRef<'vir> = MirFunctionEncOutputRef<'vir>;
     type OutputFullLocal<'vir> = MirFunctionEncOutput<'vir>;
+    type TaskKey<'tcx> = DefId;
 
     type EncodingError = MirFunctionEncError;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        task.0
     }
 
     fn do_encode_full<'tcx: 'vir, 'vir>(
@@ -62,7 +63,7 @@ impl TaskEncoder for MirFunctionEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        let (def_id, caller_def_id) = *task_key;
+        let def_id = *task_key;
         let trusted = crate::encoders::with_proc_spec(def_id, |def_spec|
             def_spec.trusted.extract_inherit().unwrap_or_default()
         ).unwrap_or_default();
@@ -70,13 +71,12 @@ impl TaskEncoder for MirFunctionEnc {
         vir::with_vcx(|vcx| {
             let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let local_defs = deps.require_local::<MirLocalDefEnc>(
-                (def_id, substs, Some(caller_def_id)),
+                (def_id, substs, None),
             ).unwrap();
 
             tracing::debug!("encoding {def_id:?}");
 
-            let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
-            let function_name = vir::vir_format!(vcx, "f_{}_CALLER_{krate}_{index}", vcx.tcx().item_name(def_id));
+            let function_name = vir::vir_format!(vcx, "f_{}_CALLER", vcx.tcx().item_name(def_id));
             let ty_arg_decls = deps.require_local::<LiftedFuncDefTyParamsEnc>(def_id).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
             ident_args.extend((1..=local_defs.arg_count)
@@ -89,7 +89,7 @@ impl TaskEncoder for MirFunctionEnc {
             deps.emit_output_ref::<Self>(*task_key, MirFunctionEncOutputRef { function_ref });
 
             let spec = deps.require_local::<MirSpecEnc>(
-                (def_id, substs, Some(caller_def_id), true)
+                (def_id, substs, None, true)
             ).unwrap();
 
             let mut func_args = ty_arg_decls.iter().map(|arg| arg.decl()).collect::<Vec<_>>();
@@ -109,7 +109,7 @@ impl TaskEncoder for MirFunctionEnc {
                         kind: PureKind::Pure,
                         parent_def_id: def_id,
                         param_env: vcx.tcx().param_env(def_id),
-                        caller_def_id,
+                        caller_def_id: None,
                     })
                     .unwrap()
                     .expr;

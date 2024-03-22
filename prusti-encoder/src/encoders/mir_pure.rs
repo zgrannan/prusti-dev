@@ -52,7 +52,7 @@ pub struct MirPureEncTask<'tcx> {
     pub kind: PureKind,
     pub parent_def_id: DefId, // ID of the function
     pub param_env: ty::ParamEnv<'tcx>, // param environment at the usage site
-    pub caller_def_id: DefId, // Caller/Use DefID
+    pub caller_def_id: Option<DefId>, // ID of the caller function, if any
 }
 
 impl TaskEncoder for MirPureEnc {
@@ -64,7 +64,6 @@ impl TaskEncoder for MirPureEnc {
         usize, // encoding depth
         PureKind, // encoding a pure function?
         DefId, // ID of the function
-        DefId, // Caller/Use DefID
     );
 
     type OutputFullLocal<'vir> = MirPureEncOutput<'vir>;
@@ -77,7 +76,6 @@ impl TaskEncoder for MirPureEnc {
             task.encoding_depth,
             task.kind,
             task.parent_def_id,
-            task.caller_def_id,
         )
     }
 
@@ -93,16 +91,16 @@ impl TaskEncoder for MirPureEnc {
     )> {
         deps.emit_output_ref::<Self>(*task_key, ());
 
-        let (_, kind, def_id, caller_def_id) = *task_key;
+        let (_, kind, def_id) = *task_key;
 
         tracing::debug!("encoding {def_id:?}");
         let expr = vir::with_vcx(move |vcx| {
             let substs = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             //let body = vcx.tcx().mir_promoted(local_def_id).0.borrow();
             let body = match kind {
-                PureKind::Closure => vcx.body_mut().get_closure_body(def_id, substs, caller_def_id),
-                PureKind::Spec => vcx.body_mut().get_spec_body(def_id, substs, caller_def_id),
-                PureKind::Pure => vcx.body_mut().get_pure_fn_body(def_id, substs, caller_def_id),
+                PureKind::Closure => vcx.body_mut().get_closure_body(def_id, substs, None),
+                PureKind::Spec => vcx.body_mut().get_spec_body(def_id, substs, None),
+                PureKind::Pure => vcx.body_mut().get_pure_fn_body(def_id, substs, None),
                 PureKind::Constant(promoted) => vcx.body_mut().get_promoted_constant_body(def_id, promoted)
             };
 
@@ -121,6 +119,8 @@ impl TaskEncoder for MirPureEnc {
                     // check: are we providing the expected number of arguments?
                     assert_eq!(lctx.1.len(), body.arg_count);
 
+                    eprintln!("Reify with {lctx:?}");
+                    eprintln!("Reify with {:?}", lctx.1.iter().map(|c| c.ty()).collect::<Vec<_>>());
                     use vir::Reify;
                     expr_inner.kind.reify(vcx, lctx)
                 }),
@@ -912,7 +912,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         kind: PureKind::Closure,
                         parent_def_id: cl_def_id,
                         param_env: self.vcx.tcx().param_env(cl_def_id),
-                        caller_def_id: self.def_id,
+                        caller_def_id: Some(self.def_id),
                     }
                 ).unwrap().expr
                 // arguments to the closure are

@@ -87,7 +87,7 @@ impl TaskEncoder for ConstEnc {
                     parent_def_id: uneval.def,
                     param_env: vcx.tcx().param_env(uneval.def),
                     kind: PureKind::Constant(uneval.promoted.unwrap()),
-                    caller_def_id: def_id
+                    caller_def_id: Some(def_id)
                 };
                 let expr = deps.require_local::<MirPureEnc>(task).unwrap().expr;
                 use vir::Reify;

@@ -107,7 +107,7 @@ use super::{
 };
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
-    DomainEnc::all_outputs()
+    DomainEnc::all_outputs().into_iter().flatten().collect()
 }
 
 impl TaskEncoder for DomainEnc {
@@ -117,8 +117,10 @@ impl TaskEncoder for DomainEnc {
 
     type OutputRef<'vir> = DomainEncOutputRef<'vir>;
     type OutputFullDependency<'vir> = DomainEncSpecifics<'vir>;
-    type OutputFullLocal<'vir> = vir::Domain<'vir>;
-    //type OutputFullDependency<'vir> = DomainEncOutputDep<'vir>;
+
+    // A domain is not encoded here for Param types, the relevant
+    // domains are encoded in `GenericEnc`.
+    type OutputFullLocal<'vir> = Option<vir::Domain<'vir>>;
 
     type EncodingError = ();
 
@@ -153,7 +155,7 @@ impl TaskEncoder for DomainEnc {
                         task_key.ty(),
                         prim_type
                     );
-                    Ok((enc.finalize(task_key), specifics))
+                    Ok((Some(enc.finalize(task_key)), specifics))
                 }
                 TyKind::Adt(adt, params) => {
                     let generics =
@@ -180,7 +182,7 @@ impl TaskEncoder for DomainEnc {
                                 ]
                             };
                             let specifics = enc.mk_struct_specifics(fields);
-                            Ok((enc.finalize(task_key), specifics))
+                            Ok((Some(enc.finalize(task_key)), specifics))
                         }
                         ty::AdtKind::Enum => {
                             let variants: Vec<_> = adt.discriminants(vcx.tcx()).map(|(v, d)| {
@@ -208,7 +210,7 @@ impl TaskEncoder for DomainEnc {
                                 })
                             };
                             let specifics = enc.mk_enum_specifics(variants);
-                            Ok((enc.finalize(task_key), specifics))
+                            Ok((Some(enc.finalize(task_key)), specifics))
                         }
                         ty::AdtKind::Union => todo!(),
                     }
@@ -222,13 +224,13 @@ impl TaskEncoder for DomainEnc {
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                     let field_tys = params.iter().map(|ty| FieldTy::from_ty(vcx, enc.deps, ty)).collect();
                     let specifics = enc.mk_struct_specifics(field_tys);
-                    Ok((enc.finalize(task_key), specifics))
+                    Ok((Some(enc.finalize(task_key)), specifics))
                 }
                 TyKind::Never => {
                     let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                     let specifics = enc.mk_enum_specifics(None);
-                    Ok((enc.finalize(task_key), specifics))
+                    Ok((Some(enc.finalize(task_key)), specifics))
                 }
                 &TyKind::Ref(_, inner, _) => {
                     let generics = vec![deps.require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(inner).unwrap().expect_generic()];
@@ -236,7 +238,7 @@ impl TaskEncoder for DomainEnc {
                     enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
                     let field_tys = vec![FieldTy::from_ty(vcx, enc.deps, inner)];
                     let specifics = enc.mk_struct_specifics(field_tys);
-                    Ok((enc.finalize(task_key), specifics))
+                    Ok((Some(enc.finalize(task_key)), specifics))
                 }
                 &TyKind::Param(_) => {
                     let out = deps.require_ref::<GenericEnc>(()).unwrap();
@@ -249,12 +251,7 @@ impl TaskEncoder for DomainEnc {
                             typeof_function: out.param_type_function,
                         },
                     );
-                    Ok((
-                        deps.require_local::<GenericEnc>(())
-                            .map(|enc| enc.param_snapshot)
-                            .unwrap(),
-                        DomainEncSpecifics::Param,
-                    ))
+                    Ok((None, DomainEncSpecifics::Param))
                 }
                 kind => todo!("{kind:?}"),
             }
