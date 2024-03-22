@@ -68,7 +68,7 @@ impl TaskEncoder for TyConstructorEnc {
         let mut functions = vec![];
         let mut axioms = vec![];
         vir::with_vcx(|vcx| {
-            let (ty_constructor, _) = extract_type_params(vcx.tcx, task_key.ty());
+            let (ty_constructor, _) = extract_type_params(vcx.tcx(), task_key.ty());
             let args = ty_constructor.generics();
             let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; args.len()]);
             let type_function_ident = FunctionIdent::new(
@@ -118,7 +118,11 @@ impl TaskEncoder for TyConstructorEnc {
             );
 
             let axiom_qvars = vcx.alloc_slice(&ty_arg_decls);
-            let axiom_triggers = vcx.alloc_slice(&[vcx.alloc_slice(&[func_app])]);
+            let axiom_triggers = vcx.alloc_slice(
+                &[vcx.mk_trigger(
+                    &[func_app]
+                )]
+            );
             for (accessor_function, ty_arg) in ty_accessor_functions.iter().zip(ty_arg_exprs.iter()) {
                 functions.push(vcx.mk_domain_function(*accessor_function, false));
                 axioms.push(vcx.mk_domain_axiom(

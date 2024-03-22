@@ -183,7 +183,7 @@ impl TaskEncoder for DomainEnc {
                             Ok((enc.finalize(task_key), specifics))
                         }
                         ty::AdtKind::Enum => {
-                            let variants: Vec<_> = adt.discriminants(vcx.tcx).map(|(v, d)| {
+                            let variants: Vec<_> = adt.discriminants(vcx.tcx()).map(|(v, d)| {
                                 let variant = adt.variant(v);
                                 let field_tys = enc.mk_field_tys(variant, params);
                                 (variant.name, v, field_tys, d)
@@ -195,7 +195,7 @@ impl TaskEncoder for DomainEnc {
                                     .variants()
                                     .iter()
                                     .any(|v| matches!(v.discr, ty::VariantDiscr::Explicit(_)));
-                                let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx);
+                                let discr_ty = adt.repr().discr_type().to_ty(vcx.tcx());
                                 let discr_ty = enc.deps
                                     .require_local::<RustTySnapshotsEnc>(discr_ty)
                                     .unwrap()
@@ -346,7 +346,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         variant
             .fields
             .iter()
-            .map(|f| f.ty(self.vcx.tcx, params))
+            .map(|f| f.ty(self.vcx.tcx(), params))
             .map(|ty| FieldTy::from_ty(self.vcx, self.deps, ty))
             .collect()
     }
@@ -454,7 +454,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             if !field_tys.is_empty() {
                 expr = self.vcx.mk_forall_expr(
                     cons_qvars,
-                    self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[discr])]),
+                    self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[discr])]),
                     expr,
                 );
             }
@@ -495,7 +495,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                             vir::vir_format!(self.vcx, "ax_{base}_read_{idx}_type"),
                             self.vcx.mk_forall_expr(
                                 self.vcx.alloc_slice(self.self_decl),
-                                self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[read.apply(self.vcx, [self.self_ex])])]),
+                                self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[read.apply(self.vcx, [self.self_ex])])]),
                                 self.vcx.mk_eq_expr(
                                     lifted.typeof_function.apply(self.vcx, [read.apply(self.vcx, [self.self_ex])]),
                                     lifted.lifted_ty.map(self.vcx, &mut generic_to_getter).expr(self.vcx)
@@ -513,7 +513,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     vir::vir_format!(self.vcx, "ax_{base}_cons_read_{idx}"),
                     self.vcx.mk_forall_expr(
                         cons_qvars,
-                        self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[cons_call_with_qvars])]),
+                        self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[cons_call_with_qvars])]),
                         self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, cons_read, cons_args[idx])
                     )
                 ));
@@ -551,7 +551,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     vir::vir_format!(self.vcx, "ax_{base}_cons"),
                     self.vcx.mk_forall_expr(
                         self.self_decl,
-                    self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[trigger])]),
+                        self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[trigger])]),
                         self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, cons_call_with_reads, self.self_ex)
                     )
                 ));
@@ -572,7 +572,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                             vir::vir_format!(self.vcx, "ax_{base}_write_{wi}_read_{ri}"),
                             self.vcx.mk_forall_expr(
                                 self.vcx.alloc_slice(&[self.self_decl[0], decl]),
-                                self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[write_read])]),
+                                self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[write_read])]),
                                 self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, write_read, rhs)
                             )
                         )
@@ -611,7 +611,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                 self.vcx.mk_forall_expr(
                     self.self_decl,
                     // TODO: should we use `discr` instead of `discr_prim` here?
-                    self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[discr_prim])]),
+                    self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[discr_prim])]),
                     body
                 )
             ));
@@ -632,12 +632,11 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         lower: vir::Expr<'vir>,
         upper: vir::Expr<'vir>,
     ) -> vir::DomainAxiom<'vir> {
-        let triggers = self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[exp])]);
         let lower = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, lower, exp);
         let upper = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, exp, upper);
         self.vcx.mk_domain_axiom(vir::vir_format!(self.vcx, "{base}_bounds"), self.vcx.mk_forall_expr(
             self.self_decl,
-            triggers,
+            self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[exp])]),
             self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lower, upper)
         ))
     }
@@ -670,7 +669,9 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     vir::vir_format!(self.vcx, "ax_typeof_{}", self.domain.name()),
                     self.vcx.mk_forall_expr(
                         self.self_decl,
-                        self.vcx.alloc_slice(&[self.vcx.alloc_slice(&[typeof_applied_to_self])]),
+                        self.vcx.alloc_slice(
+                            &[self.vcx.mk_trigger(&[typeof_applied_to_self])]
+                        ),
                         self.vcx.mk_eq_expr(
                             typeof_applied_to_self,
                             self.generic_enc.param_type_function.apply(self.vcx, [as_param])
@@ -785,7 +786,7 @@ impl <'vir> FieldTy<'vir> {
             .snapshot;
         let typeof_function =
             deps.require_ref::<DomainEnc>(
-                extract_type_params(vcx.tcx, ty).0
+                extract_type_params(vcx.tcx(), ty).0
             ).unwrap().typeof_function;
         let lifted_ty = deps.require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(ty)
             .unwrap();

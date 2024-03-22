@@ -54,7 +54,7 @@ impl TaskEncoder for RustTySnapshotsEnc {
         ),
     > {
         with_vcx(|vcx| {
-            let (generic_ty, args) = extract_type_params(vcx.tcx, *task_key);
+            let (generic_ty, args) = extract_type_params(vcx.tcx(), *task_key);
             let generic_snapshot = deps.require_ref::<SnapshotEnc>(generic_ty).unwrap();
             deps.emit_output_ref::<RustTySnapshotsEnc>(
                 *task_key,

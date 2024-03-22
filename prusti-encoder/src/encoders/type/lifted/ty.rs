@@ -211,7 +211,7 @@ impl TaskEncoder for LiftedTyEnc<EncodeGenericsAsParamTy> {
             if let TyKind::Param(p) = task_key.kind() {
                 return Ok((LiftedTy::Generic(*p), ()));
             }
-            let (ty_constructor, args) = extract_type_params(vcx.tcx, *task_key);
+            let (ty_constructor, args) = extract_type_params(vcx.tcx(), *task_key);
             let ty_constructor = deps
                 .require_ref::<TyConstructorEnc>(ty_constructor)
                 .unwrap()

@@ -36,7 +36,7 @@ impl TaskEncoder for LiftedFuncDefTyParamsEnc {
     > {
         deps.emit_output_ref::<Self>(*task_key, ());
         vir::with_vcx(|vcx| {
-            let ty_args = GenericArgs::identity_for_item(vcx.tcx, *task_key)
+            let ty_args = GenericArgs::identity_for_item(vcx.tcx(), *task_key)
                 .iter()
                 .filter_map(|arg| {
                     let ty = arg.as_type()?;

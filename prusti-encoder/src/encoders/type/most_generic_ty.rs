@@ -27,7 +27,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Bool => String::from("Bool"),
             TyKind::Int(kind) => format!("Int_{}", kind.name_str()),
             TyKind::Uint(kind) => format!("UInt_{}", kind.name_str()),
-            TyKind::Adt(adt, _) => vcx.tcx.item_name(adt.did()).to_ident_string(),
+            TyKind::Adt(adt, _) => vcx.tcx().item_name(adt.did()).to_ident_string(),
             TyKind::Tuple(params) => format!("{}_Tuple", params.len()),
             TyKind::Never => String::from("Never"),
             TyKind::Ref(_, _, m) => {
@@ -57,10 +57,10 @@ impl<'tcx> MostGenericTy<'tcx> {
     pub fn tuple(arity: usize) -> Self {
         assert!(arity != 1);
         let tuple = vir::with_vcx(|vcx| {
-            let new_tys = vcx.tcx.mk_type_list_from_iter(
-                (0..arity).map(|index| to_placeholder(vcx.tcx, Some(index))),
+            let new_tys = vcx.tcx().mk_type_list_from_iter(
+                (0..arity).map(|index| to_placeholder(vcx.tcx(), Some(index))),
             );
-            vcx.tcx.mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
+            vcx.tcx().mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
         });
         MostGenericTy(tuple)
     }

@@ -109,10 +109,10 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
                         def_id,
                         variant_index,
                     } => {
-                        let adt_def = vcx.tcx.adt_def(def_id);
+                        let adt_def = vcx.tcx().adt_def(def_id);
                         let variant = &adt_def.variant(variant_index);
                         assert!(variant.fields.len() == task_key.tys.len());
-                        let identity_substs = GenericArgs::identity_for_item(vcx.tcx, def_id);
+                        let identity_substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
                         variant
                             .fields
                             .iter()
@@ -120,7 +120,7 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
                             .map(|(v_field, actual_ty)| {
                                 let cast = deps
                                     .require_ref::<PureGenericCastEnc>(CastArgs {
-                                        expected: v_field.ty(vcx.tcx, identity_substs),
+                                        expected: v_field.ty(vcx.tcx(), identity_substs),
                                         actual: *actual_ty,
                                     })
                                     .unwrap();

@@ -83,7 +83,7 @@ impl TaskEncoder for MirSpecEnc {
             };
 
             let to_bool = deps
-                .require_ref::<RustTyPredicatesEnc>(vcx.tcx.types.bool)
+                .require_ref::<RustTyPredicatesEnc>(vcx.tcx().types.bool)
                 .unwrap()
                 .generic_predicate
                 .expect_prim()
@@ -99,7 +99,7 @@ impl TaskEncoder for MirSpecEnc {
                                 encoding_depth: 0,
                                 kind: PureKind::Spec,
                                 parent_def_id: *spec_def_id,
-                                param_env: vcx.tcx.param_env(spec_def_id),
+                                param_env: vcx.tcx().param_env(spec_def_id),
                                 // TODO: should this be `def_id` or `caller_def_id`
                                 caller_def_id: def_id,
                             },
@@ -131,7 +131,7 @@ impl TaskEncoder for MirSpecEnc {
                                 encoding_depth: 0,
                                 kind: PureKind::Spec,
                                 parent_def_id: *spec_def_id,
-                                param_env: vcx.tcx.param_env(spec_def_id),
+                                param_env: vcx.tcx().param_env(spec_def_id),
                                 // TODO: should this be `def_id` or `caller_def_id`
                                 caller_def_id: def_id,
                             },

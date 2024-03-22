@@ -68,7 +68,7 @@ impl TaskEncoder for MirFunctionEnc {
         ).unwrap_or_default();
 
         vir::with_vcx(|vcx| {
-            let substs = GenericArgs::identity_for_item(vcx.tcx, def_id);
+            let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let local_defs = deps.require_local::<MirLocalDefEnc>(
                 (def_id, substs, Some(caller_def_id)),
             ).unwrap();
@@ -76,7 +76,7 @@ impl TaskEncoder for MirFunctionEnc {
             tracing::debug!("encoding {def_id:?}");
 
             let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
-            let function_name = vir::vir_format!(vcx, "f_{}_CALLER_{krate}_{index}", vcx.tcx.item_name(def_id));
+            let function_name = vir::vir_format!(vcx, "f_{}_CALLER_{krate}_{index}", vcx.tcx().item_name(def_id));
             let ty_arg_decls = deps.require_local::<LiftedFuncDefTyParamsEnc>(def_id).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
             ident_args.extend((1..=local_defs.arg_count)
@@ -108,7 +108,7 @@ impl TaskEncoder for MirFunctionEnc {
                         encoding_depth: 0,
                         kind: PureKind::Pure,
                         parent_def_id: def_id,
-                        param_env: vcx.tcx.param_env(def_id),
+                        param_env: vcx.tcx().param_env(def_id),
                         caller_def_id,
                     })
                     .unwrap()
@@ -121,7 +121,7 @@ impl TaskEncoder for MirFunctionEnc {
                 Some(expr)
             };
 
-            let input_tys = vcx.tcx.fn_sig(def_id)
+            let input_tys = vcx.tcx().fn_sig(def_id)
                 .instantiate_identity()
                 .inputs()
                 .iter()
@@ -143,7 +143,7 @@ impl TaskEncoder for MirFunctionEnc {
                         )
                     },
                     LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
-                        let domain_ref = deps.require_ref::<DomainEnc>(extract_type_params(vcx.tcx, *ty).0).unwrap();
+                        let domain_ref = deps.require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), *ty).0).unwrap();
                         Some(
                             vcx.mk_eq_expr(
                                 domain_ref.typeof_function.apply(vcx, [vir_arg]),

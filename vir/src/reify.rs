@@ -47,7 +47,7 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
             ExprKindGenData::Result(t) => vcx.alloc(ExprKindGenData::Result(t)),
             ExprKindGenData::Todo(v) => vcx.alloc(ExprKindGenData::Todo(v)),
 
-            ExprKindGenData::Lazy(_, f) => f(vcx, lctx),
+            ExprKindGenData::Lazy(v) => (v.func)(vcx, lctx),
         }
     }
 }
@@ -113,6 +113,15 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
     for Option<&'vir [CfgBlockGen<'vir, Curr, ExprKindGen<'vir, NextA, NextB>>]>
 {
     type Next = Option<&'vir [CfgBlockGen<'vir, NextA, NextB>]>;
+    fn reify<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, lctx: Curr) -> Self::Next {
+        self.map(|elem| elem.reify(vcx, lctx))
+    }
+}
+
+impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
+    for Option<MethodBodyGen<'vir, Curr, ExprKindGen<'vir, NextA, NextB>>>
+{
+    type Next = Option<MethodBodyGen<'vir, NextA, NextB>>;
     fn reify<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, lctx: Curr) -> Self::Next {
         self.map(|elem| elem.reify(vcx, lctx))
     }

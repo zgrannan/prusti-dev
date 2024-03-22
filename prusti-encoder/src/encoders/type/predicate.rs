@@ -461,7 +461,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         }
     }
     pub fn tcx(&self) -> ty::TyCtxt<'tcx> {
-        self.vcx.tcx
+        self.vcx.tcx()
     }
 
     // Ref creation

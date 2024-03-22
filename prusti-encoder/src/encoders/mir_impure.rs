@@ -98,11 +98,11 @@ impl TaskEncoder for MirImpureEnc {
             let method_name = vir::vir_format!(
                 vcx,
                 "m_{}{extra}_CALLER_{caller}",
-                vcx.tcx.item_name(def_id)
+                vcx.tcx().item_name(def_id)
             );
             let mut args = vec![&vir::TypeData::Ref; arg_count];
             let param_ty_decls = substs
-                .into_type_list(vcx.tcx)
+                .into_type_list(vcx.tcx())
                 .iter()
                 .flat_map(|ty| {
                     deps.require_ref::<RustTyPredicatesEnc>(ty)
@@ -121,10 +121,10 @@ impl TaskEncoder for MirImpureEnc {
             // a call stub.
             let local_def_id = def_id.as_local().filter(|_| !trusted && caller_def_id.is_none());
             let blocks = if let Some(local_def_id) = local_def_id {
-                let body = vcx.body.borrow_mut().get_impure_fn_body(local_def_id, substs, caller_def_id);
-                // let body = vcx.tcx.mir_promoted(local_def_id).0.borrow();
+                let body = vcx.body_mut().get_impure_fn_body(local_def_id, substs, caller_def_id);
+                // let body = vcx.tcx().mir_promoted(local_def_id).0.borrow();
 
-                let fpcs_analysis = mir_state_analysis::run_free_pcs(&body, vcx.tcx);
+                let fpcs_analysis = mir_state_analysis::run_free_pcs(&body, vcx.tcx());
 
                 //let ssa_analysis = SsaAnalysis::analyse(&body);
 
@@ -365,7 +365,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         assert!(matches!(repack_op, RepackOp::Collapse(..)));
                         return;
                     }
-                    let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
+                    let place_ty = (*place).ty(self.local_decls, self.vcx.tcx());
                     let place_ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
                     let ref_to_pred = place_ty_out
                         .generic_predicate
@@ -384,7 +384,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     }
                 }
                 RepackOp::Weaken(place, CapabilityKind::Exclusive, CapabilityKind::Write) => {
-                    let place_ty = (*place).ty(self.local_decls, self.vcx.tcx);
+                    let place_ty = (*place).ty(self.local_decls, self.vcx.tcx());
                     assert!(place_ty.variant_index.is_none());
 
                     let place_ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
@@ -424,7 +424,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     }
 
     fn encode_operand_snap(&mut self, operand: &mir::Operand<'tcx>) -> vir::Expr<'vir> {
-        let ty = operand.ty(self.local_decls, self.vcx.tcx);
+        let ty = operand.ty(self.local_decls, self.vcx.tcx());
         match operand {
             &mir::Operand::Move(source) => {
                 let ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(ty).unwrap();
@@ -457,7 +457,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         &mut self,
         operand: &mir::Operand<'tcx>,
     ) -> vir::Expr<'vir> {
-        let ty = operand.ty(self.local_decls, self.vcx.tcx);
+        let ty = operand.ty(self.local_decls, self.vcx.tcx());
         let (snap_val, ty_out) = match operand {
             &mir::Operand::Move(source) => return self.encode_place(Place::from(source)),
             &mir::Operand::Copy(source) => {
@@ -486,7 +486,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         // TODO: factor this out (duplication with pure encoder)?
         for &elem in place.projection {
             expr = self.encode_place_element(place_ty, elem, expr);
-            place_ty = place_ty.projection_ty(self.vcx.tcx, elem);
+            place_ty = place_ty.projection_ty(self.vcx.tcx(), elem);
         }
         expr
     }
@@ -631,7 +631,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 // What are we assigning to?
                 let proj_ref = self.encode_place(Place::from(*dest));
 
-                let rvalue_ty = rvalue.ty(self.local_decls, self.vcx.tcx);
+                let rvalue_ty = rvalue.ty(self.local_decls, self.vcx.tcx());
 
                 // The snapshot of the value that we are assigning.
                 let expr = match rvalue {
@@ -646,8 +646,8 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                     rv@mir::Rvalue::BinaryOp(op, box (l, r)) |
                     rv@mir::Rvalue::CheckedBinaryOp(op, box (l, r)) => {
-                        let l_ty = l.ty(self.local_decls, self.vcx.tcx);
-                        let r_ty = r.ty(self.local_decls, self.vcx.tcx);
+                        let l_ty = l.ty(self.local_decls, self.vcx.tcx());
+                        let r_ty = r.ty(self.local_decls, self.vcx.tcx());
                         use crate::encoders::MirBuiltinEncTask::{BinOp, CheckedBinOp};
                         let task = if matches!(rv, mir::Rvalue::BinaryOp(..)) {
                             BinOp(rvalue_ty, *op, l_ty, r_ty)
@@ -666,7 +666,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     //mir::Rvalue::NullaryOp(NullOp, Ty<'tcx>) => {}
 
                     mir::Rvalue::UnaryOp(unop, operand) => {
-                        let operand_ty = operand.ty(self.local_decls, self.vcx.tcx);
+                        let operand_ty = operand.ty(self.local_decls, self.vcx.tcx());
                         let unop_function = self.deps.require_ref::<MirBuiltinEnc>(
                             crate::encoders::MirBuiltinEncTask::UnOp(
                                 rvalue_ty,
@@ -683,7 +683,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         let unop_function = self.deps.require_ref::<crate::encoders::MirBuiltinEnc>(
                             crate::encoders::MirBuiltinEncTask::UnOp(
                                 *unop,
-                                source.ty(self.local_decls, self.vcx.tcx).ty,
+                                source.ty(self.local_decls, self.vcx.tcx()).ty,
                             ),
                         ).unwrap().name;
                         Some(self.vcx.mk_func_app(
@@ -703,7 +703,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                             _ => e_rvalue_ty.generic_predicate.expect_structlike()
                         };
                         let field_tys = fields.iter()
-                            .map(|field| field.ty(self.local_decls, self.vcx.tcx))
+                            .map(|field| field.ty(self.local_decls, self.vcx.tcx()))
                             .collect::<Vec<_>>();
                         let ty_caster = self.deps.require_local::<AggregateSnapArgsCastEnc>(
                             AggregateSnapArgsCastEncTask {
@@ -717,7 +717,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     }
                     mir::Rvalue::Discriminant(place) => {
                         let e_rvalue_ty = self.deps.require_ref::<RustTyPredicatesEnc>(rvalue_ty).unwrap();
-                        let place_ty = place.ty(self.local_decls, self.vcx.tcx);
+                        let place_ty = place.ty(self.local_decls, self.vcx.tcx());
                         let ty = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
                         let place_expr = self.encode_place(Place::from(*place));
 
@@ -743,7 +743,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     }
                 };
 
-                let dest_ty = dest.ty(self.local_decls, self.vcx.tcx);
+                let dest_ty = dest.ty(self.local_decls, self.vcx.tcx());
                 assert!(dest_ty.variant_index.is_none());
                 let dest_ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(dest_ty.ty).unwrap();
                 let method_assign_app = dest_ty_out.apply_method_assign(
@@ -802,7 +802,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             mir::TerminatorKind::SwitchInt { discr, targets } => {
                 //let discr_version = self.ssa_analysis.version.get(&(location, discr.local)).unwrap();
                 //let discr_name = vir::vir_format!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
-                let discr_ty_rs = discr.ty(self.local_decls, self.vcx.tcx);
+                let discr_ty_rs = discr.ty(self.local_decls, self.vcx.tcx());
                 let discr_ty = self
                     .deps
                     .require_ref::<RustTyPredicatesEnc>(discr_ty_rs)
@@ -822,17 +822,14 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                                 target
                             );
 
-                            let extra_stmts =
-                                self.collect_terminator_repacks(idx, |rep| &rep.repacks_start);
-                            (
-                                discr_ty.expr_from_bits(discr_ty_rs, value),
-                                self.vcx
-                                    .alloc(vir::CfgBlockLabelData::BasicBlock(target.as_usize())),
-                                self.vcx.alloc_slice(&extra_stmts),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                );
+                        let extra_stmts = self.collect_terminator_repacks(idx, |rep| &rep.repacks_start);
+                        self.vcx.mk_goto_if_target(
+                            discr_ty.expr_from_bits(discr_ty_rs, value),
+                            self.vcx.alloc(vir::CfgBlockLabelData::BasicBlock(target.as_usize())),
+                            self.vcx.alloc_slice(&extra_stmts),
+                        )
+                    })
+                    .collect::<Vec<_>>());
                 let goto_otherwise = self.vcx.alloc(vir::CfgBlockLabelData::BasicBlock(
                     targets.otherwise().as_usize(),
                 ));
@@ -869,7 +866,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 if is_pure {
                     let pure_func_app = self.encode_pure_func_app(func, args, destination, self.def_id, &());
 
-                    let return_ty = destination.ty(self.local_decls, self.vcx.tcx).ty;
+                    let return_ty = destination.ty(self.local_decls, self.vcx.tcx()).ty;
                     let assign_stmt = self
                         .deps
                         .require_ref::<RustTyPredicatesEnc>(return_ty)
@@ -919,7 +916,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             } => {
                 let e_bool = self
                     .deps
-                    .require_ref::<RustTyPredicatesEnc>(self.vcx.tcx.types.bool)
+                    .require_ref::<RustTyPredicatesEnc>(self.vcx.tcx().types.bool)
                     .unwrap();
                 let enc = self.encode_operand_snap(cond);
                 let enc = e_bool
@@ -943,12 +940,11 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                     _ => todo!(),
                 };
 
-                self.vcx.mk_goto_if_stmt(
-                    enc,
-                    self.vcx.alloc_slice(&[(expected, &target_bb, &[])]),
-                    otherwise,
+                self.vcx.mk_goto_if_stmt(enc, self.vcx.alloc_slice(&[self.vcx.mk_goto_if_target(
+                    expected,
+                    target_bb,
                     &[],
-                )
+                )]), otherwise, &[])
             }
             mir::TerminatorKind::Unreachable => self.unreachable(),
 

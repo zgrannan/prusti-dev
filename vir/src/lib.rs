@@ -9,8 +9,10 @@ mod debug_info;
 mod gendata;
 mod genrefs; // TODO: explain gen...
 mod macros;
+mod make;
 mod refs;
 mod reify;
+mod serde;
 mod callable_idents;
 
 // `fmt_domain_with_extras` can be removed once we're encoding the Viper AST via

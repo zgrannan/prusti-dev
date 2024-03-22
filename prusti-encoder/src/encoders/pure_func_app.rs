@@ -52,7 +52,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         &self,
         func: &mir::Operand<'tcx>,
     ) -> (DefId, &'tcx List<GenericArg<'tcx>>) {
-        let func_ty = func.ty(self.local_decls_src(), self.vcx().tcx);
+        let func_ty = func.ty(self.local_decls_src(), self.vcx().tcx());
         match func_ty.kind() {
             &ty::TyKind::FnDef(def_id, arg_tys) => (def_id, arg_tys),
             _ => todo!(),
@@ -71,7 +71,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
         let fn_arg_tys = self
             .vcx()
-            .tcx
+            .tcx()
             .fn_sig(def_id)
             .instantiate_identity()
             .inputs()
@@ -95,7 +95,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             .zip(args.iter())
             .map(|(expected_ty, oper)| {
                 let base = self.encode_operand(&encode_operand_args, oper);
-                let oper_ty = oper.ty(self.local_decls_src(), self.vcx().tcx);
+                let oper_ty = oper.ty(self.local_decls_src(), self.vcx().tcx());
                 let caster = self
                     .deps()
                     .require_ref::<PureGenericCastEnc>(CastArgs {
@@ -124,7 +124,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         let vcx = self.vcx();
         let (def_id, _) = self.get_def_id_and_arg_tys(func);
         let fn_result_ty = vcx
-            .tcx
+            .tcx()
             .fn_sig(def_id)
             .instantiate_identity()
             .output()
@@ -136,7 +136,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             .function_ref;
         let encoded_args = self.encode_fn_args(func, args, encode_operand_args);
         let call = pure_func.apply(vcx, &encoded_args);
-        let expected_ty = destination.ty(self.local_decls_src(), vcx.tcx).ty;
+        let expected_ty = destination.ty(self.local_decls_src(), vcx.tcx()).ty;
         let result_cast = self
             .deps()
             .require_ref::<PureGenericCastEnc>(CastArgs {
