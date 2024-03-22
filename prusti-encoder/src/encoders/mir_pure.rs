@@ -119,8 +119,6 @@ impl TaskEncoder for MirPureEnc {
                     // check: are we providing the expected number of arguments?
                     assert_eq!(lctx.1.len(), body.arg_count);
 
-                    eprintln!("Reify with {lctx:?}");
-                    eprintln!("Reify with {:?}", lctx.1.iter().map(|c| c.ty()).collect::<Vec<_>>());
                     use vir::Reify;
                     expr_inner.kind.reify(vcx, lctx)
                 }),

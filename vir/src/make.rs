@@ -2,7 +2,7 @@ use cfg_if::cfg_if;
 use std::fmt::Debug;
 use prusti_rustc_interface::middle::ty;
 use crate::{
-    callable_idents::*, data::*, debug_info::{self, DebugInfo, DEBUGINFO_NONE}, gendata::*, genrefs::*, refs::*, VirCtxt
+    callable_idents::*, data::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, gendata::*, genrefs::*, refs::*, VirCtxt
 };
 
 macro_rules! const_expr {
@@ -15,6 +15,17 @@ macro_rules! const_expr {
 }
 cfg_if! {
     if #[cfg(debug_assertions)] {
+
+        // The functions below conservatively check that local variables bound
+        // in forall expressions, let-bindings, function arguments etc. have the
+        // correct type with respect to their usages. It's better to identify
+        // the relevant errors here so more debug information is available. The
+        // check is incomplete, namely:
+        // - Lazy expressions are not typechecked
+        // - The binding for a local is not always known, usages of unbound
+        //   variables are not checked
+        // - Unsupported types are not checked
+
         use std::collections::HashMap;
         fn check_predicate_app_bindings<'vir, Curr, Next>(
             m: &mut HashMap<&'vir str, Type<'vir>>,

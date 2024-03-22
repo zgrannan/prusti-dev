@@ -352,12 +352,11 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Let<'vir> {
 impl<'vir, 'v> ToViper<'vir, 'v> for vir::LocalData<'vir> {
     type Output = viper::Expr<'v>;
     fn to_viper(&self, ctx: &ToViperContext<'vir, 'v>) -> Self::Output {
-        let pos_id = format!("{:?}{}", self.ty, self.debug_info);
         ctx.ast.local_var(
             self.name,
             self.ty.to_viper(ctx),
             // TODO: Use a real position here
-            ctx.ast.identifier_position(0, 0, pos_id)
+            ctx.ast.no_position()
         )
     }
 }

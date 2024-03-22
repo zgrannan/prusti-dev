@@ -164,7 +164,7 @@ impl<'a> Verifier<'a> {
         self
     }
 
-    /// Extracst a position identifier from a `Position` object.
+    /// Extract a position identifier from a `Position` object.
     fn extract_pos_id(&self, pos: JObject<'_>) -> Option<String> {
         let has_identifier_wrapper = silver::ast::HasIdentifier::with(self.env);
 
