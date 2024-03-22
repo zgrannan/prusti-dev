@@ -1,5 +1,5 @@
 use crate::{
-    debug_info::DebugInfo, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
+    debug_info::DebugInfo, with_vcx, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
 };
 use sealed::sealed;
 
@@ -24,11 +24,11 @@ impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, R
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo);
+pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo<'vir>);
 
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
     fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
-        Self(name, args, result_ty, DebugInfo::new())
+        Self(name, args, result_ty, with_vcx(DebugInfo::new))
     }
 
     fn name(&self) -> &'vir str {
@@ -44,7 +44,7 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> FunctionIdent<'vir, A> {
-    pub fn debug_info(&self) -> DebugInfo {
+    pub fn debug_info(&self) -> DebugInfo<'vir> {
         self.3
     }
 
@@ -59,10 +59,10 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> FunctionIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo);
+pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
     fn new(name: &'vir str, args: A, _unused: ()) -> Self {
-        Self(name, args, DebugInfo::new())
+        Self(name, args, with_vcx(DebugInfo::new))
     }
     fn name(&self) -> &'vir str {
         self.0
@@ -76,14 +76,14 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
 }
 
 impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
-    pub fn debug_info(&self) -> DebugInfo {
+    pub fn debug_info(&self) -> DebugInfo<'vir> {
         self.2
     }
 }
 
 impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
-        Self(name, args, DebugInfo::new())
+        Self(name, args, with_vcx(DebugInfo::new))
     }
 }
 
@@ -94,10 +94,10 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> MethodIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo);
+pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
     fn new(name: &'vir str, args: A, _unused: ()) -> Self {
-        Self(name, args, DebugInfo::new())
+        Self(name, args, with_vcx(DebugInfo::new))
     }
     fn name(&self) -> &'vir str {
         self.0
@@ -111,16 +111,16 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A
 }
 
 impl <'vir, A: Arity<'vir>> PredicateIdent<'vir, A> {
-    pub fn debug_info(&self) -> DebugInfo {
+    pub fn debug_info(&self) -> DebugInfo<'vir> {
         self.2
     }
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
     pub fn new(name: &'vir str, args: A) -> Self {
-        Self(name, args, DebugInfo::new())
+        Self(name, args, with_vcx(DebugInfo::new))
     }
-    pub fn as_unknown_arity(self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
+    pub fn as_unknown_arity(&self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
         PredicateIdent(self.0, UnknownArity::new(self.1.args()), self.debug_info())
     }
 }
