@@ -571,7 +571,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Type<'vir> {
             vir::TypeData::Bool => ctx.ast.bool_type(),
             vir::TypeData::DomainTypeParam(param) => ctx.ast.type_var(param.name),
             vir::TypeData::Domain(name, params) => {
-                let domain = ctx.domains.get(name).unwrap();
+                let domain = ctx.domains.get(name).unwrap_or_else(|| panic!("Domain {name} not found"));
                 ctx.ast.domain_type(
                     name,
                     &domain.typarams.iter()
