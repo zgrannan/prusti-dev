@@ -9,6 +9,7 @@ mod pure_func_app;
 mod local_def;
 mod r#type;
 mod r#const;
+mod mono;
 
 pub use pure::*;
 pub use pure::spec::MirSpecEnc;

@@ -172,9 +172,6 @@ impl<'tcx> VirCtxt<'tcx> {
         &'vir self,
         local: Local<'vir>,
     ) -> ExprGen<'vir, Curr, Next> {
-        if local.name == "_1p" {
-            println!("ty: {:?}", local.ty);
-        }
         self.alloc(ExprGenData::new(
             self.alloc(ExprKindGenData::Local(local)),
         ))

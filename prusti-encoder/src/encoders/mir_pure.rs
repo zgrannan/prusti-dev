@@ -52,6 +52,7 @@ pub struct MirPureEncTask<'tcx> {
     pub kind: PureKind,
     pub parent_def_id: DefId, // ID of the function
     pub param_env: ty::ParamEnv<'tcx>, // param environment at the usage site
+    pub substs: ty::GenericArgsRef<'tcx>, // type substitutions at the usage site
     pub caller_def_id: Option<DefId>, // ID of the caller function, if any
 }
 
@@ -64,6 +65,8 @@ impl TaskEncoder for MirPureEnc {
         usize, // encoding depth
         PureKind, // encoding a pure function?
         DefId, // ID of the function
+        ty::GenericArgsRef<'tcx>, // ? this should be the "signature", after applying the env/substs
+        Option<DefId>, // Caller/Use DefID
     );
 
     type OutputFullLocal<'vir> = MirPureEncOutput<'vir>;
@@ -76,6 +79,8 @@ impl TaskEncoder for MirPureEnc {
             task.encoding_depth,
             task.kind,
             task.parent_def_id,
+            task.substs,
+            task.caller_def_id,
         )
     }
 
@@ -91,16 +96,15 @@ impl TaskEncoder for MirPureEnc {
     )> {
         deps.emit_output_ref::<Self>(*task_key, ());
 
-        let (_, kind, def_id) = *task_key;
+        let (_, kind, def_id, substs, caller_def_id) = *task_key;
 
         tracing::debug!("encoding {def_id:?}");
         let expr = vir::with_vcx(move |vcx| {
-            let substs = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             //let body = vcx.tcx().mir_promoted(local_def_id).0.borrow();
             let body = match kind {
-                PureKind::Closure => vcx.body_mut().get_closure_body(def_id, substs, None),
-                PureKind::Spec => vcx.body_mut().get_spec_body(def_id, substs, None),
-                PureKind::Pure => vcx.body_mut().get_pure_fn_body(def_id, substs, None),
+                PureKind::Closure => vcx.body_mut().get_closure_body(def_id, substs, caller_def_id),
+                PureKind::Spec => vcx.body_mut().get_spec_body(def_id, substs, caller_def_id),
+                PureKind::Pure => vcx.body_mut().get_pure_fn_body(def_id, substs, caller_def_id),
                 PureKind::Constant(promoted) => vcx.body_mut().get_promoted_constant_body(def_id, promoted)
             };
 
@@ -910,6 +914,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         kind: PureKind::Closure,
                         parent_def_id: cl_def_id,
                         param_env: self.vcx.tcx().param_env(cl_def_id),
+                        substs: ty::List::identity_for_item(self.vcx.tcx(), cl_def_id),
                         caller_def_id: Some(self.def_id),
                     }
                 ).unwrap().expr

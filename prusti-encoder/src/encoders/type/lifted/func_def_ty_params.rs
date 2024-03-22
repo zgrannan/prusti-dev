@@ -1,17 +1,16 @@
 use prusti_rustc_interface::{
-    middle::ty::{GenericArgs, TyKind},
+    middle::ty::{self, GenericArgs, TyKind},
     span::def_id::DefId,
 };
 use task_encoder::TaskEncoder;
 
 use super::generic::{LiftedGeneric, LiftedGenericEnc};
 
-/// Encodes the type parameters of a function definition.
-pub struct LiftedFuncDefTyParamsEnc;
+pub struct LiftedTyParamsEnc;
 
-impl TaskEncoder for LiftedFuncDefTyParamsEnc {
-    task_encoder::encoder_cache!(LiftedFuncDefTyParamsEnc);
-    type TaskDescription<'tcx> = DefId;
+impl TaskEncoder for LiftedTyParamsEnc {
+    task_encoder::encoder_cache!(LiftedTyParamsEnc);
+    type TaskDescription<'tcx> = ty::GenericArgsRef<'tcx>;
 
     type OutputFullLocal<'vir> = &'vir [LiftedGeneric<'vir>];
 
@@ -36,7 +35,7 @@ impl TaskEncoder for LiftedFuncDefTyParamsEnc {
     > {
         deps.emit_output_ref::<Self>(*task_key, ());
         vir::with_vcx(|vcx| {
-            let ty_args = GenericArgs::identity_for_item(vcx.tcx(), *task_key)
+            let ty_args = task_key
                 .iter()
                 .filter_map(|arg| {
                     let ty = arg.as_type()?;

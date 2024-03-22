@@ -122,7 +122,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
         let vcx = self.vcx();
-        let (def_id, _) = self.get_def_id_and_arg_tys(func);
+        let (def_id, substs) = self.get_def_id_and_arg_tys(func);
         let fn_result_ty = vcx
             .tcx()
             .fn_sig(def_id)
@@ -131,7 +131,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             .skip_binder();
         let pure_func = self
             .deps()
-            .require_ref::<MirFunctionEnc>((def_id, caller_def_id))
+            .require_ref::<MirFunctionEnc>((def_id, substs, caller_def_id))
             .unwrap()
             .function_ref;
         let encoded_args = self.encode_fn_args(func, args, encode_operand_args);

@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    middle::mir,
+    middle::{mir, ty},
     span::def_id::DefId,
 };
 use rustc_middle::mir::interpret::{ConstValue, Scalar, GlobalAlloc};
@@ -86,6 +86,7 @@ impl TaskEncoder for ConstEnc {
                     encoding_depth: encoding_depth + 1,
                     parent_def_id: uneval.def,
                     param_env: vcx.tcx().param_env(uneval.def),
+                    substs: ty::List::identity_for_item(vcx.tcx(), uneval.def),
                     kind: PureKind::Constant(uneval.promoted.unwrap()),
                     caller_def_id: Some(def_id)
                 };
