@@ -1,6 +1,6 @@
 use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{
-    CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity,
+    vir_format, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity
 };
 
 use crate::encoders::{
@@ -24,9 +24,7 @@ impl<'vir> OutputRefAny for TyConstructorEncOutputRef<'vir> {}
 
 #[derive(Clone)]
 pub struct TyConstructorEncOutput<'vir> {
-    pub domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
-    pub functions: &'vir [vir::DomainFunction<'vir>],
-    pub axioms: &'vir [vir::DomainAxiom<'vir>],
+    pub domain: vir::Domain<'vir>
 }
 
 /// Encodes the lifted representation of a Rust type constructor (e.g. Option,
@@ -135,9 +133,12 @@ impl TaskEncoder for TyConstructorEnc {
                 ))
             }
             let result = TyConstructorEncOutput {
-                domain: task_key.get_vir_domain_ident(vcx),
-                functions: vcx.alloc_slice(&functions),
-                axioms: vcx.alloc_slice(&axioms),
+                domain: vcx.mk_domain(
+                    vir_format!(vcx, "s_{}_ty_constructor", task_key.get_vir_base_name(vcx)),
+                    &[],
+                    vcx.alloc_slice(&axioms),
+                    vcx.alloc_slice(&functions),
+                )
             };
             Ok((result, ()))
         })

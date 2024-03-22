@@ -15,8 +15,6 @@ use prusti_rustc_interface::{
     middle::ty,
     hir,
 };
-use vir::{fmt_domain_with_extras, CallableIdent, DomainFunction, DomainAxiom};
-use std::fmt::{self, Debug, Formatter};
 
 use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
 
@@ -95,37 +93,29 @@ pub fn test_entrypoint<'tcx>(
     header(&mut viper_code, "generics");
     for output in crate::encoders::GenericEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.type_snapshot));
+        viper_code.push_str(&format!("{:?}\n", output.param_snapshot));
+        program_domains.push(output.type_snapshot);
+        program_domains.push(output.param_snapshot);
     }
 
     header(&mut viper_code, "generic casts");
     for output in crate::encoders::lifted::cast_functions::CastFunctionsEnc::all_outputs() {
         for cast_function in output {
             viper_code.push_str(&format!("{:?}\n", cast_function));
+            program_functions.push(cast_function);
         }
     }
 
     header(&mut viper_code, "snapshots");
     for output in crate::encoders::DomainEnc_all_outputs() {
-        let lifted_ty_func_outputs = TyConstructorEnc::all_outputs();
-        let lifted_ty_func_output = lifted_ty_func_outputs.iter()
-            .find(|f_output| f_output.domain.name() == output.name);
-        let (type_functions, type_axioms) = if let Some(f_output) = lifted_ty_func_output {
-            (f_output.functions.iter().map(|a| *a).collect(), f_output.axioms.iter().map(|a| *a).collect())
-        } else {
-            (vec![], vec![])
-        };
-        struct DomainWithExtras<'a>(
-            vir::Domain<'a>,
-            Vec<DomainFunction<'a>>,
-            Vec<DomainAxiom<'a>>
-        );
+        viper_code.push_str(&format!("{:?}\n", output));
+        program_domains.push(output);
+    }
 
-        impl <'a> Debug for DomainWithExtras<'a> {
-            fn fmt<'b>(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                fmt_domain_with_extras(f, self.0, &self.1, &self.2)
-            }
-        }
-        viper_code.push_str(&format!("{:?}\n", DomainWithExtras(output, type_functions, type_axioms)));
+    header(&mut viper_code, "type constructors");
+    for output in TyConstructorEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output.domain));
+        program_domains.push(output.domain);
     }
 
     header(&mut viper_code, "types");
