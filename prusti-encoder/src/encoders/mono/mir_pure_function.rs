@@ -1,7 +1,4 @@
-use prusti_rustc_interface::{
-    middle::{mir, ty::GenericArgs},
-    span::def_id::DefId,
-};
+use prusti_rustc_interface::middle::mir;
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, FunctionIdent, Reify, UnknownArity};
@@ -54,7 +51,6 @@ impl TaskEncoder for MirMonoFunctionEnc {
         .unwrap_or_default();
 
         vir::with_vcx(|vcx| {
-            let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let local_defs = deps
                 .require_local::<MirLocalDefEnc>((def_id, substs, Some(caller_def_id)))
                 .unwrap();

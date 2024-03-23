@@ -864,7 +864,14 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
 
                 let task = (func_def_id, self.def_id);
                 if is_pure {
-                    let pure_func_app = self.encode_pure_func_app(func, args, destination, self.def_id, &());
+                    let pure_func_app = self.encode_pure_func_app(
+                        func_def_id,
+                        arg_tys,
+                        args,
+                        destination,
+                        self.def_id,
+                        &()
+                    );
 
                     let return_ty = destination.ty(self.local_decls, self.vcx.tcx()).ty;
                     let assign_stmt = self

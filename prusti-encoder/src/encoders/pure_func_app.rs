@@ -1,7 +1,7 @@
 use prusti_rustc_interface::{
     middle::{
         mir::{self, HasLocalDecls},
-        ty::{self, GenericArg, List},
+        ty::{self, GenericArg, List, FnSig, Binder},
     },
     span::def_id::DefId,
 };
@@ -14,6 +14,12 @@ use super::{
     },
     MirFunctionEnc,
 };
+
+#[cfg(feature = "mono_function_encoding")]
+type PureFunctionEnc = super::mono::mir_pure_function::MirMonoFunctionEnc;
+
+#[cfg(not(feature = "mono_function_encoding"))]
+type PureFunctionEnc = super::MirFunctionEnc;
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.
@@ -59,21 +65,37 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         }
     }
 
+    fn get_fn_sig(
+        &self,
+        def_id: DefId,
+        substs: &'tcx List<GenericArg<'tcx>>,
+        param_env: ty::ParamEnv<'tcx>,
+    ) -> Binder<'tcx, FnSig<'tcx>> {
+        let sig = self.vcx().tcx().fn_sig(def_id);
+        if cfg!(feature="mono_function_encoding") {
+            self.vcx().tcx().subst_and_normalize_erasing_regions(
+                substs,
+                param_env,
+                sig
+            )
+        } else {
+            sig.instantiate_identity()
+        }
+    }
+
     /// Encodes the arguments to the function. The first arguments are the lifted
     /// type parameters, followed by the actual arguments. Appropriate casts
     /// are inserted to convert from/to generic and concrete arguments as necessary.
     fn encode_fn_args(
         &mut self,
-        func: &mir::Operand<'tcx>,
+        def_id: DefId,
+        substs: &'tcx List<GenericArg<'tcx>>,
+        param_env: ty::ParamEnv<'tcx>,
         args: &Vec<mir::Operand<'tcx>>,
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
-        let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
-        let fn_arg_tys = self
-            .vcx()
-            .tcx()
-            .fn_sig(def_id)
-            .instantiate_identity()
+        let sig = self.get_fn_sig(def_id, substs, param_env);
+        let fn_arg_tys = sig
             .inputs()
             .iter()
             .map(|i| i.skip_binder())
@@ -81,7 +103,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             .collect::<Vec<_>>();
         let encoded_ty_args = self
             .deps()
-            .require_local::<LiftedFuncAppTyParamsEnc>(arg_tys)
+            .require_local::<LiftedFuncAppTyParamsEnc>(substs)
             .unwrap();
 
         // Initial arguments are lifted type parameters
@@ -115,26 +137,27 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
     /// to the appropriate generic/concrete type to match the type of `destination`.
     fn encode_pure_func_app(
         &mut self,
-        func: &mir::Operand<'tcx>,
+        def_id: DefId,
+        substs: &'tcx List<GenericArg<'tcx>>,
         args: &Vec<mir::Operand<'tcx>>,
         destination: &mir::Place<'tcx>,
         caller_def_id: DefId,
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next> {
         let vcx = self.vcx();
-        let (def_id, substs) = self.get_def_id_and_arg_tys(func);
-        let fn_result_ty = vcx
-            .tcx()
-            .fn_sig(def_id)
-            .instantiate_identity()
-            .output()
-            .skip_binder();
+        let param_env = vcx.tcx().param_env(caller_def_id);
+        let sig = self.get_fn_sig(
+            def_id,
+            substs,
+            param_env
+        );
+        let fn_result_ty = sig.output().skip_binder();
         let pure_func = self
             .deps()
-            .require_ref::<MirFunctionEnc>((def_id, substs, caller_def_id))
+            .require_ref::<PureFunctionEnc>((def_id, substs, caller_def_id))
             .unwrap()
             .function_ref;
-        let encoded_args = self.encode_fn_args(func, args, encode_operand_args);
+        let encoded_args = self.encode_fn_args(def_id, substs, param_env, args, encode_operand_args);
         let call = pure_func.apply(vcx, &encoded_args);
         let expected_ty = destination.ty(self.local_decls_src(), vcx.tcx()).ty;
         let result_cast = self

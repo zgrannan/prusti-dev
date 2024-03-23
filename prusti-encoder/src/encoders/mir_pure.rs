@@ -480,7 +480,14 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                         def_spec.kind.is_pure().unwrap_or_default()
                     ).unwrap_or_default();
                     if is_pure {
-                        self.encode_pure_func_app(func, args, destination, self.def_id, &new_curr_ver)
+                        self.encode_pure_func_app(
+                            def_id,
+                            arg_tys,
+                            args,
+                            destination,
+                            self.def_id,
+                            &new_curr_ver
+                        )
                     } else {
                         self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
                     }

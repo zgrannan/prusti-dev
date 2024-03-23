@@ -87,9 +87,7 @@ impl<'vir, 'tcx> LiftedTy<'vir, LiftedGeneric<'vir>> {
     /// W]`.
     ///
     /// This should only be necessary when encoding monomorphized versions of
-    /// methods that may still contain generic types. In the future we will not
-    /// be encoding monomorphised versions of methods, at that time this
-    /// function can be removed.
+    /// methods that may still contain generic types.
     pub fn instantiation_arguments(&self) -> Vec<vir::LocalDecl<'vir>> {
         match self {
             LiftedTy::Generic(g) => vec![g.decl()],

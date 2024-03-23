@@ -40,6 +40,7 @@ impl TaskEncoder for LiftedFuncAppTyParamsEnc {
                 .iter()
                 .filter_map(|arg| {
                     let ty = arg.as_type()?;
+                    eprintln!("{:?}", ty);
                     Some(
                         deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(ty)
                             .unwrap(),

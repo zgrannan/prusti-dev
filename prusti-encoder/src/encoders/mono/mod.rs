@@ -1,1 +1,1 @@
-mod mir_pure_function;
+pub mod mir_pure_function;
