@@ -8,7 +8,7 @@ pub fn program_to_viper<'vir, 'v>(program: vir::Program<'vir>, ast: &'vir AstFac
     for domain in program.domains {
         domains.insert(domain.name, *domain);
         for function in domain.functions {
-            domain_functions.insert(function.name, (*domain, *function));
+            domain_functions.insert(function.name.to_str(), (*domain, *function));
         }
         for axiom in domain.axioms {
             domain_axioms.insert(axiom.name, (*domain, *axiom));
@@ -178,9 +178,9 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::DomainAxiom<'vir> {
 impl<'vir, 'v> ToViper<'vir, 'v> for vir::DomainFunction<'vir> {
     type Output = viper::DomainFunc<'v>;
     fn to_viper(&self, ctx: &ToViperContext<'vir, 'v>) -> Self::Output {
-        let (domain, _) = ctx.domain_functions.get(self.name).expect("no domain for domain function");
+        let (domain, _) = ctx.domain_functions.get(self.name.to_str()).expect("no domain for domain function");
         ctx.ast.domain_func(
-            self.name,
+            self.name.to_str(),
             &self.args.iter().enumerate().map(|(idx, v)| ctx.ast.local_var_decl(
                 &format!("arg{idx}"),
                 v.to_viper(ctx),

@@ -1,7 +1,7 @@
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{
     BinaryArity, CallableIdent, DomainIdent, DomainParamData, FunctionIdent,
-    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity,
+    KnownArityAny, NullaryArity, PredicateIdent, TypeData, UnaryArity, ViperIdent,
 };
 
 pub struct GenericEnc;
@@ -65,22 +65,22 @@ impl TaskEncoder for GenericEnc {
         ),
     > {
         let ref_to_pred =
-            PredicateIdent::new("p_Param", BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]));
-        let type_domain_ident = DomainIdent::nullary("Type");
-        let param_domain_ident = DomainIdent::nullary("s_Param");
+            PredicateIdent::new(ViperIdent::new("p_Param"), BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]));
+        let type_domain_ident = DomainIdent::nullary(ViperIdent::new("Type"));
+        let param_domain_ident = DomainIdent::nullary(ViperIdent::new("s_Param"));
         let ref_to_snap = FunctionIdent::new(
-            "p_Param_snap",
+            ViperIdent::new("p_Param_snap"),
             BinaryArity::new(&[&TypeData::Ref, &TYP_DOMAIN]),
             &SNAPSHOT_PARAM_DOMAIN,
         );
         let unreachable_to_snap = FunctionIdent::new(
-            "p_Param_unreachable",
+            ViperIdent::new("p_Param_unreachable"),
             NullaryArity::new(&[]),
             &SNAPSHOT_PARAM_DOMAIN,
         );
 
         let param_type_function = FunctionIdent::new(
-            "typ",
+            ViperIdent::new("typ"),
             UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]),
             &TYP_DOMAIN,
         );
@@ -103,7 +103,7 @@ impl TaskEncoder for GenericEnc {
         );
 
         let typ = FunctionIdent::new(
-            "typ",
+            ViperIdent::new("typ"),
             UnaryArity::new(&[&SNAPSHOT_PARAM_DOMAIN]),
             &TYP_DOMAIN,
         );
@@ -129,7 +129,7 @@ impl TaskEncoder for GenericEnc {
             );
 
             // unreachable_to_snap
-            let name = unreachable_to_snap.name();
+            let name = unreachable_to_snap.name_str();
             let false_ = vcx.alloc_slice(&[vcx.mk_bool::<false>()]);
             let unreachable_to_snap =
                 vcx

@@ -16,7 +16,7 @@ impl <'tcx: 'vir, 'vir> MostGenericTy<'tcx> {
     pub fn get_vir_domain_ident(&self, vcx: &'vir vir::VirCtxt<'tcx>) ->
         vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>> {
         let base_name = self.get_vir_base_name(vcx);
-        vir::DomainIdent::nullary(vir::vir_format!(vcx, "s_{base_name}"))
+        vir::DomainIdent::nullary(vir::vir_format_identifier!(vcx, "s_{base_name}"))
     }
 }
 

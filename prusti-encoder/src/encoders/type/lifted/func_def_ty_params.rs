@@ -1,7 +1,5 @@
-use prusti_rustc_interface::{
-    middle::ty::{self, GenericArgs, TyKind},
-    span::def_id::DefId,
-};
+use prusti_rustc_interface::middle::ty::{self, ParamTy, Ty, TyKind};
+use std::collections::HashSet;
 use task_encoder::TaskEncoder;
 
 use super::generic::{LiftedGeneric, LiftedGenericEnc};
@@ -37,16 +35,30 @@ impl TaskEncoder for LiftedTyParamsEnc {
         vir::with_vcx(|vcx| {
             let ty_args = task_key
                 .iter()
-                .filter_map(|arg| {
-                    let ty = arg.as_type()?;
-                    if let TyKind::Param(p) = ty.kind() {
-                        Some(deps.require_ref::<LiftedGenericEnc>(*p).unwrap())
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|arg| arg.as_type())
+                .flat_map(extract_ty_params);
+            let ty_args = unique(ty_args)
+                .map(|ty| deps.require_ref::<LiftedGenericEnc>(ty).unwrap())
                 .collect::<Vec<_>>();
             Ok((vcx.alloc_slice(&ty_args), ()))
         })
+    }
+}
+
+fn unique<'tcx>(iter: impl IntoIterator<Item = ParamTy>) -> impl Iterator<Item = ParamTy> {
+    let mut seen = HashSet::new();
+    iter.into_iter().filter(move |item| seen.insert(*item))
+}
+
+fn extract_ty_params(ty: Ty<'_>) -> Vec<ParamTy> {
+    match ty.kind() {
+        TyKind::Param(p) => vec![*p],
+        TyKind::Adt(_, args) => args
+            .iter()
+            .filter_map(|arg| arg.as_type())
+            .flat_map(|arg| extract_ty_params(arg))
+            .collect(),
+        TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => vec![],
+        other => todo!("{:?}", other),
     }
 }

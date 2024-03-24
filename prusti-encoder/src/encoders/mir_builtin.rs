@@ -104,7 +104,7 @@ impl MirBuiltinEnc {
             .unwrap()
             .generic_snapshot;
 
-        let name = vir::vir_format!(vcx, "mir_unop_{op:?}_{}", int_name(ty));
+        let name = vir::vir_format_identifier!(vcx, "mir_unop_{op:?}_{}", int_name(ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_ty.snapshot]));
         let function = FunctionIdent::new(name, arity, e_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
@@ -131,7 +131,7 @@ impl MirBuiltinEnc {
         }
 
         vcx.mk_function(
-            name,
+            name.to_str(),
             vcx.alloc_slice(&[vcx.mk_local_decl("arg", e_ty.snapshot)]),
             e_ty.snapshot,
             &[],
@@ -166,7 +166,7 @@ impl MirBuiltinEnc {
         let prim_r_ty = e_r_ty.specifics.expect_primitive();
         let prim_res_ty = e_res_ty.specifics.expect_primitive();
 
-        let name = vir::vir_format!(vcx, "mir_binop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
+        let name = vir::vir_format_identifier!(vcx, "mir_binop_{op:?}_{}_{}", int_name(l_ty), int_name(r_ty));
         let arity = UnknownArity::new(vcx.alloc_slice(&[e_l_ty.snapshot, e_r_ty.snapshot]));
         let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref::<Self>(key, MirBuiltinEncOutputRef {
@@ -256,7 +256,7 @@ impl MirBuiltinEnc {
             BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset => (Vec::new(), val),
         };
         vcx.mk_function(
-            name,
+            name.to_str(),
             vcx.alloc_slice(&[
                 vcx.mk_local_decl("arg1", e_l_ty.snapshot),
                 vcx.mk_local_decl("arg2", e_r_ty.snapshot),
@@ -291,7 +291,7 @@ impl MirBuiltinEnc {
             .unwrap()
             .generic_snapshot;
 
-        let name = vir::vir_format!(
+        let name = vir::vir_format_identifier!(
             vcx,
             "mir_checkedbinop_{op:?}_{}_{}",
             int_name(l_ty),
@@ -332,11 +332,11 @@ impl MirBuiltinEnc {
         ), e_r_ty.specifics.expect_primitive().snap_to_prim.apply(vcx,
             [vcx.mk_local_ex("arg2", e_r_ty.snapshot)],
         ));
-        let val_str = vir::vir_format!(vcx, "val");
+        let val_str = "val";
         let val = vcx.mk_local_ex(val_str, e_rvalue_pure_ty.prim_type);
         // Wrapped value
         let wrapped_val_exp = Self::get_wrapped_val(vcx, val, e_rvalue_pure_ty.prim_type, rvalue_pure_ty);
-        let wrapped_val_str = vir::vir_format!(vcx, "wrapped_val");
+        let wrapped_val_str = "wrapped_val";
         let wrapped_val = vcx.mk_local_ex(wrapped_val_str, e_rvalue_pure_ty.prim_type);
         let wrapped_val_snap = e_rvalue_pure_ty.prim_to_snap.apply(vcx,
             [wrapped_val],
@@ -356,7 +356,7 @@ impl MirBuiltinEnc {
         let inner_let = vcx.mk_let_expr(wrapped_val_str, wrapped_val_exp, tuple);
 
         vcx.mk_function(
-            name,
+            name.to_str(),
             vcx.alloc_slice(&[
                 vcx.mk_local_decl("arg1", e_l_ty.snapshot),
                 vcx.mk_local_decl("arg2", e_r_ty.snapshot),

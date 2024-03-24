@@ -59,7 +59,7 @@ impl TaskEncoder for MirMonoFunctionEnc {
 
             let extra: String = substs.iter().map(|s| format!("_{s}")).collect();
             let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
-            let function_name = vir::vir_format!(
+            let function_name = vir::vir_format_identifier!(
                 vcx,
                 "f_{}{extra}_CALLER_{krate}_{index}",
                 vcx.tcx().item_name(def_id)
@@ -159,7 +159,7 @@ impl TaskEncoder for MirMonoFunctionEnc {
             Ok((
                 MirFunctionEncOutput {
                     function: vcx.mk_function(
-                        function_name,
+                        function_name.to_str(),
                         vcx.alloc_slice(&func_args),
                         return_type.snapshot,
                         vcx.alloc_slice(&pres),

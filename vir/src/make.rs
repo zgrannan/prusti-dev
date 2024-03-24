@@ -2,7 +2,7 @@ use cfg_if::cfg_if;
 use std::fmt::Debug;
 use prusti_rustc_interface::middle::ty;
 use crate::{
-    callable_idents::*, data::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, gendata::*, genrefs::*, refs::*, VirCtxt
+    callable_idents::*, data::*, debug_info::{DebugInfo, DEBUGINFO_NONE}, gendata::*, genrefs::*, refs::*, ViperIdent, VirCtxt
 };
 
 macro_rules! const_expr {
@@ -408,11 +408,11 @@ impl<'tcx> VirCtxt<'tcx> {
 
     pub fn mk_domain_axiom<'vir, Curr, Next>(
         &'vir self,
-        name: &'vir str,
+        name: ViperIdent<'vir>,
         expr: ExprGen<'vir, Curr, Next>
     ) -> DomainAxiomGen<'vir, Curr, Next> {
         self.alloc(DomainAxiomGenData {
-            name,
+            name: name.to_str(),
             expr
         })
     }
@@ -477,7 +477,7 @@ impl<'tcx> VirCtxt<'tcx> {
         }
         assert!(ident.arity().types_match(args));
         self.mk_predicate_unchecked(
-            ident.name(),
+            ident.name().to_str(),
             args,
             expr
         )
@@ -498,13 +498,13 @@ impl<'tcx> VirCtxt<'tcx> {
 
     pub fn mk_domain<'vir, Curr, Next>(
         &'vir self,
-        name: &'vir str,
+        name: ViperIdent<'vir>,
         typarams: &'vir [DomainParam<'vir>],
         axioms: &'vir [DomainAxiomGen<'vir, Curr, Next>],
         functions: &'vir [DomainFunction<'vir>]
     ) -> DomainGen<'vir, Curr, Next> {
         self.alloc(DomainGenData {
-            name,
+            name: name.to_str(),
             typarams,
             axioms,
             functions
@@ -647,7 +647,7 @@ impl<'tcx> VirCtxt<'tcx> {
     ) -> MethodGen<'vir, Curr, Next> {
         assert!(ident.arity().types_match(args));
         self.mk_method_unchecked(
-            ident.name(),
+            ident.name().to_str(),
             args,
             rets,
             pres,

@@ -129,7 +129,7 @@ impl TaskEncoder for CastFunctionsEnc {
 
             let make_generic_arg_tys = [self_ty];
             let make_generic_ident = FunctionIdent::new(
-                vir::vir_format!(vcx, "make_generic_s_{base_name}"),
+                vir::vir_format_identifier!(vcx, "make_generic_s_{base_name}"),
                 UnaryArity::new(vcx.alloc(make_generic_arg_tys)),
                 generic_ref.param_snapshot,
             );
@@ -144,7 +144,7 @@ impl TaskEncoder for CastFunctionsEnc {
                 .collect::<Vec<_>>();
 
             let make_concrete_ident = FunctionIdent::new(
-                vir::vir_format!(vcx, "make_concrete_s_{base_name}"),
+                vir::vir_format_identifier!(vcx, "make_concrete_s_{base_name}"),
                 UnknownArity::new(vcx.alloc(make_concrete_arg_tys)),
                 self_ty,
             );
@@ -183,7 +183,7 @@ impl TaskEncoder for CastFunctionsEnc {
             };
 
             let make_generic = vcx.mk_function(
-                make_generic_ident.name(),
+                make_generic_ident.name().to_str(),
                 make_generic_arg_decls,
                 generic_ref.param_snapshot,
                 &[],
@@ -220,7 +220,7 @@ impl TaskEncoder for CastFunctionsEnc {
             );
 
             let make_concrete = vcx.mk_function(
-                make_concrete_ident.name(),
+                make_concrete_ident.name().to_str(),
                 make_concrete_arg_decls,
                 self_ty,
                 vcx.alloc_slice(&[make_concrete_pre]),

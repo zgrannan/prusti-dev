@@ -1,11 +1,14 @@
 use crate::{
-    debug_info::DebugInfo, with_vcx, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
+    debug_info::DebugInfo, viper_ident::ViperIdent, with_vcx, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
 };
 use sealed::sealed;
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
-    fn new(name: &'vir str, args: A, result_ty: ResultTy) -> Self;
-    fn name(&self) -> &'vir str;
+    fn new(name: ViperIdent<'vir>, args: A, result_ty: ResultTy) -> Self;
+    fn name(&self) -> ViperIdent<'vir>;
+    fn name_str(&self) -> &'vir str {
+        self.name().to_str()
+    }
     fn arity(&self) -> &A;
     fn result_ty(&self) -> ResultTy;
 }
@@ -24,14 +27,14 @@ impl<'vir, T: 'vir, ResultTy, K: CallableIdent<'vir, UnknownArityAny<'vir, T>, R
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct FunctionIdent<'vir, A: Arity<'vir>>(&'vir str, A, Type<'vir>, DebugInfo<'vir>);
+pub struct FunctionIdent<'vir, A: Arity<'vir>>(ViperIdent<'vir>, A, Type<'vir>, DebugInfo<'vir>);
 
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, Type<'vir>> for FunctionIdent<'vir, A> {
-    fn new(name: &'vir str, args: A, result_ty: Type<'vir>) -> Self {
+    fn new(name: ViperIdent<'vir>, args: A, result_ty: Type<'vir>) -> Self {
         Self(name, args, result_ty, with_vcx(DebugInfo::new))
     }
 
-    fn name(&self) -> &'vir str {
+    fn name(&self) -> ViperIdent<'vir> {
         self.0
     }
     fn arity(&self) -> &A {
@@ -59,12 +62,12 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> FunctionIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct MethodIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo<'vir>);
+pub struct MethodIdent<'vir, A: Arity<'vir>>(ViperIdent<'vir>, A, DebugInfo<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for MethodIdent<'vir, A> {
-    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
+    fn new(name: ViperIdent<'vir>, args: A, _unused: ()) -> Self {
         Self(name, args, with_vcx(DebugInfo::new))
     }
-    fn name(&self) -> &'vir str {
+    fn name(&self) -> ViperIdent<'vir> {
         self.0
     }
     fn arity(&self) -> &A {
@@ -82,7 +85,7 @@ impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
 }
 
 impl <'vir, A: Arity<'vir>> MethodIdent<'vir, A> {
-    pub fn new(name: &'vir str, args: A) -> Self {
+    pub fn new(name: ViperIdent<'vir>, args: A) -> Self {
         Self(name, args, with_vcx(DebugInfo::new))
     }
 }
@@ -94,12 +97,12 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> MethodIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct PredicateIdent<'vir, A: Arity<'vir>>(&'vir str, A, DebugInfo<'vir>);
+pub struct PredicateIdent<'vir, A: Arity<'vir>>(ViperIdent<'vir>, A, DebugInfo<'vir>);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for PredicateIdent<'vir, A> {
-    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
+    fn new(name: ViperIdent<'vir>, args: A, _unused: ()) -> Self {
         Self(name, args, with_vcx(DebugInfo::new))
     }
-    fn name(&self) -> &'vir str {
+    fn name(&self) -> ViperIdent<'vir> {
         self.0
     }
     fn arity(&self) -> &A {
@@ -117,7 +120,7 @@ impl <'vir, A: Arity<'vir>> PredicateIdent<'vir, A> {
 }
 
 impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
-    pub fn new(name: &'vir str, args: A) -> Self {
+    pub fn new(name: ViperIdent<'vir>, args: A) -> Self {
         Self(name, args, with_vcx(DebugInfo::new))
     }
     pub fn as_unknown_arity(&self) -> PredicateIdent<'vir, UnknownArity<'vir>> {
@@ -126,12 +129,12 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>>> PredicateIdent<'vir, A> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct DomainIdent<'vir, A: Arity<'vir>>(&'vir str, A);
+pub struct DomainIdent<'vir, A: Arity<'vir>>(ViperIdent<'vir>, A);
 impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for DomainIdent<'vir, A> {
-    fn new(name: &'vir str, args: A, _unused: ()) -> Self {
+    fn new(name: ViperIdent<'vir>, args: A, _unused: ()) -> Self {
         Self(name, args)
     }
-    fn name(&self) -> &'vir str {
+    fn name(&self) -> ViperIdent<'vir> {
         self.0
     }
     fn arity(&self) -> &A {
@@ -143,7 +146,7 @@ impl<'vir, A: Arity<'vir>> CallableIdent<'vir, A, ()> for DomainIdent<'vir, A> {
 }
 
 impl<'vir> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, 0>> {
-    pub fn nullary(name: &'vir str) -> Self {
+    pub fn nullary(name: ViperIdent<'vir>) -> Self {
         Self(name, KnownArityAny::new(&[]))
     }
 }
@@ -152,7 +155,7 @@ pub type DomainIdentUnknownArity<'vir> =
     DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>>;
 
 impl<'vir> DomainIdentUnknownArity<'vir> {
-    pub fn new(name: &'vir str, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
+    pub fn new(name: ViperIdent<'vir>, args: UnknownArityAny<'vir, DomainParamData<'vir>>) -> Self {
         Self(name, args)
     }
 }
@@ -268,7 +271,7 @@ impl<'vir, const N: usize> FunctionIdent<'vir, KnownArity<'vir, N>> {
         args: [ExprGen<'vir, Curr, Next>; N],
     ) -> ExprGen<'vir, Curr, Next> {
         if self.1.types_match(&args) {
-            vcx.mk_func_app(self.name(), &args, self.result_ty())
+            vcx.mk_func_app(self.name().to_str(), &args, self.result_ty())
         } else {
             panic!(
                 "Function {} could not be applied. Expected: {:?}, Actual: {:?}, debug info: {}",
@@ -290,7 +293,7 @@ impl<'vir, const N: usize> PredicateIdent<'vir, KnownArity<'vir, N>> {
     ) -> PredicateAppGen<'vir, Curr, Next> {
         assert!(self.1.types_match(&args));
         vcx.alloc(PredicateAppGenData {
-            target: self.name(),
+            target: self.name().to_str(),
             args: vcx.alloc_slice(&args),
             perm,
         })
@@ -305,14 +308,14 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
         assert!(self.1.types_match(&args));
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
-            method: self.name(),
+            method: self.name().to_str(),
             args: vcx.alloc_slice(&args),
         }))
     }
 }
 impl<'vir, const N: usize> DomainIdent<'vir, KnownArityAny<'vir, DomainParamData<'vir>, N>> {
     pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: [Type<'vir>; N]) -> Type<'vir> {
-        vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(&args)))
+        vcx.alloc(TypeData::Domain(self.0.to_str(), vcx.alloc_slice(&args)))
     }
 }
 
@@ -326,7 +329,7 @@ impl<'vir> FunctionIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> ExprGen<'vir, Curr, Next> {
         if self.1.types_match(args) {
-            vcx.mk_func_app(self.name(), args, self.result_ty())
+            vcx.mk_func_app(self.name().to_str(), args, self.result_ty())
         } else {
             panic!(
                 "Function {} could not be applied. Expected: {:?}, Actual Exprs: {:?}, Actual Types: {:?}, debug info: {}",
@@ -349,7 +352,7 @@ impl<'vir> PredicateIdent<'vir, UnknownArity<'vir>> {
     ) -> PredicateAppGen<'vir, Curr, Next> {
         if self.1.types_match(args) {
             vcx.alloc(PredicateAppGenData {
-                target: self.name(),
+                target: self.name().to_str(),
                 args: vcx.alloc_slice(args),
                 perm,
             })
@@ -381,7 +384,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
         }
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
-            method: self.name(),
+            method: self.name().to_str(),
             args: vcx.alloc_slice(args),
         }))
     }
@@ -389,6 +392,6 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
 impl<'vir> DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>> {
     pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: &[Type<'vir>]) -> Type<'vir> {
         assert!(self.1.len_matches(args.len()));
-        vcx.alloc(TypeData::Domain(self.0, vcx.alloc_slice(args)))
+        vcx.alloc(TypeData::Domain(self.0.to_str(), vcx.alloc_slice(args)))
     }
 }

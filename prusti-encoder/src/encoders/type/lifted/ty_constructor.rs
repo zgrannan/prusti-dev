@@ -1,6 +1,6 @@
 use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{
-    vir_format, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity
+    vir_format_identifier, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity
 };
 
 use crate::encoders::{
@@ -70,7 +70,7 @@ impl TaskEncoder for TyConstructorEnc {
             let args = ty_constructor.generics();
             let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; args.len()]);
             let type_function_ident = FunctionIdent::new(
-                vir::vir_format!(vcx, "s_{}_type", ty_constructor.get_vir_base_name(vcx)),
+                vir::vir_format_identifier!(vcx, "s_{}_type", ty_constructor.get_vir_base_name(vcx)),
                 UnknownArity::new(&type_function_args),
                 generic_ref.type_snapshot,
             );
@@ -96,7 +96,7 @@ impl TaskEncoder for TyConstructorEnc {
                 .iter()
                 .map(|arg| {
                     FunctionIdent::new(
-                        vir::vir_format!(
+                        vir::vir_format_identifier!(
                             vcx,
                             "s_{}_typaram_{}",
                             ty_constructor.get_vir_base_name(vcx),
@@ -124,7 +124,7 @@ impl TaskEncoder for TyConstructorEnc {
             for (accessor_function, ty_arg) in ty_accessor_functions.iter().zip(ty_arg_exprs.iter()) {
                 functions.push(vcx.mk_domain_function(*accessor_function, false));
                 axioms.push(vcx.mk_domain_axiom(
-                    vir::vir_format!(vcx, "ax_{}", accessor_function.name()),
+                    vir::vir_format_identifier!(vcx, "ax_{}", accessor_function.name()),
                     vcx.mk_forall_expr(
                         axiom_qvars,
                         axiom_triggers,
@@ -134,7 +134,7 @@ impl TaskEncoder for TyConstructorEnc {
             }
             let result = TyConstructorEncOutput {
                 domain: vcx.mk_domain(
-                    vir_format!(vcx, "s_{}_ty_constructor", task_key.get_vir_base_name(vcx)),
+                    vir_format_identifier!(vcx, "s_{}_ty_constructor", task_key.get_vir_base_name(vcx)),
                     &[],
                     vcx.alloc_slice(&axioms),
                     vcx.alloc_slice(&functions),

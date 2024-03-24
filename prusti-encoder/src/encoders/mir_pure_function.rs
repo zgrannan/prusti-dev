@@ -77,7 +77,7 @@ impl TaskEncoder for MirFunctionEnc {
 
             tracing::debug!("encoding {def_id:?}");
 
-            let function_name = vir::vir_format!(vcx, "f_{}_CALLER", vcx.tcx().item_name(def_id));
+            let function_name = vir::vir_format_identifier!(vcx, "f_{}_CALLER", vcx.tcx().item_name(def_id));
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
             ident_args.extend((1..=local_defs.arg_count)
@@ -166,7 +166,7 @@ impl TaskEncoder for MirFunctionEnc {
             Ok((
                 MirFunctionEncOutput {
                     function: vcx.mk_function(
-                        function_name,
+                        function_name.to_str(),
                         vcx.alloc_slice(&func_args),
                         return_type.snapshot,
                         vcx.alloc_slice(&pres),

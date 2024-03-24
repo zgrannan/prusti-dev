@@ -1,4 +1,6 @@
-use prusti_rustc_interface::middle::ty::GenericArgsRef;
+use std::collections::HashSet;
+
+use prusti_rustc_interface::middle::ty::{GenericArgsRef, ParamTy, Ty, TyKind};
 use task_encoder::TaskEncoder;
 
 use super::{
@@ -36,18 +38,43 @@ impl TaskEncoder for LiftedFuncAppTyParamsEnc {
     > {
         deps.emit_output_ref::<Self>(*task_key, ());
         vir::with_vcx(|vcx| {
-            let ty_args = task_key
+            let tys = task_key.iter().filter_map(|arg| arg.as_type());
+
+            // If we are monomorphizing functions, we must only pass to the function
+            // the type parameters that are unknown from the caller's persepective, i.e.,
+            // all `ParamTy`s within the generics
+            // Otherwise, we simply encode each argument in the `GenericArgs`
+            let ty_args: Vec<_> = if cfg!(feature = "mono_function_encoding") {
+                unique(tys.flat_map(extract_ty_params)).collect()
+            } else {
+                tys.collect()
+            };
+            let ty_args = ty_args
                 .iter()
-                .filter_map(|arg| {
-                    let ty = arg.as_type()?;
-                    eprintln!("{:?}", ty);
-                    Some(
-                        deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(ty)
-                            .unwrap(),
-                    )
+                .map(|ty| {
+                    deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(*ty)
+                        .unwrap()
                 })
                 .collect::<Vec<_>>();
             Ok((vcx.alloc_slice(&ty_args), ()))
         })
+    }
+}
+
+fn unique<'tcx>(iter: impl IntoIterator<Item = Ty<'tcx>>) -> impl Iterator<Item = Ty<'tcx>> {
+    let mut seen = HashSet::new();
+    iter.into_iter().filter(move |item| seen.insert(*item))
+}
+
+fn extract_ty_params(ty: Ty<'_>) -> Vec<Ty<'_>> {
+    match ty.kind() {
+        TyKind::Param(_) => vec![ty],
+        TyKind::Adt(_, args) => args
+            .iter()
+            .filter_map(|arg| arg.as_type())
+            .flat_map(|arg| extract_ty_params(arg))
+            .collect(),
+        TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => vec![],
+        other => todo!("{:?}", other),
     }
 }

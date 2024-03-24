@@ -305,7 +305,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
         let typeof_function = if !ty.is_generic() {
             let typeof_function = vir::FunctionIdent::new(
-                vir::vir_format!(vcx, "typeof_{}", domain.name()),
+                vir::vir_format_identifier!(vcx, "typeof_{}", domain.name()),
                 UnaryArity::new(vcx.alloc_array(&[self_ty])),
                 generic_enc.type_snapshot
             );
@@ -372,7 +372,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         };
         specifics.bounds(ty).map(|(lower, upper)| {
             let exp = snap_to_prim.apply(self.vcx, [self.self_ex]);
-            let axiom = self.mk_bounds_axiom(self.domain.name(), exp, lower, upper);
+            let axiom = self.mk_bounds_axiom(self.domain.name_str(), exp, lower, upper);
             self.axioms.push(axiom);
         });
         DomainEncSpecifics::Primitive(specifics)
@@ -423,7 +423,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         let base = discr.map(|(_, _, v)| format!("{name}_{v}")).unwrap_or_else(|| name.to_string());
         // Constructor
         let field_snaps_to_snap = {
-            let name = vir::vir_format!(self.vcx, "{base}_cons");
+            let name = vir::vir_format_identifier!(self.vcx, "{base}_cons");
             let ident = FunctionIdent::new(
                 name,
                 UnknownArity::new(self.vcx.alloc_slice(&field_tys.iter().map(|fty| fty.ty).collect::<Vec<_>>())),
@@ -456,7 +456,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                 );
             }
             self.axioms.push(self.vcx.mk_domain_axiom(
-                vir::vir_format!(self.vcx, "ax_{base}_cons_discr"),
+                vir::vir_format_identifier!(self.vcx, "ax_{base}_cons_discr"),
                 expr,
             ));
         }
@@ -465,7 +465,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         let field_access = {
             field_tys.iter().enumerate().map(|(idx, field_ty)| {
                 // Read
-                let name = vir::vir_format!(self.vcx, "{base}_read_{idx}");
+                let name = vir::vir_format_identifier!(self.vcx, "{base}_read_{idx}");
                 let args = self.vcx.alloc_array(&[self.self_ty]);
                 let read = FunctionIdent::new(
                     name,
@@ -489,7 +489,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
                     self.axioms.push(
                         self.vcx.mk_domain_axiom(
-                            vir::vir_format!(self.vcx, "ax_{base}_read_{idx}_type"),
+                            vir::vir_format_identifier!(self.vcx, "ax_{base}_read_{idx}_type"),
                             self.vcx.mk_forall_expr(
                                 self.vcx.alloc_slice(self.self_decl),
                                 self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[read.apply(self.vcx, [self.self_ex])])]),
@@ -507,7 +507,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
 
                 let cons_read = read.apply(self.vcx, [cons_call_with_qvars]);
                 self.axioms.push(self.vcx.mk_domain_axiom(
-                    vir::vir_format!(self.vcx, "ax_{base}_cons_read_{idx}"),
+                    vir::vir_format_identifier!(self.vcx, "ax_{base}_cons_read_{idx}"),
                     self.vcx.mk_forall_expr(
                         cons_qvars,
                         self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[cons_call_with_qvars])]),
@@ -516,7 +516,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                 ));
 
                 // Write
-                let name = vir::vir_format!(self.vcx, "{base}_write_{idx}");
+                let name = vir::vir_format_identifier!(self.vcx, "{base}_write_{idx}");
                 let args = self.vcx.alloc_array(&[self.self_ty, field_ty.ty]);
                 let write = FunctionIdent::new(
                     name,
@@ -545,7 +545,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     cons_call_with_reads
                 };
                 self.axioms.push(self.vcx.mk_domain_axiom(
-                    vir::vir_format!(self.vcx, "ax_{base}_cons"),
+                    vir::vir_format_identifier!(self.vcx, "ax_{base}_cons"),
                     self.vcx.mk_forall_expr(
                         self.self_decl,
                         self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[trigger])]),
@@ -566,7 +566,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
                     let rhs = if wi == ri { val } else { read.read.apply(self.vcx, [self.self_ex]) };
                     self.axioms.push(
                         self.vcx.mk_domain_axiom(
-                            vir::vir_format!(self.vcx, "ax_{base}_write_{wi}_read_{ri}"),
+                            vir::vir_format_identifier!(self.vcx, "ax_{base}_write_{wi}_read_{ri}"),
                             self.vcx.mk_forall_expr(
                                 self.vcx.alloc_slice(&[self.self_decl[0], decl]),
                                 self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[write_read])]),
@@ -584,7 +584,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         &mut self,
         discr_ty: vir::Type<'vir>,
     ) -> FunctionIdent<'vir, UnaryArity<'vir>> {
-        let name = vir::vir_format!(self.vcx, "{}_discr", self.domain.name());
+        let name = vir::vir_format_identifier!(self.vcx, "{}_discr", self.domain.name());
         let types = self.vcx.alloc_array(&[self.self_ty]);
         let snap_to_discr_snap = FunctionIdent::new(name, UnaryArity::new(types), discr_ty);
         self.functions
@@ -604,7 +604,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             let discr_vals_eq: Vec<_> = discr_vals.iter().map(|val| self.vcx.mk_eq_expr(discr_prim, *val)).collect();
             let body = self.vcx.mk_disj(&discr_vals_eq);
             self.axioms.push(self.vcx.mk_domain_axiom(
-                vir::vir_format!(self.vcx, "{}_discr_values", self.domain.name()),
+                vir::vir_format_identifier!(self.vcx, "{}_discr_values", self.domain.name()),
                 self.vcx.mk_forall_expr(
                     self.self_decl,
                     // TODO: should we use `discr` instead of `discr_prim` here?
@@ -631,7 +631,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     ) -> vir::DomainAxiom<'vir> {
         let lower = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, lower, exp);
         let upper = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, exp, upper);
-        self.vcx.mk_domain_axiom(vir::vir_format!(self.vcx, "{base}_bounds"), self.vcx.mk_forall_expr(
+        self.vcx.mk_domain_axiom(vir::vir_format_identifier!(self.vcx, "{base}_bounds"), self.vcx.mk_forall_expr(
             self.self_decl,
             self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[exp])]),
             self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lower, upper)
@@ -663,7 +663,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
             self.axioms.push(
                 self.vcx.mk_domain_axiom(
-                    vir::vir_format!(self.vcx, "ax_typeof_{}", self.domain.name()),
+                    vir::vir_format_identifier!(self.vcx, "ax_typeof_{}", self.domain.name()),
                     self.vcx.mk_forall_expr(
                         self.self_decl,
                         self.vcx.alloc_slice(

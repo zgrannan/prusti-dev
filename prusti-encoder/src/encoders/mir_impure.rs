@@ -95,7 +95,7 @@ impl TaskEncoder for MirImpureEnc {
             let caller = caller_def_id
                 .map(|id| format!("{}_{}", id.krate, id.index.index()))
                 .unwrap_or_default();
-            let method_name = vir::vir_format!(
+            let method_name = vir::vir_format_identifier!(
                 vcx,
                 "m_{}{extra}_CALLER_{caller}",
                 vcx.tcx().item_name(def_id)
@@ -563,12 +563,12 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         local_ty.function_unreachable,
                         &[],
                     ), |prev, source| self.vcx.alloc(vir::ExprData::Ternary(self.vcx.alloc(vir::TernaryData {
-                        cond: self.vcx.mk_local_ex(vir::vir_format!(self.vcx, "_reach_bb{}", source.0.as_usize())),
-                        then: self.vcx.mk_local_ex(vir::vir_format!(self.vcx, "_{}s_{}", phi_node.local.as_usize(), source.1)),
+                        cond: self.vcx.mk_local_ex(vir::vir_format_identifier!(self.vcx, "_reach_bb{}", source.0.as_usize())),
+                        then: self.vcx.mk_local_ex(vir::vir_format_identifier!(self.vcx, "_{}s_{}", phi_node.local.as_usize(), source.1)),
                         else_: prev,
                     }))));
                 phi_stmts.push(vir::StmtData::LocalDecl(self.vcx.alloc(vir::LocalDeclData {
-                    name: vir::vir_format!(self.vcx, "_{}s_{}", phi_node.local.as_usize(), phi_node.new_version),
+                    name: vir::vir_format_identifier!(self.vcx, "_{}s_{}", phi_node.local.as_usize(), phi_node.new_version),
                     ty: self.local_types[phi_node.local].snapshot,
                     expr: Some(expr),
                 })));
@@ -624,8 +624,8 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 //let ssa_update = self.ssa_analysis.updates.get(&location).cloned().unwrap();
                 //assert!(ssa_update.local == dest.local);
 
-                //let old_name_s = vir::vir_format!(self.vcx, "_{}s_{}", dest.local.index(), ssa_update.old_version);
-                //let name_s = vir::vir_format!(self.vcx, "_{}s_{}", dest.local.index(), ssa_update.new_version);
+                //let old_name_s = vir::vir_format_identifier!(self.vcx, "_{}s_{}", dest.local.index(), ssa_update.old_version);
+                //let name_s = vir::vir_format_identifier!(self.vcx, "_{}s_{}", dest.local.index(), ssa_update.new_version);
                 //let ty_s = self.local_types[ssa_update.local].snapshot;
 
                 // What are we assigning to?
@@ -678,7 +678,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                         /*
                         assert!(source.projection.is_empty());
                         let source_version = self.ssa_analysis.version.get(&(location, source.local)).unwrap();
-                        let source_name = vir::vir_format!(self.vcx, "_{}s_{}", source.local.index(), source_version);
+                        let source_name = vir::vir_format_identifier!(self.vcx, "_{}s_{}", source.local.index(), source_version);
 
                         let unop_function = self.deps.require_ref::<crate::encoders::MirBuiltinEnc>(
                             crate::encoders::MirBuiltinEncTask::UnOp(
@@ -801,7 +801,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
             }
             mir::TerminatorKind::SwitchInt { discr, targets } => {
                 //let discr_version = self.ssa_analysis.version.get(&(location, discr.local)).unwrap();
-                //let discr_name = vir::vir_format!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
+                //let discr_name = vir::vir_format_identifier!(self.vcx, "_{}s_{}", discr.local.index(), discr_version);
                 let discr_ty_rs = discr.ty(self.local_decls, self.vcx.tcx());
                 let discr_ty = self
                     .deps

@@ -122,6 +122,11 @@ macro_rules! vir_format {
 }
 
 #[macro_export]
+macro_rules! vir_format_identifier {
+    ($vcx:expr, $($arg:tt)*) => { $crate::ViperIdent::sanitize($vcx, format!($($arg)*)) };
+}
+
+#[macro_export]
 macro_rules! vir_type {
     ($vcx:expr; Bool) => { & $crate::TypeData::Bool };
     ($vcx:expr; Ref) => { & $crate::TypeData::Ref };
@@ -248,7 +253,7 @@ macro_rules! vir_domain {
         let mut functions = vec![];
         $crate::vir_domain_members!($vcx; axioms; functions; $($member)*);
         $vcx.mk_domain(
-            $crate::vir_ident!($vcx; $name),
+            $crate::ViperIdent::new($crate::vir_ident!($vcx; $name)),
             &[],
             $vcx.alloc_slice(&axioms),
             $vcx.alloc_slice(&functions),
