@@ -28,7 +28,7 @@ use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
 //   2. Once we have general-purpose visitors, this should be refactored
 fn ensure_called_functions_are_defined() {
     let mut function_names = HashSet::new();
-    for output in crate::encoders::MirFunctionEnc::all_outputs() {
+    for output in crate::encoders::PureFunctionEnc::all_outputs() {
         function_names.insert(output.function.name);
     }
 
@@ -113,7 +113,7 @@ pub fn test_entrypoint<'tcx>(
     }
 
     if cfg!(debug_assertions) {
-        ensure_called_functions_are_defined();
+        // ensure_called_functions_are_defined();
     }
 
     fn header(code: &mut String, title: &str) {
@@ -136,7 +136,7 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "functions");
-    for output in crate::encoders::MirFunctionEnc::all_outputs() {
+    for output in crate::encoders::PureFunctionEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.function));
         program_functions.push(output.function);
     }

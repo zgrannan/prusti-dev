@@ -11,15 +11,8 @@ use super::{
     lifted::{
         cast::{CastArgs, PureGenericCastEnc},
         func_app_ty_params::LiftedFuncAppTyParamsEnc,
-    },
-    MirFunctionEnc,
+    }, PureFunctionEnc,
 };
-
-#[cfg(feature = "mono_function_encoding")]
-type PureFunctionEnc = super::mono::mir_pure_function::MirMonoFunctionEnc;
-
-#[cfg(not(feature = "mono_function_encoding"))]
-type PureFunctionEnc = super::MirFunctionEnc;
 
 /// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
 /// applications of Rust functions annotated as pure.

@@ -31,17 +31,22 @@ impl <'vir> ViperIdent<'vir> {
         self.0
     }
 }
+fn sanitize_char(c: char) -> Option<String> {
+    match c {
+        '<' => Some("$lt$".to_string()),
+        '>' => Some("$gt$".to_string()),
+        ' ' => Some("$space$".to_string()),
+        ',' => Some("$comma$".to_string()),
+        _ => None,
+    }
+}
 
 fn sanitize_str(s: &str) -> String {
     s.chars()
-        .map(|c| match c {
-            '<' => "$lt".to_string(),
-            '>' => "$gt".to_string(),
-            _ => c.to_string(),
-        })
+        .map(|c| sanitize_char(c).unwrap_or_else(|| c.to_string()))
         .collect()
 }
 
 fn is_valid_identifier(s: &str) -> bool {
-    s.chars().all(|c| c != '<' && c != '>')
+    s.chars().all(|c| sanitize_char(c).is_none())
 }

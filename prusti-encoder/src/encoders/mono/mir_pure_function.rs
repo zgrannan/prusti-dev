@@ -10,9 +10,9 @@ use crate::encoders::{
         ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc},
     },
     mir_pure::PureKind,
-    mir_pure_function::{MirFunctionEncError, MirFunctionEncOutput, MirFunctionEncOutputRef},
+    mir_pure_function::{MirFunctionEnc, MirFunctionEncError, MirFunctionEncOutput, MirFunctionEncOutputRef},
     most_generic_ty::extract_type_params,
-    GenericEnc, MirFunctionEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc,
+    GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc,
 };
 
 pub struct MirMonoFunctionEnc;

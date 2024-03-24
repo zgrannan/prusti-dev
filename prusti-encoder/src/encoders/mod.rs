@@ -11,6 +11,12 @@ mod r#type;
 mod r#const;
 mod mono;
 
+#[cfg(feature = "mono_function_encoding")]
+pub type PureFunctionEnc = mono::mir_pure_function::MirMonoFunctionEnc;
+
+#[cfg(not(feature = "mono_function_encoding"))]
+pub type PureFunctionEnc = super::MirFunctionEnc;
+
 pub use pure::*;
 pub use pure::spec::MirSpecEnc;
 pub use local_def::*;
@@ -43,5 +49,3 @@ pub use viper_tuple::{
     ViperTupleEncOutput,
 };
 pub use r#const::ConstEnc;
-
-pub use mir_pure_function::MirFunctionEnc;
