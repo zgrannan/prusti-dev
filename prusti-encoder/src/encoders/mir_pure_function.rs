@@ -1,17 +1,15 @@
-use prusti_rustc_interface::{middle::{mir, ty::{self, GenericArgs}}, span::def_id::DefId};
+use prusti_rustc_interface::{middle::{mir, ty::{self, GenericArgs, Ty}}, span::def_id::DefId};
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{Reify, FunctionIdent, UnknownArity, CallableIdent};
+use vir::{CallableIdent, ExprGen, FunctionIdent, Reify, UnknownArity};
 
 use crate::encoders::{
-    domain::DomainEnc,
-    lifted::{
+    domain::DomainEnc, lifted::{
         func_def_ty_params::LiftedTyParamsEnc,
         ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}
-    },
-    mir_pure::PureKind,
+    }, mir_pure::PureKind,
     most_generic_ty::extract_type_params,
-    GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
+    GenericEnc, LocalDef, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
 };
 
 pub struct MirFunctionEnc;
@@ -123,18 +121,15 @@ impl TaskEncoder for MirFunctionEnc {
                 Some(expr)
             };
 
-            let input_tys = vcx.tcx().fn_sig(def_id)
-                .instantiate_identity()
-                .inputs()
-                .iter()
-                .map(|i| i.skip_binder())
-                .copied()
-                .collect::<Vec<_>>();
             let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
-            let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
-                let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
-                let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
-                let lifted_ty = deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(*ty).unwrap();
+            let fn_sig = vcx.tcx().fn_sig(def_id)
+                .instantiate_identity();
+
+            // Adds an assertion connecting the type of an argument (or return) of the function
+            // with the appropriate type based on the param, e.g. in f<T, U>(u: U) -> T, this would
+            // be called to require that the type of `u` be `U`
+            let mut mk_type_assertion = |vir_arg: ExprGen<'vir, _, _>, ty: Ty<'tcx>| {
+                let lifted_ty = deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(ty).unwrap();
                 match lifted_ty  {
                     LiftedTy::Generic(generic) => {
                         Some(
@@ -144,8 +139,12 @@ impl TaskEncoder for MirFunctionEnc {
                             )
                         )
                     },
+                    // When the instantiated type constructor doesn't take any
+                    // arguments, the type of the argument is known by the
+                    // definition of its `typeof_funtion`, therefore it's not
+                    // necessary to include an explicit assertion
                     LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
-                        let domain_ref = deps.require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), *ty).0).unwrap();
+                        let domain_ref = deps.require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), ty).0).unwrap();
                         Some(
                             vcx.mk_eq_expr(
                                 domain_ref.typeof_function.apply(vcx, [vir_arg]),
@@ -155,13 +154,36 @@ impl TaskEncoder for MirFunctionEnc {
                     }
                     _ => None
                 }
-            });
+            };
 
+            let input_tys = fn_sig
+                .inputs()
+                .iter()
+                .map(|i| i.skip_binder())
+                .copied()
+                .collect::<Vec<_>>();
+
+            let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
+                let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
+                let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
+                mk_type_assertion(vir_arg, *ty)
+            });
+            let mut pres = spec.pres;
+            pres.extend(type_preconditions);
+
+            let type_postcondition = mk_type_assertion(
+                vcx.mk_result(
+                    return_type.snapshot
+                ),
+                fn_sig.output().skip_binder()
+            );
+            let mut posts = spec.posts;
+            if let Some(pc) = type_postcondition {
+                posts.push(pc);
+            }
 
             tracing::debug!("finished {def_id:?}");
 
-            let mut pres = spec.pres;
-            pres.extend(type_preconditions);
 
             Ok((
                 MirFunctionEncOutput {
@@ -170,7 +192,7 @@ impl TaskEncoder for MirFunctionEnc {
                         vcx.alloc_slice(&func_args),
                         return_type.snapshot,
                         vcx.alloc_slice(&pres),
-                        vcx.alloc_slice(&spec.posts),
+                        vcx.alloc_slice(&posts),
                         expr
                     ),
                 },

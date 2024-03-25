@@ -15,7 +15,7 @@ mod mono;
 pub type PureFunctionEnc = mono::mir_pure_function::MirMonoFunctionEnc;
 
 #[cfg(not(feature = "mono_function_encoding"))]
-pub type PureFunctionEnc = super::MirFunctionEnc;
+pub type PureFunctionEnc = mir_pure_function::MirFunctionEnc;
 
 pub use pure::*;
 pub use pure::spec::MirSpecEnc;
