@@ -62,7 +62,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
 
     /// Obtains the signature of the function. If we are monomoprhising function
     /// calls, then the signature of the monomorphised function is returned.
-    /// Otherwise, the signature of the original function is returned (`substs``
+    /// Otherwise, the signature of the original function is returned (`substs`
     /// and `param_env` are therefore ignored).
     fn get_fn_sig(
         &self,
