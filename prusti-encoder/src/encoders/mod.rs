@@ -28,6 +28,7 @@ pub use mir_builtin::{
 };
 pub use mir_impure::MirImpureEnc;
 pub use mir_pure::{
+    PureKind,
     MirPureEnc,
     MirPureEncTask,
 };

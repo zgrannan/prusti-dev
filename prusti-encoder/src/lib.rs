@@ -8,6 +8,7 @@ extern crate rustc_serialize;
 extern crate rustc_type_ir;
 
 mod encoders;
+mod encoder_traits;
 pub mod request;
 
 use std::collections::HashSet;

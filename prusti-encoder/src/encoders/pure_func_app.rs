@@ -88,7 +88,6 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
         let sig = self.get_fn_sig(def_id, substs, param_env);
-        eprintln!("Substs for {} : {:?}", self.vcx().tcx().def_path_str(def_id), substs);
         let fn_arg_tys = sig
             .inputs()
             .iter()
