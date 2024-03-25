@@ -94,27 +94,18 @@ impl Debug for ConstData {
     }
 }
 
-pub fn fmt_domain_with_extras<'vir, Curr, Next>(
-    f: &mut Formatter<'_>,
-    domain: &DomainGenData<'vir, Curr, Next>,
-    extra_functions: &Vec<DomainFunction<'vir>>,
-    extra_axioms: &Vec<DomainAxiomGen<'vir, Curr, Next>>
-) -> FmtResult {
-    write!(f, "domain {}", domain.name)?;
-    if !domain.typarams.is_empty() {
-        write!(f, "[")?;
-        fmt_comma_sep_display(f, &domain.typarams)?;
-        write!(f, "]")?;
-    }
-    writeln!(f, " {{")?;
-    domain.axioms.iter().chain(extra_axioms).map(|el| el.fmt(f)).collect::<FmtResult>()?;
-    domain.functions.iter().chain(extra_functions).map(|el| el.fmt(f)).collect::<FmtResult>()?;
-    writeln!(f, "}}")
-}
-
 impl<'vir, Curr, Next> Debug for DomainGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        fmt_domain_with_extras(f, self, &vec![], &vec![])
+        write!(f, "domain {}", self.name)?;
+        if !self.typarams.is_empty() {
+            write!(f, "[")?;
+            fmt_comma_sep_display(f, &self.typarams)?;
+            write!(f, "]")?;
+        }
+        writeln!(f, " {{")?;
+        self.axioms.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
+        self.functions.iter().map(|el| el.fmt(f)).collect::<FmtResult>()?;
+        writeln!(f, "}}")
     }
 }
 

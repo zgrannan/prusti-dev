@@ -193,7 +193,7 @@ impl TaskEncoder for CastFunctionsEnc {
                         make_concrete_ident.apply(
                             vcx,
                             &std::iter::once(make_generic_result)
-                                .chain(ty_params_from_snap.iter().map(|t| *t))
+                                .chain(ty_params_from_snap.iter().copied())
                                 .collect::<Vec<_>>(),
                         ),
                         make_generic_expr,

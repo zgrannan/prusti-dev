@@ -444,7 +444,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 let ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(ty).unwrap();
                 let viper_ref = self.encode_place(Place::from(source));
                 let args = ty_out.ref_to_args(self.vcx, viper_ref);
-                ty_out.ref_to_snap(self.vcx, &args)
+                ty_out.ref_to_snap(self.vcx, args)
             }
             mir::Operand::Constant(box constant) => self
                 .deps

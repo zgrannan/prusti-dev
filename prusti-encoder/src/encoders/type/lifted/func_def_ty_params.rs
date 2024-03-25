@@ -45,7 +45,7 @@ impl TaskEncoder for LiftedTyParamsEnc {
     }
 }
 
-fn unique<'tcx>(iter: impl IntoIterator<Item = ParamTy>) -> impl Iterator<Item = ParamTy> {
+fn unique(iter: impl IntoIterator<Item = ParamTy>) -> impl Iterator<Item = ParamTy> {
     let mut seen = HashSet::new();
     iter.into_iter().filter(move |item| seen.insert(*item))
 }

@@ -235,7 +235,7 @@ impl TaskEncoder for DomainEnc {
                 &TyKind::Ref(_, inner, _) => {
                     let generics = vec![deps.require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(inner).unwrap().expect_generic()];
                     let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
-                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(String::from(base_name)));
+                    enc.deps.emit_output_ref::<Self>(*task_key, enc.output_ref(base_name));
                     let field_tys = vec![FieldTy::from_ty(vcx, enc.deps, inner)];
                     let specifics = enc.mk_struct_specifics(field_tys);
                     Ok((Some(enc.finalize(task_key)), specifics))
@@ -299,7 +299,7 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
 
         let ty_param_accessors = deps.require_ref::<TyConstructorEnc>(*ty).unwrap().ty_param_accessors;
-        let generics: Vec<_> = generics.into_iter().zip(ty_param_accessors.into_iter().map(|t| *t)).collect();
+        let generics: Vec<_> = generics.into_iter().zip(ty_param_accessors.iter().copied()).collect();
 
         let mut functions = vec![];
 

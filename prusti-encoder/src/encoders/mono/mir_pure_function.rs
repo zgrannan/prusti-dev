@@ -1,31 +1,16 @@
-use prusti_rustc_interface::{
-    span::def_id::DefId,
-    middle::{mir, ty::GenericArgs}
-};
+use prusti_rustc_interface::{middle::ty::GenericArgs, span::def_id::DefId};
+use std::fmt::Write;
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, FunctionIdent, Reify, UnknownArity};
 
 use crate::{
     encoder_traits::function_enc::{FunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef},
-    encoders::{
-        domain::DomainEnc,
-        lifted::{
-            func_def_ty_params::LiftedTyParamsEnc,
-            ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc},
-        },
-        mir_pure::PureKind,
-        mir_pure_function::{
-            MirFunctionEnc, MirFunctionEncError,
-        },
-        most_generic_ty::extract_type_params,
-        GenericEnc, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc,
-    },
+    encoders::mir_pure_function::{MirFunctionEnc, MirFunctionEncError},
 };
 
 impl FunctionEnc for MirMonoFunctionEnc {
-    fn get_substs<'vir, 'tcx>(
-        _vcx: &'vir vir::VirCtxt<'tcx>,
+    fn get_substs<'tcx>(
+        _vcx: &vir::VirCtxt<'tcx>,
         task_key: &Self::TaskKey<'tcx>,
     ) -> &'tcx GenericArgs<'tcx> {
         task_key.1
@@ -35,8 +20,11 @@ impl FunctionEnc for MirMonoFunctionEnc {
         vcx: &'vir vir::VirCtxt<'tcx>,
         task_key: &Self::TaskKey<'tcx>,
     ) -> vir::ViperIdent<'vir> {
-        let (def_id, substs, caller_def_id)  = task_key;
-        let extra: String = substs.iter().map(|s| format!("_{s}")).collect();
+        let (def_id, substs, caller_def_id) = task_key;
+        let mut extra = String::new();
+        for s in substs.iter() {
+            write!(extra, "_{s}").unwrap();
+        }
         let (krate, index) = (caller_def_id.krate, caller_def_id.index.index());
         vir::vir_format_identifier!(
             vcx,

@@ -1,19 +1,13 @@
 use prusti_rustc_interface::{
-    middle::{mir, ty::{self, GenericArgs, Ty}},
+    middle::ty::{self, GenericArgs},
     span::def_id::DefId,
 };
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, ExprGen, FunctionIdent, Reify, UnknownArity};
 
-use crate::{encoder_traits::function_enc::{FunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef}, encoders::{
-    domain::DomainEnc, lifted::{
-        func_def_ty_params::LiftedTyParamsEnc,
-        ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc}
-    }, mir_pure::PureKind,
-    most_generic_ty::extract_type_params,
-    GenericEnc, LocalDef, MirLocalDefEnc, MirPureEnc, MirPureEncTask, MirSpecEnc
-}};
+use crate::encoder_traits::function_enc::{
+    FunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef,
+};
 
 pub struct MirFunctionEnc;
 
@@ -22,10 +16,9 @@ pub enum MirFunctionEncError {
     Unsupported,
 }
 
-
 impl FunctionEnc for MirFunctionEnc {
-    fn get_substs<'vir, 'tcx>(
-        vcx: &'vir vir::VirCtxt<'tcx>,
+    fn get_substs<'tcx>(
+        vcx: &vir::VirCtxt<'tcx>,
         def_id: &Self::TaskKey<'tcx>,
     ) -> &'tcx GenericArgs<'tcx> {
         GenericArgs::identity_for_item(vcx.tcx(), *def_id)
@@ -42,7 +35,7 @@ impl FunctionEnc for MirFunctionEnc {
         *task_key
     }
 
-    fn get_caller_def_id(task_key: &Self::TaskKey<'_>) -> Option<DefId> {
+    fn get_caller_def_id(_task_key: &Self::TaskKey<'_>) -> Option<DefId> {
         None
     }
 }
@@ -51,9 +44,9 @@ impl TaskEncoder for MirFunctionEnc {
     task_encoder::encoder_cache!(MirFunctionEnc);
 
     type TaskDescription<'vir> = (
-        DefId, // ID of the function
+        DefId,                    // ID of the function
         ty::GenericArgsRef<'vir>, // ? this should be the "signature", after applying the env/substs
-        DefId, // Caller DefID
+        DefId,                    // Caller DefID
     );
 
     type OutputRef<'vir> = MirFunctionEncOutputRef<'vir>;

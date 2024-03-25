@@ -84,7 +84,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         def_id: DefId,
         substs: &'tcx List<GenericArg<'tcx>>,
         param_env: ty::ParamEnv<'tcx>,
-        args: &Vec<mir::Operand<'tcx>>,
+        args: &[mir::Operand<'tcx>],
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
         let sig = self.get_fn_sig(def_id, substs, param_env);
@@ -109,7 +109,7 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
             .into_iter()
             .zip(args.iter())
             .map(|(expected_ty, oper)| {
-                let base = self.encode_operand(&encode_operand_args, oper);
+                let base = self.encode_operand(encode_operand_args, oper);
                 let oper_ty = oper.ty(self.local_decls_src(), self.vcx().tcx());
                 let caster = self
                     .deps()

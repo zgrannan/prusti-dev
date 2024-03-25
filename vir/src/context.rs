@@ -3,17 +3,8 @@ use prusti_rustc_interface::middle::ty;
 use std::cell::RefCell;
 use std::fmt::Debug;
 
-use crate::{data::*, debug_info::DEBUGINFO_NONE, gendata::*, genrefs::*, refs::*, Arity, CallableIdent, CheckTypes, FunctionIdent, MethodIdent, PredicateIdent};
+use crate::{data::*, refs::*};
 
-macro_rules! const_expr {
-    ($expr_kind:expr) => {
-        &ExprGenData {
-            kind: $expr_kind,
-            debug_info: DEBUGINFO_NONE
-        }
-    };
-
-}
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {

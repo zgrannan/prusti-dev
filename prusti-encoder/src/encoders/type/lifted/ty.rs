@@ -71,7 +71,7 @@ impl<'vir, 'tcx, Curr, Next> LiftedTy<'vir, vir::ExprGen<'vir, Curr, Next>> {
 
     pub fn expr(&self, vcx: &'vir vir::VirCtxt<'tcx>) -> vir::ExprGen<'vir, Curr, Next> {
         match self {
-            LiftedTy::Generic(g) => *g,
+            LiftedTy::Generic(g) => g,
             LiftedTy::Instantiated {
                 ty_constructor,
                 args,

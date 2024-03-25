@@ -44,10 +44,7 @@ impl<'tcx> MostGenericTy<'tcx> {
 
 
     pub fn is_generic(&self) -> bool {
-        match self.kind() {
-            TyKind::Param(_) => true,
-            _ => false,
-        }
+        matches!(self.kind(), TyKind::Param(_))
     }
 
     pub fn kind(&self) -> &TyKind<'tcx> {
@@ -100,7 +97,7 @@ impl<'tcx> From<MostGenericTy<'tcx>> for ty::Ty<'tcx> {
     }
 }
 
-fn to_placeholder<'tcx>(tcx: ty::TyCtxt<'tcx>, idx: Option<usize>) -> ty::Ty<'tcx> {
+fn to_placeholder(tcx: ty::TyCtxt<'_>, idx: Option<usize>) -> ty::Ty<'_> {
     let name = idx
         .map(|idx| format!("T{idx}"))
         .unwrap_or_else(|| String::from("T"));

@@ -71,7 +71,7 @@ impl TaskEncoder for TyConstructorEnc {
             let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; args.len()]);
             let type_function_ident = FunctionIdent::new(
                 vir::vir_format_identifier!(vcx, "s_{}_type", ty_constructor.get_vir_base_name(vcx)),
-                UnknownArity::new(&type_function_args),
+                UnknownArity::new(type_function_args),
                 generic_ref.type_snapshot,
             );
             functions.push(vcx.mk_domain_function(type_function_ident, false));

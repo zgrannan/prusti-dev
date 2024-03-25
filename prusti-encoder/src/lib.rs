@@ -11,67 +11,14 @@ mod encoders;
 mod encoder_traits;
 pub mod request;
 
-use std::collections::HashSet;
-
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::{
     middle::ty,
     hir,
 };
 use task_encoder::TaskEncoder;
-use vir::{FuncAppGen, MethodCallGenData};
 
 use crate::encoders::lifted::ty_constructor::TyConstructorEnc;
-
-// Ensures that all functions that are called in the generated Viper code are defined.
-// TODO:
-//   1. This function is not very robust, many cases aren't checked yet
-//   2. Once we have general-purpose visitors, this should be refactored
-fn ensure_called_functions_are_defined() {
-    let mut function_names = HashSet::new();
-    for output in crate::encoders::PureFunctionEnc::all_outputs() {
-        function_names.insert(output.function.name);
-    }
-
-    for output in crate::encoders::MirBuiltinEnc::all_outputs() {
-        function_names.insert(output.function.name);
-    }
-
-    for output in crate::encoders::lifted::cast_functions::CastFunctionsEnc::all_outputs() {
-        for cast_function in output {
-            function_names.insert(cast_function.name);
-        }
-    }
-
-    for output in crate::encoders::MirImpureEnc::all_outputs() {
-        if let Some(body) = output.method.body {
-            for block in body.blocks {
-                for stmt in block.stmts {
-                    match stmt  {
-                        vir::StmtGenData::MethodCall(MethodCallGenData {
-                            args,
-                            ..
-                        }) => {
-                            for arg in args.iter() {
-                                match arg.kind {
-                                    vir::ExprKindGenData::FuncApp(f) => {
-                                        assert!(function_names.contains(&f.target),
-                                        "Function {} is called but not defined. App debuginfo: {}",
-                                        f.target,
-                                        arg.debug_info
-                                    );
-                                    }
-                                    _ => {} // TODO
-                                }
-                            }
-                        }
-                        _ => {} // TODO
-                    }
-                }
-            }
-        }
-    }
-}
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -111,10 +58,6 @@ pub fn test_entrypoint<'tcx>(
                 tracing::debug!("unsupported item: {unsupported_item_kind:?}");
             }
         }
-    }
-
-    if cfg!(debug_assertions) {
-        // ensure_called_functions_are_defined();
     }
 
     fn header(code: &mut String, title: &str) {

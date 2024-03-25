@@ -16,7 +16,7 @@ use crate::{
 use jni::{errors::Result, objects::JObject, JNIEnv};
 use log::{debug, error, info};
 use std::path::PathBuf;
-use viper_sys::wrappers::{scala, viper::{silver::verifier::ConsistencyError as ViperConsistencyError, *}};
+use viper_sys::wrappers::{scala, viper::*};
 
 pub struct Verifier<'a> {
     env: &'a JNIEnv<'a>,
