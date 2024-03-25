@@ -5,8 +5,8 @@ use prusti_rustc_interface::{
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
-use crate::encoder_traits::function_enc::{
-    FunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef,
+use crate::encoder_traits::pure_function_enc::{
+    PureFunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef,
 };
 
 pub struct MirFunctionEnc;
@@ -16,7 +16,7 @@ pub enum MirFunctionEncError {
     Unsupported,
 }
 
-impl FunctionEnc for MirFunctionEnc {
+impl PureFunctionEnc for MirFunctionEnc {
     fn get_substs<'tcx>(
         vcx: &vir::VirCtxt<'tcx>,
         def_id: &Self::TaskKey<'tcx>,
@@ -72,6 +72,6 @@ impl TaskEncoder for MirFunctionEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        Ok((<Self as FunctionEnc>::encode(*task_key, deps), ()))
+        Ok((<Self as PureFunctionEnc>::encode(*task_key, deps), ()))
     }
 }

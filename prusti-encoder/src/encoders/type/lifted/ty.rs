@@ -81,30 +81,6 @@ impl<'vir, 'tcx, Curr, Next> LiftedTy<'vir, vir::ExprGen<'vir, Curr, Next>> {
 }
 
 impl<'vir, 'tcx> LiftedTy<'vir, LiftedGeneric<'vir>> {
-    /// Extracts the unique type parameters that should be used to instantiate
-    /// the type, removing duplicate instances of the same parameter. For
-    /// example, from type `Tuple3<T, U, Result<T, W>>` it would return `[T, U,
-    /// W]`.
-    ///
-    /// This should only be necessary when encoding monomorphized versions of
-    /// methods that may still contain generic types.
-    pub fn instantiation_arguments(&self) -> Vec<vir::LocalDecl<'vir>> {
-        match self {
-            LiftedTy::Generic(g) => vec![g.decl()],
-            LiftedTy::Instantiated { args, .. } => {
-                let mut buf = vec![];
-                for arg in args.iter() {
-                    for ia in arg.instantiation_arguments() {
-                        if !buf.contains(&ia) {
-                            buf.push(ia);
-                        }
-                    }
-                }
-                buf
-            }
-        }
-    }
-
     pub fn arg_exprs<Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,

@@ -4,6 +4,13 @@ use task_encoder::TaskEncoder;
 
 use super::generic::{LiftedGeneric, LiftedGenericEnc};
 
+/// Encodes the type parameters of a (possibly monomorphised) function
+/// definition. It takes as input a type substitution and returns the list of
+/// type parameters required for the function definition. For non-monomorphised
+/// functions, the type substitution will always be the identity substitution,
+/// and for monomorphised functions, the type substitution will be the
+/// substituion at the call site. The logic for both cases is the same: all
+/// unique type parameters are extracted from the substitution.
 pub struct LiftedTyParamsEnc;
 
 impl TaskEncoder for LiftedTyParamsEnc {

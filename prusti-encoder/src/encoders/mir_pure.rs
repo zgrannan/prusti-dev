@@ -471,7 +471,7 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
                 target,
                 ..
             } => {
-                let (def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
+                let (def_id, arg_tys) = self.get_def_id_and_caller_substs(func);
                 let expr = {
                     // A fn call in pure can only be one of two kinds: a
                     // call to another pure function, or a call to a prusti

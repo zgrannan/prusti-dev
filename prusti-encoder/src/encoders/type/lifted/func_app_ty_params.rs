@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use prusti_rustc_interface::middle::ty::{GenericArgsRef, ParamTy, Ty, TyKind};
+use prusti_rustc_interface::middle::ty::{GenericArgsRef, Ty, TyKind};
 use task_encoder::TaskEncoder;
 
 use super::{
@@ -8,7 +8,11 @@ use super::{
     ty::{EncodeGenericsAsLifted, LiftedTy, LiftedTyEnc},
 };
 
-/// Encodes the type parameters to a function application.
+/// Encodes the type parameters to a function application. If we are
+/// monomorphizing we must only pass to the function the type parameters that
+/// are unknown from the caller's persepective, i.e., all [`ParamTy`]s within
+/// the generics Otherwise, we simply encode each argument in the
+/// [`GenericArgsRef`]
 pub struct LiftedFuncAppTyParamsEnc;
 
 impl TaskEncoder for LiftedFuncAppTyParamsEnc {
@@ -40,10 +44,6 @@ impl TaskEncoder for LiftedFuncAppTyParamsEnc {
         vir::with_vcx(|vcx| {
             let tys = task_key.iter().filter_map(|arg| arg.as_type());
 
-            // If we are monomorphizing functions, we must only pass to the function
-            // the type parameters that are unknown from the caller's persepective, i.e.,
-            // all `ParamTy`s within the generics
-            // Otherwise, we simply encode each argument in the `GenericArgs`
             let ty_args: Vec<_> = if cfg!(feature = "mono_function_encoding") {
                 unique(tys.flat_map(extract_ty_params)).collect()
             } else {

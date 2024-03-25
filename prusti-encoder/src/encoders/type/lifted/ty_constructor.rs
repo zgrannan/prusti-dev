@@ -1,6 +1,6 @@
 use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{
-    vir_format_identifier, CallableIdent, DomainParamData, FunctionIdent, NullaryArityAny, UnaryArity, UnknownArity
+    vir_format_identifier, CallableIdent, FunctionIdent, UnaryArity, UnknownArity
 };
 
 use crate::encoders::{

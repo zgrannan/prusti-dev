@@ -4,11 +4,11 @@ use std::fmt::Write;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
 use crate::{
-    encoder_traits::function_enc::{FunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef},
+    encoder_traits::pure_function_enc::{PureFunctionEnc, MirFunctionEncOutput, MirFunctionEncOutputRef},
     encoders::mir_pure_function::{MirFunctionEnc, MirFunctionEncError},
 };
 
-impl FunctionEnc for MirMonoFunctionEnc {
+impl PureFunctionEnc for MirMonoFunctionEnc {
     fn get_substs<'tcx>(
         _vcx: &vir::VirCtxt<'tcx>,
         task_key: &Self::TaskKey<'tcx>,
@@ -42,6 +42,16 @@ impl FunctionEnc for MirMonoFunctionEnc {
     }
 }
 
+/// Encodes a function definition, monorphised based on the substitutions at the
+/// call site. Any parameters that are generic at the call are still generic in
+/// the encoded function; the monomorphised function takes as input all generic
+/// type arguments at the call site. For example consider the following:
+///
+/// fn id<T>(x: T) -> T { x }
+/// fn g<U, V>(pair: Pair<Option<U>, V>) -> Pair<Option<U>, V> { id(pair) }
+///
+/// The monomorphised encoding of `id` for the call in `g` would take type
+/// parameters `U`, `V`.
 pub struct MirMonoFunctionEnc;
 
 impl TaskEncoder for MirMonoFunctionEnc {
@@ -71,6 +81,6 @@ impl TaskEncoder for MirMonoFunctionEnc {
             Option<Self::OutputFullDependency<'vir>>,
         ),
     > {
-        Ok((<Self as FunctionEnc>::encode(*task_key, deps), ()))
+        Ok((<Self as PureFunctionEnc>::encode(*task_key, deps), ()))
     }
 }

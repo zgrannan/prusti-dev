@@ -14,7 +14,8 @@ use crate::encoders::{
     }, PureFunctionEnc,
 };
 
-/// Encoders (such as MirPureEnc, MirImpureEnc) implement this trait to encode
+/// Encoders (such as [`crate::encoders::MirPureEnc`],
+/// [`crate::encoders::MirImpureEnc`]) implement this trait to encode
 /// applications of Rust functions annotated as pure.
 pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
     /// Extra arguments required for the encoder to encode an argument to the
@@ -47,7 +48,8 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         operand: &mir::Operand<'tcx>,
     ) -> vir::ExprGen<'vir, Self::Curr, Self::Next>;
 
-    fn get_def_id_and_arg_tys(
+    /// Obtains the function's definition ID and the substitutions made at the callsite
+    fn get_def_id_and_caller_substs(
         &self,
         func: &mir::Operand<'tcx>,
     ) -> (DefId, &'tcx List<GenericArg<'tcx>>) {
@@ -58,6 +60,10 @@ pub trait PureFuncAppEnc<'tcx: 'vir, 'vir> {
         }
     }
 
+    /// Obtains the signature of the function. If we are monomoprhising function
+    /// calls, then the signature of the monomorphised function is returned.
+    /// Otherwise, the signature of the original function is returned (`substs``
+    /// and `param_env` are therefore ignored).
     fn get_fn_sig(
         &self,
         def_id: DefId,

@@ -31,7 +31,7 @@ pub struct MirImpureEncOutput<'vir> {
 }
 
 use crate::{encoder_traits::pure_func_app_enc::PureFuncAppEnc, encoders::{
-    lifted::aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
+    lifted::{aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, func_def_ty_params::LiftedTyParamsEnc}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
 }};
 
 const ENCODE_REACH_BB: bool = false;
@@ -99,17 +99,9 @@ impl TaskEncoder for MirImpureEnc {
                 vcx.tcx().item_name(def_id)
             );
             let mut args = vec![&vir::TypeData::Ref; arg_count];
-            let param_ty_decls = substs
-                .into_type_list(vcx.tcx())
-                .iter()
-                .flat_map(|ty| {
-                    deps.require_ref::<RustTyPredicatesEnc>(ty)
-                        .unwrap()
-                        .ty
-                        .instantiation_arguments()
-                        .into_iter()
-                })
-                .collect::<Vec<_>>();
+            let param_ty_decls = deps.require_local::<LiftedTyParamsEnc>(
+                substs
+            ).unwrap().iter().map(|g| g.decl()).collect::<Vec<_>>();
             args.extend(param_ty_decls.iter().map(|decl| decl.ty));
             let args = UnknownArity::new(vcx.alloc_slice(&args));
             let method_ref = MethodIdent::new(method_name, args);
@@ -853,7 +845,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for EncVisitor<'tcx, 'vir, 'enc
                 target,
                 ..
             } => {
-                let (func_def_id, arg_tys) = self.get_def_id_and_arg_tys(func);
+                let (func_def_id, arg_tys) = self.get_def_id_and_caller_substs(func);
                 let is_pure = crate::encoders::with_proc_spec(func_def_id, |spec|
                     spec.kind.is_pure().unwrap_or_default()
                 ).unwrap_or_default();

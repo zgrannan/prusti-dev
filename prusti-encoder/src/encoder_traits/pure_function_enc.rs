@@ -20,14 +20,19 @@ pub struct MirFunctionEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
 
-pub trait FunctionEnc
+/// Task encoders can implement this trait to encode pure functions. We use this
+/// code to support sharing code betwenn monomorphic and polymorhic encoding of
+/// functions; see [`MirMonoFunctionEnc`] and [`MirFunctionEnc`]
+pub trait PureFunctionEnc
 where
     Self: 'static + Sized + for <'vir> TaskEncoder<
         OutputRef<'vir> = MirFunctionEncOutputRef<'vir>
     >
 {
+    /// Obtains the function's [`DefId`] from the task key
     fn get_def_id(task_key: &Self::TaskKey<'_>) -> DefId;
 
+    /// Obtains the caller's [`DefId`] from the task key, if possible
     fn get_caller_def_id(task_key: &Self::TaskKey<'_>) -> Option<DefId>;
 
     /// Generates the identifier for the function; for a monomorphic encoding,

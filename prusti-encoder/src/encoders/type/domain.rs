@@ -118,8 +118,10 @@ impl TaskEncoder for DomainEnc {
     type OutputRef<'vir> = DomainEncOutputRef<'vir>;
     type OutputFullDependency<'vir> = DomainEncSpecifics<'vir>;
 
-    // A domain is not encoded here for Param types, the relevant
-    // domains are encoded in `GenericEnc`.
+    /// A domain is not encoded here for Param types, the relevant domains are
+    /// encoded in [`GenericEnc`]. The reason we do not encode the domain for
+    /// `Param` types here is because we don't want [`GenericEnc`] to depend on
+    /// this encoder: doing so would create a cyclic dependency.
     type OutputFullLocal<'vir> = Option<vir::Domain<'vir>>;
 
     type EncodingError = ();
@@ -279,7 +281,6 @@ struct DomainEncData<'vir, 'tcx, 'enc> {
     functions: Vec<vir::DomainFunction<'vir>>,
     generic_enc: GenericEncOutputRef<'vir>,
     deps: &'enc mut TaskEncoderDependencies<'vir>,
-    is_param_ty: bool
 }
 impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
     // Creation
@@ -329,7 +330,6 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
             deps,
             typeof_function,
             generic_enc,
-            is_param_ty: ty.is_generic(),
         }
     }
 
@@ -654,29 +654,27 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         }
     }
     fn finalize(mut self, ty: &MostGenericTy<'tcx>) -> vir::Domain<'vir> {
-        // If we're not encoding a type parameter, add an axiom relating
-        // the `typeof` function for this type to the type accessor of its casted version
-        if !self.is_param_ty {
-            let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
-            let generic_cast = self.deps.require_ref::<CastFunctionsEnc>(*ty).unwrap();
-            // This will always actually perform the cast
-            let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
-            self.axioms.push(
-                self.vcx.mk_domain_axiom(
-                    vir::vir_format_identifier!(self.vcx, "ax_typeof_{}", self.domain.name()),
-                    self.vcx.mk_forall_expr(
-                        self.self_decl,
-                        self.vcx.alloc_slice(
-                            &[self.vcx.mk_trigger(&[typeof_applied_to_self])]
-                        ),
-                        self.vcx.mk_eq_expr(
-                            typeof_applied_to_self,
-                            self.generic_enc.param_type_function.apply(self.vcx, [as_param])
-                        )
+        // Add an axiom relating the `typeof` function for this type to the type
+        // accessor of its casted version
+        let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
+        let generic_cast = self.deps.require_ref::<CastFunctionsEnc>(*ty).unwrap();
+        // This will always actually perform the cast
+        let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
+        self.axioms.push(
+            self.vcx.mk_domain_axiom(
+                vir::vir_format_identifier!(self.vcx, "ax_typeof_{}", self.domain.name()),
+                self.vcx.mk_forall_expr(
+                    self.self_decl,
+                    self.vcx.alloc_slice(
+                        &[self.vcx.mk_trigger(&[typeof_applied_to_self])]
+                    ),
+                    self.vcx.mk_eq_expr(
+                        typeof_applied_to_self,
+                        self.generic_enc.param_type_function.apply(self.vcx, [as_param])
                     )
                 )
-            );
-        }
+            )
+        );
         self.vcx.mk_domain(
             self.domain.name(),
             &[],
