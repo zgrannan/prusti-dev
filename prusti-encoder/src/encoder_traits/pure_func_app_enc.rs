@@ -7,7 +7,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use super::{
+use crate::encoders::{
     lifted::{
         cast::{CastArgs, PureGenericCastEnc},
         func_app_ty_params::LiftedFuncAppTyParamsEnc,

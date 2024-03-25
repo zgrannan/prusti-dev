@@ -262,8 +262,6 @@ impl<'a> Verifier<'a> {
 
                 let failure_context_wrapper = silver::verifier::FailureContext::with(self.env);
 
-                let has_identifier_wrapper = silver::ast::HasIdentifier::with(self.env);
-
                 let error_reason_wrapper = silver::verifier::ErrorReason::with(self.env);
 
                 for viper_error in viper_errors {

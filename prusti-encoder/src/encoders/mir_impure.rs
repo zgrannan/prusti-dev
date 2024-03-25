@@ -30,11 +30,9 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{
+use crate::{encoder_traits::pure_func_app_enc::PureFuncAppEnc, encoders::{
     lifted::aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask}, rust_ty_predicates::RustTyPredicatesEnc, ConstEnc, MirBuiltinEnc, MirLocalDefEnc, MirSpecEnc
-};
-
-use super::pure_func_app::PureFuncAppEnc;
+}};
 
 const ENCODE_REACH_BB: bool = false;
 
