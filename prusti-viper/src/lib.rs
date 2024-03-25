@@ -1,5 +1,5 @@
 use rustc_hash::FxHashMap;
-use viper::{self, AstFactory, Position};
+use viper::{self, AstFactory};
 
 pub fn program_to_viper<'vir, 'v>(program: vir::Program<'vir>, ast: &'vir AstFactory<'v>) -> viper::Program<'vir> {
     let mut domains: FxHashMap<_, _> = Default::default();

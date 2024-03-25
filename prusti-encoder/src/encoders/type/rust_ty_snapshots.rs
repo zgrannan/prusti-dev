@@ -30,10 +30,6 @@ impl TaskEncoder for RustTySnapshotsEnc {
 
     type TaskKey<'tcx> = Self::TaskDescription<'tcx>;
 
-    type OutputFullDependency<'vir> = ();
-
-    type EnqueueingError = ();
-
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {

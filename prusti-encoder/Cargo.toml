@@ -21,6 +21,6 @@ tracing = { path = "../tracing" }
 rustc_private = true
 
 [features]
-default = ["mono_function_encoding"]
+default = []
 vir_debug = ["vir/vir_debug"]
 mono_function_encoding = []
