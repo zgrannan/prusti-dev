@@ -103,7 +103,7 @@ impl<'vir> task_encoder::OutputRefAny for DomainEncOutputRef<'vir> {}
 use crate::encoders::{generic::GenericEncOutputRef, GenericEnc};
 
 use super::{
-    lifted::{cast_functions::CastFunctionsEnc, ty::{EncodeGenericsAsParamTy, LiftedTy, LiftedTyEnc}, ty_constructor::TyConstructorEnc}, most_generic_ty::{extract_type_params, MostGenericTy}, rust_ty_snapshots::RustTySnapshotsEnc
+    lifted::{cast_functions::CastFunctionsEnc, ty::{EncodeGenericsAsParamTy, LiftedTy, LiftedTyEnc}, ty_constructor::{TyConstructorEnc, TyConstructorEncOutputRef}}, most_generic_ty::{extract_type_params, MostGenericTy}, rust_ty_snapshots::RustTySnapshotsEnc
 };
 
 pub fn all_outputs<'vir>() -> Vec<vir::Domain<'vir>> {
@@ -654,27 +654,38 @@ impl<'vir, 'tcx: 'vir, 'enc> DomainEncData<'vir, 'tcx, 'enc> {
         }
     }
     fn finalize(mut self, ty: &MostGenericTy<'tcx>) -> vir::Domain<'vir> {
-        // Add an axiom relating the `typeof` function for this type to the type
-        // accessor of its casted version
-        let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
-        let generic_cast = self.deps.require_ref::<CastFunctionsEnc>(*ty).unwrap();
-        // This will always actually perform the cast
-        let as_param = generic_cast.cast_to_generic_if_necessary(self.vcx, self.self_ex);
-        self.axioms.push(
-            self.vcx.mk_domain_axiom(
-                vir::vir_format_identifier!(self.vcx, "ax_typeof_{}", self.domain.name()),
-                self.vcx.mk_forall_expr(
-                    self.self_decl,
-                    self.vcx.alloc_slice(
-                        &[self.vcx.mk_trigger(&[typeof_applied_to_self])]
-                    ),
-                    self.vcx.mk_eq_expr(
-                        typeof_applied_to_self,
-                        self.generic_enc.param_type_function.apply(self.vcx, [as_param])
+
+        // If this type has generics, assert a bijectivity axiom on the type
+        // constructor: For any value of type T, with type parameters T1, ...,
+        // Tn, the type T is exactly the application of C to those type
+        // parameters.
+        if !ty.generics().is_empty() {
+
+            let typeof_applied_to_self = self.typeof_function.apply(self.vcx, [self.self_ex]);
+
+            let TyConstructorEncOutputRef {ty_constructor, ty_param_accessors, ..} = self.deps.require_ref::<TyConstructorEnc>(*ty).unwrap();
+
+            let ty_params = ty_param_accessors
+                .iter()
+                .map(|ident| ident.apply(self.vcx, [typeof_applied_to_self]))
+                .collect::<Vec<_>>();
+
+            self.axioms.push(
+                self.vcx.mk_domain_axiom(
+                    vir::vir_format_identifier!(self.vcx, "ax_typeof_{}", self.domain.name()),
+                    self.vcx.mk_forall_expr(
+                        self.self_decl,
+                        self.vcx.alloc_slice(
+                            &[self.vcx.mk_trigger(&ty_params)]
+                        ),
+                        self.vcx.mk_eq_expr(
+                            typeof_applied_to_self,
+                            ty_constructor.apply(self.vcx, &ty_params)
+                        )
                     )
                 )
-            )
-        );
+            );
+        }
         self.vcx.mk_domain(
             self.domain.name(),
             &[],
