@@ -21,7 +21,7 @@ pub struct MirFunctionEncOutput<'vir> {
 }
 
 /// Task encoders can implement this trait to encode pure functions. We use this
-/// code to support sharing code betwenn monomorphic and polymorhic encoding of
+/// code to support sharing code between monomorphic and polymorphic encoding of
 /// functions; see [`MirMonoFunctionEnc`] and [`MirFunctionEnc`]
 pub trait PureFunctionEnc
 where
