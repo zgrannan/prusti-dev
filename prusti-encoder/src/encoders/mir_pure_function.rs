@@ -28,7 +28,7 @@ impl PureFunctionEnc for MirFunctionEnc {
         vcx: &'vir vir::VirCtxt<'tcx>,
         def_id: &Self::TaskKey<'tcx>,
     ) -> vir::ViperIdent<'vir> {
-        vir::vir_format_identifier!(vcx, "f_{}_CALLER", vcx.tcx().item_name(*def_id))
+        vir::vir_format_identifier!(vcx, "f_{}", vcx.tcx().item_name(*def_id))
     }
 
     fn get_def_id(task_key: &Self::TaskKey<'_>) -> DefId {
