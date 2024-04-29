@@ -24,4 +24,5 @@ bincode = "1.3"
 rustc_private = true
 
 [features]
+default = ["vir_debug"]
 vir_debug = []

@@ -14,9 +14,11 @@ use prusti_rustc_interface::{
 };
 use std::{cell::RefCell, rc::Rc, thread_local};
 
+use super::body::MirBody;
+
 thread_local! {
     pub static SHARED_STATE_WITH_FACTS:
-        RefCell<FxHashMap<LocalDefId, Rc<BodyWithBorrowckFacts<'static>>>> =
+        RefCell<FxHashMap<LocalDefId, MirBody<'static>>> =
         RefCell::new(FxHashMap::default());
     pub static SHARED_STATE_WITHOUT_FACTS:
         RefCell<FxHashMap<LocalDefId, mir::Body<'static>>> =
@@ -36,7 +38,7 @@ pub unsafe fn store_mir_body<'tcx>(
         unsafe { std::mem::transmute(body_with_facts) };
     SHARED_STATE_WITH_FACTS.with(|state| {
         let mut map = state.borrow_mut();
-        assert!(map.insert(def_id, Rc::new(body_with_facts)).is_none());
+        assert!(map.insert(def_id, MirBody::new(body_with_facts)).is_none());
     });
 }
 
@@ -47,8 +49,8 @@ pub unsafe fn store_mir_body<'tcx>(
 pub(crate) unsafe fn retrieve_mir_body<'tcx>(
     _tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
-) -> Rc<BodyWithBorrowckFacts<'tcx>> {
-    let body_with_facts: Rc<BodyWithBorrowckFacts<'static>> = SHARED_STATE_WITH_FACTS.with(|state| {
+) -> MirBody<'tcx> {
+    let body_with_facts: MirBody<'static> = SHARED_STATE_WITH_FACTS.with(|state| {
         let mut map = state.borrow_mut();
         map.get(&def_id).unwrap().clone()
     });

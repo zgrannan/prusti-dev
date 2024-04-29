@@ -26,14 +26,8 @@ impl<'tcx> SymbolicHeap<'tcx> {
         }
     }
 
-    pub fn new(body: &mir::Body<'tcx>) -> Self {
-        let mut heap = BTreeMap::new();
-        for (idx, local) in body.args_iter().enumerate() {
-            let place = Place::new(local, Vec::new());
-            let value = SymValue::Var(idx, body.local_decls[local].ty);
-            heap.insert(place, value);
-        }
-        SymbolicHeap(heap)
+    pub fn new() -> Self {
+        SymbolicHeap(BTreeMap::new())
     }
 
     pub fn insert(&mut self, place: Place<'tcx>, value: SymValue<'tcx>) {

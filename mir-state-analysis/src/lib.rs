@@ -16,9 +16,9 @@ pub mod symbolic_execution;
 pub mod havoc;
 
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
+use coupling_graph::BodyWithBorrowckFacts;
 use free_pcs::{FreePlaceCapabilitySummary, engine::FpcsEngine};
 use prusti_rustc_interface::{
-    borrowck::consumers::BodyWithBorrowckFacts,
     dataflow::{Analysis, ResultsCursor, Results},
     index::IndexVec,
     middle::{

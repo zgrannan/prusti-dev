@@ -5,13 +5,13 @@ pub mod path;
 pub mod path_conditions;
 
 use crate::{
+    coupling_graph::BodyWithBorrowckFacts,
     havoc::HavocData,
     symbolic_execution::{heap::SymbolicHeap, value::SymValue},
     BasicBlock,
 };
 use prusti_rustc_interface::{
     abi::FIRST_VARIANT,
-    borrowck::consumers::BodyWithBorrowckFacts,
     dataflow::{
         fmt::DebugWithContext, Analysis, AnalysisDomain, JoinSemiLattice, SwitchIntEdgeEffects,
     },
@@ -32,9 +32,7 @@ use crate::{
 };
 
 use self::{
-    path::{AcyclicPath, Path},
-    path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
-    value::AggregateKind,
+    path::{AcyclicPath, Path}, path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions}, place::Place, value::AggregateKind
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -43,8 +41,8 @@ pub enum Assertion<'tcx> {
     Precondition(DefId, Vec<SymValue<'tcx>>),
 }
 
-type ResultPath<'tcx> = (AcyclicPath, PathConditions<'tcx>, SymValue<'tcx>);
-type ResultAssertion<'tcx> = (AcyclicPath, PathConditions<'tcx>, Assertion<'tcx>);
+pub type ResultPath<'tcx> = (AcyclicPath, PathConditions<'tcx>, SymValue<'tcx>);
+pub type ResultAssertion<'tcx> = (AcyclicPath, PathConditions<'tcx>, Assertion<'tcx>);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SymbolicExecutionResult<'tcx> {
@@ -58,7 +56,7 @@ pub struct SymbolicExecution<'mir, 'tcx> {
     body: &'mir BodyWithBorrowckFacts<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
     havoc: HavocData,
-    pub symvars: Vec<ty::Ty<'tcx>>,
+    symvars: Vec<ty::Ty<'tcx>>,
 }
 
 impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
@@ -71,12 +69,8 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
             tcx,
             body,
             fpcs_analysis,
-            symvars: body
-                .body
-                .args_iter()
-                .map(|d| body.body.local_decls[d].ty)
-                .collect(),
             havoc: HavocData::new(&body.body),
+            symvars: Vec::with_capacity(body.body.arg_count),
         }
     }
 
@@ -186,10 +180,18 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
     pub fn execute(&mut self) -> SymbolicExecutionResult<'tcx> {
         let mut result_paths: BTreeSet<ResultPath<'tcx>> = BTreeSet::new();
         let mut assertions: BTreeSet<ResultAssertion<'tcx>> = BTreeSet::new();
+        let mut init_heap = SymbolicHeap::new();
+        for (idx, arg) in self.body.body.args_iter().enumerate() {
+            let local = &self.body.body.local_decls[arg];
+            let arg_ty = local.ty;
+            self.symvars.push(arg_ty);
+            let place = Place::new(arg, Vec::new());
+            init_heap.insert(place, SymValue::Var(idx, arg_ty));
+        }
         let mut paths = vec![Path::new(
             AcyclicPath::from_start_block(),
             PathConditions::new(),
-            SymbolicHeap::new(&self.body.body),
+            init_heap,
         )];
         while let Some(mut path) = paths.pop() {
             let block = path.last_block();
@@ -264,7 +266,6 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                     }
                     mir::Rvalue::Aggregate(kind, ops) => {
                         let ops = ops.iter().map(|op| heap.encode_operand(op)).collect();
-                        eprintln!("Encode aggregate {:?} {:?}", kind, ops);
                         SymValue::Aggregate(
                             AggregateKind::from_mir(
                                 *kind.clone(),
@@ -276,9 +277,9 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                     mir::Rvalue::Discriminant(target) => SymValue::Discriminant(Box::new(
                         heap.get(&(*target).into()).unwrap().clone(),
                     )),
-                    mir::Rvalue::Ref(_, _, place) => SymValue::Ref(Box::new(
-                        heap.get(&(*place).into()).unwrap().clone(),
-                    )),
+                    mir::Rvalue::Ref(_, _, place) => {
+                        SymValue::Ref(Box::new(heap.get(&(*place).into()).unwrap().clone()))
+                    }
                     _ => todo!("{rvalue:?}"),
                 };
                 heap.insert((*place).into(), sym_value);
@@ -324,15 +325,9 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                 for f in std::iter::once(&field).chain(rest.iter()) {
                     let mut value = value.clone();
                     for elem in f.projection.iter().skip(old_proj_len) {
-                        value = SymValue::Projection(
-                            elem.clone(),
-                            Box::new(value.clone()),
-                        );
+                        value = SymValue::Projection(elem.clone(), Box::new(value.clone()));
                     }
-                    heap.insert(
-                        f.deref().into(),
-                        value
-                    )
+                    heap.insert(f.deref().into(), value)
                 }
             }
             crate::free_pcs::RepackOp::Collapse(place, from, _) => {
@@ -348,7 +343,7 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                     SymValue::Aggregate(
                         AggregateKind::new(
                             place_ty.ty,
-                            from.ty(self.fpcs_analysis.repacker()).variant_index
+                            from.ty(self.fpcs_analysis.repacker()).variant_index,
                         ),
                         places,
                     ),

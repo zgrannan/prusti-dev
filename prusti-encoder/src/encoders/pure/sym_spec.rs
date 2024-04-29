@@ -2,23 +2,30 @@ use middle::mir::{
     interpret::{ConstValue, Scalar},
     Constant,
 };
-use mir_state_analysis::symbolic_execution::value::SymValue;
+use mir_state_analysis::symbolic_execution::{
+    path_conditions::PathConditions, value::SymValue, ResultPath,
+};
 use prusti_rustc_interface::{
     hir::lang_items,
     middle::{self, mir, ty},
     span::{def_id::DefId, DUMMY_SP},
 };
 
+use std::collections::BTreeSet;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
-use crate::encoders::{mir_pure::PureKind, CapabilityEnc, MirPureEnc, SymPureEnc};
+use crate::encoders::{
+    mir_pure::PureKind, sym_pure::SymPureEncResult, CapabilityEnc, MirPureEnc, SymPureEnc,
+};
 pub struct SymSpecEnc;
+
+type SymSpec<'tcx> = BTreeSet<SymPureEncResult<'tcx>>;
 
 #[derive(Clone)]
 pub struct SymSpecEncOutput<'vir> {
-    pub pres: Vec<SymValue<'vir>>,
-    pub posts: Vec<SymValue<'vir>>,
+    pub pres: SymSpec<'vir>,
+    pub posts: SymSpec<'vir>,
 }
 type SymSpecEncTask<'tcx> = (
     DefId,                    // The function annotated with specs
@@ -33,9 +40,6 @@ impl SymSpecEnc {
     ) -> SymSpecEncOutput<'tcx> {
         let (def_id, substs, caller_def_id) = task_key;
 
-        eprintln!("def_id: {:?}", def_id);
-
-
         vir::with_vcx(|vcx| {
             let panic_lang_items = [
                 vcx.tcx().lang_items().panic_fn().unwrap(),
@@ -48,8 +52,12 @@ impl SymSpecEnc {
                     literal: mir::ConstantKind::from_bool(vcx.tcx(), false),
                 };
                 return SymSpecEncOutput {
-                    pres: vec![SymValue::Constant(false_constant.into())],
-                    posts: vec![],
+                    pres: vec![SymPureEncResult::from_sym_value(SymValue::Constant(
+                        false_constant.into(),
+                    ))]
+                    .into_iter()
+                    .collect(),
+                    posts: BTreeSet::new(),
                 };
             }
             let specs = deps
@@ -69,22 +77,24 @@ impl SymSpecEnc {
                         caller_def_id: Some(def_id),
                     })
                 })
-                .collect::<Vec<_>>();
+                .collect::<BTreeSet<_>>();
 
             let posts = specs
                 .posts
                 .iter()
                 .map(|spec_def_id| {
-                    SymPureEnc::encode(crate::encoders::SymPureEncTask {
+                    let post = SymPureEnc::encode(crate::encoders::SymPureEncTask {
                         kind: PureKind::Spec,
                         parent_def_id: *spec_def_id,
                         param_env: vcx.tcx().param_env(spec_def_id),
                         substs,
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: Some(def_id),
-                    })
+                    });
+                    eprintln!("post: {:#?}", post);
+                    post
                 })
-                .collect::<Vec<_>>();
+                .collect::<BTreeSet<_>>();
             SymSpecEncOutput { pres, posts }
         })
     }

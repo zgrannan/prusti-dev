@@ -1,4 +1,6 @@
-use mir_state_analysis::symbolic_execution::value::SymValue;
+use mir_state_analysis::symbolic_execution::{
+    path_conditions::PathConditions, value::SymValue, ResultPath,
+};
 use prusti_rustc_interface::{
     ast,
     ast::Local,
@@ -7,12 +9,10 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
-use crate::encoders::{
-    CapabilityEnc, ConstEnc, MirBuiltinEnc, MirFunctionEnc, SnapshotEnc, ViperTupleEnc,
-};
+use crate::encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc};
 
 use super::{mir_base::MirBaseEnc, mir_pure::PureKind};
 
@@ -42,28 +42,37 @@ pub struct SymPureEncTask<'tcx> {
     pub caller_def_id: Option<DefId>,     // Caller/Use DefID
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SymPureEncResult<'tcx>(BTreeSet<(PathConditions<'tcx>, SymValue<'tcx>)>);
+
+impl<'tcx> SymPureEncResult<'tcx> {
+    pub fn from_sym_value(value: SymValue<'tcx>) -> Self {
+        Self(vec![(PathConditions::new(), value)].into_iter().collect())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(PathConditions<'tcx>, SymValue<'tcx>)> {
+        self.0.iter()
+    }
+}
+
 impl SymPureEnc {
-    pub fn encode<'tcx>(task: SymPureEncTask<'tcx>) -> SymValue<'tcx> {
+    pub fn encode<'tcx>(task: SymPureEncTask<'tcx>) -> SymPureEncResult<'tcx> {
         let kind = task.kind;
         let def_id = task.parent_def_id;
         let substs = task.substs;
         let caller_def_id = task.caller_def_id;
         vir::with_vcx(move |vcx| {
             let body = match kind {
-                PureKind::Closure => {
-                    vcx.body_mut()
-                        .get_closure_body(def_id, substs, caller_def_id.unwrap())
-                }
-                PureKind::Spec => {
-                    vcx.body_mut()
-                        .get_spec_body(def_id, substs, caller_def_id.unwrap())
-                }
+                PureKind::Closure => vcx
+                    .body_mut()
+                    .get_closure_body(def_id, substs, caller_def_id),
+                PureKind::Spec => vcx.body_mut().get_spec_body(def_id, substs, caller_def_id),
                 PureKind::Pure => vcx
                     .body_mut()
                     .get_pure_fn_body(def_id, substs, caller_def_id),
                 PureKind::Constant(promoted) => todo!(),
             };
-            let body = &body.body();
+            let body = &*body.body();
             let mut fpcs_analysis = mir_state_analysis::run_free_pcs(body, vcx.tcx());
             fpcs_analysis.analysis_for_bb(mir::START_BLOCK);
             let symbolic_execution = mir_state_analysis::run_symbolic_execution(
@@ -71,7 +80,13 @@ impl SymPureEnc {
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
             );
-            symbolic_execution.paths.into_iter().next().unwrap().2 // TODO
+            SymPureEncResult(
+                symbolic_execution
+                    .paths
+                    .into_iter()
+                    .map(|(_, path_conditions, value)| (path_conditions, value))
+                    .collect(),
+            )
         })
     }
 }

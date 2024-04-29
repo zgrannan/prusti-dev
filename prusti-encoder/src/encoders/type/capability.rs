@@ -35,23 +35,23 @@ impl TaskEncoder for CapabilityEnc {
         Option<Self::OutputFullDependency<'vir>>,
     )> {
         vir::with_vcx(|vcx| {
-            let mut folder = RegionRenumberVisitor {
-                tcx: vcx.tcx(),
-                map: FxHashMap::default(),
-            };
-            let ty = task_key.fold_with(&mut folder);
-            let mut out = deps.require_ref::<PredicateEnc>(ty).unwrap();
-            let inverse: FxHashMap<_, _> = folder.map.iter().map(|(k, v)| (*v, *k)).collect();
-            out.ref_to_region_refs = out.ref_to_region_refs.into_iter().map(|(v, d)| {
-                // println!("backtranslate: {:?} -> {:?} ({d:?})", v, inverse[&v]);
-                let v = inverse[&v];
-                if v.is_var() {
-                    (v.as_var(), d)
-                } else {
-                    (ty::RegionVid::MAX, d)
-                }
-            }).collect();
-            deps.emit_output_ref::<Self>(*task_key, out);
+            // let mut folder = RegionRenumberVisitor {
+            //     tcx: vcx.tcx(),
+            //     map: FxHashMap::default(),
+            // };
+            // let ty = task_key.fold_with(&mut folder);
+            // let mut out = deps.require_ref::<PredicateEnc>(ty).unwrap();
+            // let inverse: FxHashMap<_, _> = folder.map.iter().map(|(k, v)| (*v, *k)).collect();
+            // out.ref_to_region_refs = out.ref_to_region_refs.into_iter().map(|(v, d)| {
+            //     // println!("backtranslate: {:?} -> {:?} ({d:?})", v, inverse[&v]);
+            //     let v = inverse[&v];
+            //     if v.is_var() {
+            //         (v.as_var(), d)
+            //     } else {
+            //         (ty::RegionVid::MAX, d)
+            //     }
+            // }).collect();
+            // deps.emit_output_ref::<Self>(*task_key, out);
             Ok(((), ()))
         })
     }

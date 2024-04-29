@@ -10,6 +10,13 @@ mod local_def;
 mod r#type;
 mod r#const;
 mod sym_pure;
+mod mono;
+
+#[cfg(feature = "mono_function_encoding")]
+pub type PureFunctionEnc = mono::mir_pure_function::MirMonoFunctionEnc;
+
+#[cfg(not(feature = "mono_function_encoding"))]
+pub type PureFunctionEnc = mir_pure_function::MirFunctionEnc;
 
 pub use pure::*;
 pub use pure::spec::MirSpecEnc;
@@ -22,6 +29,7 @@ pub use mir_builtin::{
 };
 pub use sym_impure::SymImpureEnc;
 pub use mir_pure::{
+    PureKind,
     MirPureEnc,
     MirPureEncTask,
 };
@@ -31,11 +39,11 @@ pub use spec::{
     SpecEncOutput,
     SpecEncTask,
 };
-pub(super) use spec::{init_def_spec, with_def_spec, with_proc_spec};
+pub(super) use spec::{init_def_spec, with_proc_spec};
 pub use snapshot::SnapshotEnc;
 pub use capability::CapabilityEnc;
 pub use predicate::{
-    all_outputs as PredicateEnc_all_outputs,
+    // all_outputs as PredicateEnc_all_outputs,
     PredicateEncOutputRef,
     PredicateEncOutput,
 };
@@ -45,5 +53,3 @@ pub use viper_tuple::{
     ViperTupleEncOutput,
 };
 pub use r#const::ConstEnc;
-
-pub use mir_pure_function::MirFunctionEnc;

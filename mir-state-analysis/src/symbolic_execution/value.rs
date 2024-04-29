@@ -8,11 +8,10 @@ use prusti_rustc_interface::{
 };
 
 use std::{
-    cmp::Ordering,
-    hash::{Hash, Hasher},
-    marker::PhantomData,
+    cmp::Ordering, collections::BTreeMap, hash::{Hash, Hasher}, marker::PhantomData
 };
 
+#[derive(Debug)]
 pub struct Ty<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
 
 impl<'tcx> Ty<'tcx> {
@@ -52,32 +51,38 @@ pub enum SymValue<'tcx> {
     Discriminant(Box<SymValue<'tcx>>),
 }
 
+pub type Substs<'tcx> = BTreeMap<usize, SymValue<'tcx>>;
+
 impl<'tcx> SymValue<'tcx> {
-    pub fn subst(self, substs: &[SymValue<'tcx>]) -> Self {
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+        eprintln!("subst {:?} with substs: {:?}", self, substs);
         match self {
-            SymValue::Var(idx, _) => substs[idx].clone(),
+            SymValue::Var(idx, ty) => {
+                assert_eq!(ty, substs[&idx].ty(tcx).rust_ty());
+                substs[&idx].clone()
+            }
             c @ SymValue::Constant(_) => c,
             SymValue::CheckedBinaryOp(ty, op, lhs, rhs) => SymValue::CheckedBinaryOp(
                 ty,
                 op,
-                Box::new(lhs.subst(substs)),
-                Box::new(rhs.subst(substs)),
+                Box::new(lhs.subst(tcx, substs)),
+                Box::new(rhs.subst(tcx, substs)),
             ),
             SymValue::BinaryOp(ty, op, lhs, rhs) => SymValue::BinaryOp(
                 ty,
                 op,
-                Box::new(lhs.subst(substs)),
-                Box::new(rhs.subst(substs)),
+                Box::new(lhs.subst(tcx, substs)),
+                Box::new(rhs.subst(tcx, substs)),
             ),
             SymValue::Projection(kind, val) => {
-                SymValue::Projection(kind, Box::new(val.subst(substs)))
+                SymValue::Projection(kind, Box::new(val.subst(tcx, substs)))
             }
             SymValue::Aggregate(ty, vals) => {
-                let vals = vals.into_iter().map(|v| v.subst(substs)).collect();
+                let vals = vals.into_iter().map(|v| v.subst(tcx, substs)).collect();
                 SymValue::Aggregate(ty, vals)
             }
-            SymValue::Discriminant(val) => SymValue::Discriminant(Box::new(val.subst(substs))),
-            SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(substs))),
+            SymValue::Discriminant(val) => SymValue::Discriminant(Box::new(val.subst(tcx, substs))),
+            SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(tcx, substs))),
         }
     }
 }
@@ -90,22 +95,23 @@ impl<'tcx> SymValue<'tcx> {
             SymValue::Constant(c) => Ty::new(c.ty(), None),
             SymValue::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
             SymValue::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValue::Projection(elem, val) => {
-                match elem {
-                    ProjectionElem::Deref => todo!(),
-                    ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
-                    ProjectionElem::Index(_) => todo!(),
-                    ProjectionElem::ConstantIndex { offset, min_length, from_end } => todo!(),
-                    ProjectionElem::Subslice { from, to, from_end } => todo!(),
-                    ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
-                    ProjectionElem::OpaqueCast(_) => todo!(),
-                }
-            }
+            SymValue::Projection(elem, val) => match elem {
+                ProjectionElem::Deref => todo!(),
+                ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
+                ProjectionElem::Index(_) => todo!(),
+                ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end,
+                } => todo!(),
+                ProjectionElem::Subslice { from, to, from_end } => todo!(),
+                ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
+                ProjectionElem::OpaqueCast(_) => todo!(),
+            },
             SymValue::Aggregate(kind, _) => kind.ty(),
-            SymValue::Discriminant(sym_val) => Ty::new(
-                sym_val.ty(tcx).rust_ty().discriminant_ty(tcx),
-                None,
-            ),
+            SymValue::Discriminant(sym_val) => {
+                Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
+            }
         }
     }
 }
@@ -167,12 +173,10 @@ pub struct AggregateKind<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
 impl<'tcx> AggregateKind<'tcx> {
     pub fn from_mir(kind: mir::AggregateKind<'tcx>, result_ty: ty::Ty<'tcx>) -> Self {
         let variant_idx = match kind {
-            mir::AggregateKind::Adt(_, vidx, _, _, _) => {
-                match result_ty.kind() {
-                    ty::TyKind::Adt(def, _) if def.is_enum() => Some(vidx),
-                    _ => None,
-                }
-            }
+            mir::AggregateKind::Adt(_, vidx, _, _, _) => match result_ty.kind() {
+                ty::TyKind::Adt(def, _) if def.is_enum() => Some(vidx),
+                _ => None,
+            },
             _ => None,
         };
         AggregateKind(result_ty, variant_idx)
@@ -185,5 +189,4 @@ impl<'tcx> AggregateKind<'tcx> {
     pub fn ty(&self) -> Ty<'tcx> {
         Ty(self.0, self.1)
     }
-
 }

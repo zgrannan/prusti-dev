@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::{cell::RefCell, fmt};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 use self::{
     outlives_info::OutlivesInfo, region_info::{map::RegionKind, RegionInfo}, shared_borrow_set::SharedBorrowSet,
@@ -14,21 +14,52 @@ use crate::{
     utils::{Place, PlaceRepacker},
 };
 use prusti_rustc_interface::{
-    borrowck::consumers::BodyWithBorrowckFacts,
     borrowck::consumers::{BorrowIndex, Borrows, calculate_borrows_out_of_scope_at_location},
+    borrowck::borrow_set::BorrowSet,
+    borrowck::consumers::{PoloniusInput, RegionInferenceContext, LocationTable, PoloniusOutput},
     data_structures::fx::FxHashMap,
     dataflow::{Analysis, ResultsCursor},
     index::IndexVec,
     data_structures::fx::FxIndexMap,
     middle::{
         mir::{Body, Location, Promoted, RETURN_PLACE, Local},
-        ty::{RegionVid, TyCtxt},
+        ty::{self, RegionVid, TyCtxt, GenericArgsRef, ParamEnv},
     },
 };
 
 pub(crate) mod shared_borrow_set;
 pub(crate) mod region_info;
 pub(crate) mod outlives_info;
+
+#[derive(Clone)]
+pub struct BodyWithBorrowckFacts<'tcx> {
+    pub body: Body<'tcx>,
+    pub promoted: IndexVec<Promoted, Body<'tcx>>,
+    pub borrow_set: Rc<BorrowSet<'tcx>>,
+    pub region_inference_context: Rc<RegionInferenceContext<'tcx>>,
+    pub input_facts: Option<Box<PoloniusInput>>,
+    pub location_table: Option<Rc<LocationTable>>,
+    pub output_facts: Option<Rc<PoloniusOutput>>,
+}
+
+impl <'tcx> BodyWithBorrowckFacts<'tcx> {
+    pub fn monomorphize(self,
+        tcx: ty::TyCtxt<'tcx>,
+        substs: GenericArgsRef<'tcx>,
+        param_env: ParamEnv<'tcx>,
+    ) -> Self {
+        let monomorphized_body = tcx.subst_and_normalize_erasing_regions(substs, param_env, ty::EarlyBinder::bind(self.body));
+        Self {
+            body: monomorphized_body,
+            promoted: self.promoted,
+            borrow_set: self.borrow_set,
+            region_inference_context: self.region_inference_context,
+            input_facts: self.input_facts,
+            location_table: self.location_table,
+            output_facts: self.output_facts,
+        }
+    }
+}
 
 pub struct CgContext<'a, 'tcx> {
     pub rp: PlaceRepacker<'a, 'tcx>,
@@ -53,6 +84,7 @@ impl fmt::Debug for CgContext<'_, '_> {
             .finish()
     }
 }
+
 
 impl<'a, 'tcx> CgContext<'a, 'tcx> {
     #[tracing::instrument(name = "CgContext::new", level = "debug", skip_all, ret)]

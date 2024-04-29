@@ -3,7 +3,7 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoderDependencies;
 
-use super::SnapshotEnc;
+use super::{rust_ty_snapshots::RustTySnapshotsEnc, SnapshotEnc};
 
 pub trait MirBaseEnc<'tcx: 'vir, 'vir: 'enc, 'enc> {
     fn get_local_decl(&self, local: Local) -> &LocalDecl<'tcx>;
@@ -22,7 +22,7 @@ pub trait MirBaseEnc<'tcx: 'vir, 'vir: 'enc, 'enc> {
                 name: "closure",
             })
         } else {
-            deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot
+            deps.require_ref::<RustTySnapshotsEnc>(ty).unwrap().generic_snapshot.snapshot
         }
     }
 }
