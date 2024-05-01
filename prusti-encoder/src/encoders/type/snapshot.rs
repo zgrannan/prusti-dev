@@ -104,9 +104,10 @@ impl TaskEncoder for SnapshotEnc {
                 }
                 TyKind::Ref(r, orig, m) => {
                     // TODO: handle `r`?
-                    let ty = Self::to_placeholder(vcx.tcx, None);
-                    let ty = vcx.tcx.mk_ty_from_kind(TyKind::Ref(vcx.tcx.lifetimes.re_erased, ty, m));
-                    (ty, vec![orig])
+                    // let ty = Self::to_placeholder(vcx.tcx, None);
+                    // let ty = vcx.tcx.mk_ty_from_kind(TyKind::Ref(vcx.tcx.lifetimes.re_erased, ty, m));
+                    // (ty, vec![orig])
+                    (orig, vec![])
                 }
                 _ => (*task_key, Vec::new()),
             };

@@ -1,4 +1,5 @@
 use prusti_rustc_interface::{
+    ast::Local,
     index::IndexVec,
     middle::{mir, ty},
     span::def_id::DefId,
@@ -11,6 +12,8 @@ use task_encoder::{
 use std::collections::HashMap;
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
 use crate::encoders::{ViperTupleEnc, CapabilityEnc, SnapshotEnc, MirFunctionEnc, MirBuiltinEnc, ConstEnc};
+
+use super::mir_base::MirBaseEnc;
 
 pub struct MirPureEnc;
 
@@ -99,9 +102,11 @@ impl TaskEncoder for MirPureEnc {
             let body = match kind {
                 PureKind::Closure => vcx.body.borrow_mut().get_closure_body(def_id, substs, caller_def_id),
                 PureKind::Spec => vcx.body.borrow_mut().get_spec_body(def_id, substs, caller_def_id),
-                PureKind::Pure => vcx.body.borrow_mut().get_pure_fn_body(def_id, substs, caller_def_id),
-                PureKind::Constant(promoted) => vcx.body.borrow_mut().get_promoted_constant_body(def_id, promoted)
+                PureKind::Pure => vcx.body.borrow_mut().get_pure_fn_body(def_id, substs, Some(caller_def_id)),
+                PureKind::Constant(promoted) => todo!()
             };
+
+            let body = &body.body().body;
 
             let expr_inner = Enc::new(vcx, task_key.0, def_id, &body, deps).encode_body();
 
@@ -116,7 +121,7 @@ impl TaskEncoder for MirPureEnc {
                     assert_eq!(lctx.0, def_id);
 
                     // check: are we providing the expected number of arguments?
-                    assert_eq!(lctx.1.len(), body.arg_count);
+                    // assert_eq!(lctx.1.len(), body.arg_count);
 
                     use vir::Reify;
                     expr_inner.kind.reify(vcx, lctx)
@@ -173,6 +178,16 @@ struct Enc<'tcx, 'vir: 'enc, 'enc>
     phi_ctr: usize,
 }
 
+impl <'tcx, 'vir, 'enc> MirBaseEnc<'tcx, 'vir, 'enc> for Enc<'tcx, 'vir, 'enc> {
+    fn get_local_decl(&self, local: mir::Local) -> &mir::LocalDecl<'tcx> {
+        &self.body.local_decls[local]
+    }
+
+    fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir> {
+        self.deps
+    }
+}
+
 impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
 {
     fn new(
@@ -203,21 +218,6 @@ impl<'tcx, 'vir: 'enc, 'enc> Enc<'tcx, 'vir, 'enc>
         version: usize,
     ) -> &'vir str {
         vir::vir_format!(self.vcx, "_{}_{}s_{}", self.encoding_depth, local.as_usize(), version)
-    }
-
-    fn get_ty_for_local(
-        &mut self,
-        local: mir::Local
-    ) -> vir::Type<'tcx> {
-        let ty = self.body.local_decls[local].ty;
-        if let ty::TyKind::Closure(..) = ty.kind() {
-            // TODO: Support closure types
-            &vir::TypeData::Unsupported(vir::UnsupportedType {
-                name: "closure",
-            })
-        } else {
-            self.deps.require_ref::<SnapshotEnc>(ty).unwrap().snapshot
-        }
     }
 
     fn mk_local_ex(

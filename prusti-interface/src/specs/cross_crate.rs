@@ -90,7 +90,8 @@ impl CrossCrateSpecs {
         let mut encoder = DefSpecsEncoder::new(env.tcx(), path)?;
         def_spec.proc_specs.encode(&mut encoder);
         def_spec.type_specs.encode(&mut encoder);
-        CrossCrateBodies::from(&env.body).encode(&mut encoder);
+        // todo!();
+        // CrossCrateBodies::from(&env.body).encode(&mut encoder);
         encoder.finish()
     }
 
@@ -107,11 +108,12 @@ impl CrossCrateSpecs {
         file.read_to_end(&mut data)?;
         let mut decoder = DefSpecsDecoder::new(env.tcx(), &data, path.clone(), crate_name);
 
-        let proc_specs = FxHashMap::decode(&mut decoder);
-        let type_specs = FxHashMap::decode(&mut decoder);
-        let mirs_of_specs = CrossCrateBodies::decode(&mut decoder);
-        def_spec.import_external(proc_specs, type_specs, env);
-        env.body.import_external_bodies(mirs_of_specs);
+        // todo!();
+        // let proc_specs = FxHashMap::decode(&mut decoder);
+        // let type_specs = FxHashMap::decode(&mut decoder);
+        // let mirs_of_specs = CrossCrateBodies::decode(&mut decoder);
+        // def_spec.import_external(proc_specs, type_specs, env);
+        // env.body.import_external_bodies(mirs_of_specs);
         Ok(())
     }
 }

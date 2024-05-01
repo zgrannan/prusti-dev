@@ -45,7 +45,7 @@ pub fn test_entrypoint<'tcx>(
 
                 if !(is_trusted && is_pure) {
                     let substs = ty::GenericArgs::identity_for_item(tcx, def_id);
-                    let res = crate::encoders::MirImpureEnc::encode((def_id, substs, None));
+                    let res = crate::encoders::SymImpureEnc::encode((def_id, substs, None));
                     assert!(res.is_ok());
                 }
             }
@@ -66,7 +66,7 @@ pub fn test_entrypoint<'tcx>(
     for (_, output) in crate::encoders::MirLocalFieldEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.field));
     }
-    for (_, output) in crate::encoders::MirImpureEnc::all_outputs() {
+    for (_, output) in crate::encoders::SymImpureEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.method));
     }
 

@@ -40,7 +40,7 @@ fn mir_borrowck<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> MirBorrowck<'tcx
     // (anon) const bodies at all, and if so, how to get them?
     if !is_anon_const {
         let consumer_opts = if is_spec_fn(tcx, def_id.to_def_id()) || config::no_verify() {
-            consumers::ConsumerOptions::RegionInferenceContext
+            consumers::ConsumerOptions::PoloniusOutputFacts
         } else {
             consumers::ConsumerOptions::PoloniusOutputFacts
         };

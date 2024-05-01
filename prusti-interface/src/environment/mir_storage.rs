@@ -12,11 +12,11 @@ use prusti_rustc_interface::{
     hir::def_id::LocalDefId,
     middle::{mir, ty::TyCtxt},
 };
-use std::{cell::RefCell, thread_local};
+use std::{cell::RefCell, rc::Rc, thread_local};
 
 thread_local! {
     pub static SHARED_STATE_WITH_FACTS:
-        RefCell<FxHashMap<LocalDefId, BodyWithBorrowckFacts<'static>>> =
+        RefCell<FxHashMap<LocalDefId, Rc<BodyWithBorrowckFacts<'static>>>> =
         RefCell::new(FxHashMap::default());
     pub static SHARED_STATE_WITHOUT_FACTS:
         RefCell<FxHashMap<LocalDefId, mir::Body<'static>>> =
@@ -36,7 +36,7 @@ pub unsafe fn store_mir_body<'tcx>(
         unsafe { std::mem::transmute(body_with_facts) };
     SHARED_STATE_WITH_FACTS.with(|state| {
         let mut map = state.borrow_mut();
-        assert!(map.insert(def_id, body_with_facts).is_none());
+        assert!(map.insert(def_id, Rc::new(body_with_facts)).is_none());
     });
 }
 
@@ -47,10 +47,10 @@ pub unsafe fn store_mir_body<'tcx>(
 pub(crate) unsafe fn retrieve_mir_body<'tcx>(
     _tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
-) -> BodyWithBorrowckFacts<'tcx> {
-    let body_with_facts: BodyWithBorrowckFacts<'static> = SHARED_STATE_WITH_FACTS.with(|state| {
+) -> Rc<BodyWithBorrowckFacts<'tcx>> {
+    let body_with_facts: Rc<BodyWithBorrowckFacts<'static>> = SHARED_STATE_WITH_FACTS.with(|state| {
         let mut map = state.borrow_mut();
-        map.remove(&def_id).unwrap()
+        map.get(&def_id).unwrap().clone()
     });
     // SAFETY: See the module level comment.
     unsafe { std::mem::transmute(body_with_facts) }

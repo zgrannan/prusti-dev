@@ -5,6 +5,7 @@ use prusti_rustc_interface::{
         mir,
         ty::{self, GenericArgsRef, TyCtxt},
     },
+    index::IndexVec,
     span::def_id::{DefId, LocalDefId},
 };
 use rustc_hash::FxHashMap;
@@ -14,17 +15,11 @@ use crate::environment::mir_storage;
 
 /// Stores any possible MIR body (from the compiler) that
 /// Prusti might want to work with. Cheap to clone
-#[derive(Clone, TyEncodable, TyDecodable)]
-pub struct MirBody<'tcx>(Rc<mir::Body<'tcx>>);
+#[derive(Clone)]
+pub struct MirBody<'tcx>(Rc<BodyWithBorrowckFacts<'tcx>>);
 impl<'tcx> MirBody<'tcx> {
-    pub fn body(&self) -> Rc<mir::Body<'tcx>> {
+    pub fn body(&self) -> Rc<BodyWithBorrowckFacts<'tcx>> {
         self.0.clone()
-    }
-}
-impl<'tcx> std::ops::Deref for MirBody<'tcx> {
-    type Target = mir::Body<'tcx>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -32,12 +27,12 @@ pub enum MirBodyAny<'tcx> {
     BodyOnly(MirBody<'tcx>),
     BodyWithBorrowckFacts(Rc<BodyWithBorrowckFacts<'tcx>>),
 }
-impl<'tcx> std::ops::Deref for MirBodyAny<'tcx> {
-    type Target = mir::Body<'tcx>;
-    fn deref(&self) -> &Self::Target {
+
+impl <'tcx> MirBodyAny<'tcx> {
+    pub fn local_decls(&self) -> &IndexVec<mir::Local, mir::LocalDecl<'tcx>> {
         match self {
-            MirBodyAny::BodyOnly(body) => body,
-            MirBodyAny::BodyWithBorrowckFacts(body) => &body.body,
+            MirBodyAny::BodyOnly(body) => &(*body.0).body.local_decls,
+            MirBodyAny::BodyWithBorrowckFacts(body) => &(**body).body.local_decls,
         }
     }
 }
@@ -134,7 +129,7 @@ impl<'tcx> EnvBody<'tcx> {
     ) -> Rc<BodyWithBorrowckFacts<'tcx>> {
         // SAFETY: This is safe because we are feeding in the same `tcx`
         // that was used to store the data.
-        Rc::new(unsafe { mir_storage::retrieve_mir_body(tcx, def_id) })
+        unsafe { mir_storage::retrieve_mir_body(tcx, def_id) }
     }
 
     /// Get local MIR body of spec or pure functions. Retrieves the body from
@@ -142,8 +137,8 @@ impl<'tcx> EnvBody<'tcx> {
     pub fn load_local_mir(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> MirBody<'tcx> {
         // SAFETY: This is safe because we are feeding in the same `tcx`
         // that was used to store the data.
-        let body = unsafe { mir_storage::retrieve_promoted_mir_body(tcx, def_id) };
-        MirBody(Rc::new(body))
+        let body = unsafe { mir_storage::retrieve_mir_body(tcx, def_id) };
+        MirBody(body)
     }
 
     fn get_monomorphised(
@@ -156,28 +151,6 @@ impl<'tcx> EnvBody<'tcx> {
             .borrow()
             .get(&(def_id, substs, caller_def_id))
             .cloned()
-    }
-    fn set_monomorphised(
-        &self,
-        def_id: DefId,
-        substs: GenericArgsRef<'tcx>,
-        caller_def_id: Option<DefId>,
-        body: MirBody<'tcx>,
-    ) -> MirBody<'tcx> {
-        if let Entry::Vacant(v) =
-            self.monomorphised_bodies
-                .borrow_mut()
-                .entry((def_id, substs, caller_def_id))
-        {
-            let param_env = self.tcx.param_env(caller_def_id.unwrap_or(def_id));
-            // TODO: figure out some other way to substitute without losing the region information
-            let body = self.tcx.erase_regions(body.0);
-            let monomorphised = self.tcx
-                    .subst_and_normalize_erasing_regions(substs, param_env, ty::EarlyBinder::bind(body));
-            v.insert(MirBody(monomorphised)).clone()
-        } else {
-            unreachable!()
-        }
     }
 
     /// Get the MIR body of a local impure function, without any substitutions.
@@ -229,8 +202,7 @@ impl<'tcx> EnvBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
             return body;
         }
-        let body = self.get_closure_body_identity(def_id);
-        self.set_monomorphised(def_id, substs, Some(caller_def_id), body)
+        self.get_closure_body_identity(def_id)
     }
 
     /// Get the MIR body of a local or external pure function,
@@ -239,13 +211,12 @@ impl<'tcx> EnvBody<'tcx> {
         &self,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
-        caller_def_id: DefId,
+        caller_def_id: Option<DefId>,
     ) -> MirBody<'tcx> {
-        if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
+        if let Some(body) = self.get_monomorphised(def_id, substs, caller_def_id) {
             return body;
         }
-        let body = self.pure_fns.expect(def_id);
-        self.set_monomorphised(def_id, substs, Some(caller_def_id), body)
+        self.pure_fns.expect(def_id)
     }
 
     /// Get the MIR body of a local or external expression (e.g. any spec or predicate),
@@ -259,11 +230,10 @@ impl<'tcx> EnvBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
             return body;
         }
-        let body = self
+        self
             .specs
             .get(def_id)
-            .unwrap_or_else(|| self.predicates.expect(def_id));
-        self.set_monomorphised(def_id, substs, Some(caller_def_id), body)
+            .unwrap_or_else(|| self.predicates.expect(def_id))
     }
 
     /// Get the MIR body of a local or external spec (pres/posts/pledges/type-specs),
@@ -277,15 +247,14 @@ impl<'tcx> EnvBody<'tcx> {
         if let Some(body) = self.get_monomorphised(def_id, substs, Some(caller_def_id)) {
             return body;
         }
-        let body = self.specs.expect(def_id);
-        self.set_monomorphised(def_id, substs, Some(caller_def_id), body)
+        self.specs.expect(def_id)
     }
 
-    pub fn get_promoted_constant_body(&self,  def_id: DefId, promoted: mir::Promoted) -> MirBody<'tcx> {
-       MirBody(Rc::new(
-            self.tcx.promoted_mir(def_id)[promoted].clone(),
-        ))
-    }
+    // pub fn get_promoted_constant_body(&self,  def_id: DefId, promoted: mir::Promoted) -> MirBody<'tcx> {
+    //    MirBody(Rc::new(
+    //         self.tcx.promoted_mir(def_id)[promoted].clone(),
+    //     ))
+    // }
 
     ///// Get Polonius facts of a local procedure.
     //pub fn local_mir_borrowck_facts(&self, def_id: LocalDefId) -> Rc<BorrowckFacts> {
@@ -352,7 +321,6 @@ impl<'tcx> EnvBody<'tcx> {
     }
 }
 
-#[derive(TyEncodable, TyDecodable)]
 pub(crate) struct CrossCrateBodies<'tcx> {
     pure_fns: FxHashMap<DefId, MirBody<'tcx>>,
     predicates: FxHashMap<DefId, MirBody<'tcx>>,

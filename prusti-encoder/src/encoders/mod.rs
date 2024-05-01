@@ -1,6 +1,7 @@
 mod generic;
+mod mir_base;
 mod mir_builtin;
-mod mir_impure;
+mod sym_impure;
 mod mir_pure;
 mod spec;
 mod mir_pure_function;
@@ -8,6 +9,7 @@ mod pure;
 mod local_def;
 mod r#type;
 mod r#const;
+mod sym_pure;
 
 pub use pure::*;
 pub use pure::spec::MirSpecEnc;
@@ -18,11 +20,12 @@ pub use mir_builtin::{
     MirBuiltinEnc,
     MirBuiltinEncTask,
 };
-pub use mir_impure::MirImpureEnc;
+pub use sym_impure::SymImpureEnc;
 pub use mir_pure::{
     MirPureEnc,
     MirPureEncTask,
 };
+pub use sym_pure::{SymPureEnc, SymPureEncTask};
 pub use spec::{
     SpecEnc,
     SpecEncOutput,

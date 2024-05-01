@@ -326,6 +326,7 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
             }
             Self::Comment(info) => write!(f, "// {}", info),
             Self::Dummy(info) => write!(f, "// {}", info),
+            StmtGenData::If(data) => write!(f, "if ({:?}) {{\n  {:?}\n}}", data.cond, data.then),
         }
     }
 }

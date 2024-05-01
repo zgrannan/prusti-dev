@@ -12,20 +12,32 @@ pub mod utils;
 pub mod coupling_graph;
 pub mod r#loop;
 pub mod combined_pcs;
+pub mod symbolic_execution;
+pub mod havoc;
 
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
 use free_pcs::{FreePlaceCapabilitySummary, engine::FpcsEngine};
 use prusti_rustc_interface::{
     borrowck::consumers::BodyWithBorrowckFacts,
-    dataflow::{Analysis, Results},
+    dataflow::{Analysis, ResultsCursor, Results},
     index::IndexVec,
     middle::{
         mir::{Body, Promoted, START_BLOCK, BasicBlock},
         ty::TyCtxt,
     },
 };
+use symbolic_execution::{SymbolicExecution, SymbolicExecutionResult};
 
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
+
+#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis))]
+pub fn run_symbolic_execution<'mir, 'tcx>(
+    mir: &'mir BodyWithBorrowckFacts<'tcx>,
+    tcx: TyCtxt<'tcx>,
+    fpcs_analysis: FpcsOutput<'mir, 'tcx>,
+) -> SymbolicExecutionResult<'tcx> {
+    SymbolicExecution::new(tcx, mir, fpcs_analysis).execute()
+}
 
 #[tracing::instrument(name = "run_free_pcs", level = "debug", skip(mir, tcx))]
 pub fn run_free_pcs<'mir, 'tcx>(

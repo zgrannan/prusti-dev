@@ -8,6 +8,7 @@ pub type ExprKindGen<'vir, Curr, Next> = &'vir crate::gendata::ExprKindGenData<'
 pub type ForallGen<'vir, Curr, Next> = &'vir crate::gendata::ForallGenData<'vir, Curr, Next>;
 pub type FuncAppGen<'vir, Curr, Next> = &'vir crate::gendata::FuncAppGenData<'vir, Curr, Next>;
 pub type FunctionGen<'vir, Curr, Next> = &'vir crate::gendata::FunctionGenData<'vir, Curr, Next>;
+pub type IfGen<'vir, Curr, Next> = &'vir crate::gendata::IfGenData<'vir, Curr, Next>;
 pub type GotoIfGen<'vir, Curr, Next> = &'vir crate::gendata::GotoIfGenData<'vir, Curr, Next>;
 pub type LetGen<'vir, Curr, Next> = &'vir crate::gendata::LetGenData<'vir, Curr, Next>;
 pub type MacroGen<'vir, Curr, Next> = &'vir crate::gendata::MacroGenData<'vir, Curr, Next>;

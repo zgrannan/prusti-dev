@@ -294,6 +294,14 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
+    pub fn mk_if_stmt<'vir, Curr, Next>(
+        &'vir self,
+        cond: ExprGen<'vir, Curr, Next>,
+        then: StmtGen<'vir, Curr, Next>,
+    ) -> StmtGen<'vir, Curr, Next> {
+        self.alloc(StmtGenData::If(self.alloc(IfGenData { cond, then })))
+    }
+
     pub fn mk_function<'vir, Curr, Next>(
         &'vir self,
         name: &'vir str, // TODO: identifiers

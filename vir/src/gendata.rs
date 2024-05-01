@@ -236,8 +236,15 @@ pub enum StmtGenData<'vir, Curr, Next> {
     Unfold(PredicateAppGen<'vir, Curr, Next>),
     Fold(PredicateAppGen<'vir, Curr, Next>),
     MethodCall(MethodCallGen<'vir, Curr, Next>),
+    If(IfGen<'vir, Curr, Next>),
     Comment(#[reify_copy] &'vir str),
     Dummy(#[reify_copy] &'vir str),
+}
+
+#[derive(Reify)]
+pub struct IfGenData<'vir, Curr, Next> {
+    pub(crate) cond: ExprGen<'vir, Curr, Next>,
+    pub(crate) then: StmtGen<'vir, Curr, Next>,
 }
 
 #[derive(Reify)]
