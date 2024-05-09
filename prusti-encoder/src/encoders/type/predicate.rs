@@ -80,6 +80,11 @@ pub struct PredicateEncOutputRef<'vir> {
 impl<'vir> task_encoder::OutputRefAny for PredicateEncOutputRef<'vir> {}
 
 impl<'vir> PredicateEncOutputRef<'vir> {
+
+    /// Constructs arguments for [`PredicateEncOutputRef::ref_to_pred`] and
+    /// [`PredicateEncOutputRef::ref_to_snap`]. Takes as input a Ref representing
+    /// the self, and the encoded Rust type (see [`LiftedTy`]). The arguments to the
+    /// function are the type arguments of the lifted type.
     pub fn ref_to_args<'tcx>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
@@ -713,7 +718,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             Vec<(abi::VariantIdx, Vec<RustTyPredicatesEncOutputRef<'vir>>)>,
         )>,
     ) -> PredicateEncOutput<'vir> {
-        let mut predicate_body = self.vcx.mk_bool::<false>();
+        let mut predicate_body = self.vcx.mk_bool::<false, !, !>();
         let fn_snap_body = data.map(|(data, fields)| {
             let discr_acc = self.vcx.mk_acc_field_expr(self.self_ex, data.discr, None);
             let discr = data
@@ -793,7 +798,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         );
         // unreachable_to_snap
         let name = self.unreachable_to_snap.name();
-        let false_ = self.vcx.alloc_slice(&[self.vcx.mk_bool::<false>()]);
+        let false_ = self.vcx.alloc_slice(&[self.vcx.mk_bool::<false, !, !>()]);
         let unreachable_to_snap =
             self.vcx
                 .mk_function(name.to_str(), &[], self.snap_inst, false_, false_, None);

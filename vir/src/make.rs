@@ -367,7 +367,7 @@ impl<'tcx> VirCtxt<'tcx> {
         ))
     }
 
-    pub const fn mk_bool<'vir, const VALUE: bool>(&'vir self) -> Expr<'vir> {
+    pub const fn mk_bool<'vir, const VALUE: bool, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Bool(VALUE)))
     }
 
@@ -388,6 +388,10 @@ impl<'tcx> VirCtxt<'tcx> {
 
     pub const fn mk_wildcard<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Wildcard))
+    }
+
+    pub const fn mk_permission_full<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
+        const_expr!(&ExprKindGenData::Const(&ConstData::Perm(1, 1)))
     }
 
     pub const fn mk_null<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
@@ -636,7 +640,7 @@ impl<'tcx> VirCtxt<'tcx> {
         })
     }
 
-    pub fn mk_method<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir>>(
+    pub fn mk_method<'vir, Curr, Next, A: Arity<'vir> + CheckTypes<'vir> + Debug>(
         &'vir self,
         ident: MethodIdent<'vir, A>,
         args: &'vir [LocalDecl<'vir>],
@@ -645,7 +649,11 @@ impl<'tcx> VirCtxt<'tcx> {
         posts: &'vir [ExprGen<'vir, Curr, Next>],
         blocks: Option<&'vir [CfgBlockGen<'vir, Curr, Next>]>, // first one is the entrypoint
     ) -> MethodGen<'vir, Curr, Next> {
-        assert!(ident.arity().types_match(args));
+        assert!(ident.arity().types_match(args),
+            "Method {} could not be created. Identifier arity: {:?}, Method decls: {args:?}",
+            ident.name_str(),
+            ident.arity()
+        );
         self.mk_method_unchecked(
             ident.name().to_str(),
             args,
@@ -713,7 +721,7 @@ impl<'tcx> VirCtxt<'tcx> {
             rest.iter().rfold(*last, |acc, e| {
                 self.mk_bin_op_expr(BinOpKind::And, *e, acc)
             })
-        }).unwrap_or_else(|| self.mk_bool::<true>())
+        }).unwrap_or_else(|| self.mk_bool::<true, !, !>())
     }
 
     pub fn mk_disj<'vir>(&'vir self, elems: &[Expr<'vir>]) -> Expr<'vir> {
@@ -721,7 +729,7 @@ impl<'tcx> VirCtxt<'tcx> {
             rest.iter().rfold(*last, |acc, e| {
                 self.mk_bin_op_expr(BinOpKind::Or, *e, acc)
             })
-        }).unwrap_or_else(|| self.mk_bool::<false>())
+        }).unwrap_or_else(|| self.mk_bool::<false, !, !>())
     }
 
     const fn get_int_data(rust_ty: &ty::TyKind) -> (u32, bool) {

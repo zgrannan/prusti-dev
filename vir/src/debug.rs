@@ -89,6 +89,7 @@ impl Debug for ConstData {
             Self::Bool(b) => write!(f, "{b}"),
             Self::Int(n) => write!(f, "{n}"),
             Self::Wildcard => write!(f, "wildcard"),
+            Self::Perm(n, d) => write!(f, "({n} / {d})"),
             Self::Null => write!(f, "null"),
         }
     }

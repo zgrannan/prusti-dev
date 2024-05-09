@@ -146,6 +146,10 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Const<'vir> {
             vir::ConstData::Int(v) if *v < (i64::MAX as u128) => ctx.ast.int_lit(*v as i64),
             vir::ConstData::Int(v) => ctx.ast.int_lit_from_ref(v),
             vir::ConstData::Wildcard => ctx.ast.wildcard_perm(),
+            vir::ConstData::Perm(n, d) => ctx.ast.fractional_perm(
+                ctx.ast.int_lit(*n as i64),
+                ctx.ast.int_lit(*d as i64)
+            ),
             vir::ConstData::Null => ctx.ast.null_lit(),
         }
     }
