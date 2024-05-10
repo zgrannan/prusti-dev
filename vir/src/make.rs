@@ -390,10 +390,6 @@ impl<'tcx> VirCtxt<'tcx> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Wildcard))
     }
 
-    pub const fn mk_permission_full<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
-        const_expr!(&ExprKindGenData::Const(&ConstData::Perm(1, 1)))
-    }
-
     pub const fn mk_null<'vir, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Null))
     }

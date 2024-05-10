@@ -96,7 +96,6 @@ impl From<&mir::BinOp> for BinOpKind {
 
 #[derive(PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 pub enum ConstData {
-    Perm(i128, i128),
     Bool(bool),
     Int(u128), // TODO: what about negative numbers? larger numbers?
     Wildcard,
@@ -109,7 +108,6 @@ impl ConstData {
             ConstData::Bool(_) => &TypeData::Bool,
             ConstData::Int(_) => &TypeData::Int,
             ConstData::Wildcard => &TypeData::Perm,
-            ConstData::Perm(..) => &TypeData::Perm,
             ConstData::Null => &TypeData::Ref
         }
     }
