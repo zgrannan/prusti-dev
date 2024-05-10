@@ -608,10 +608,9 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             .enumerate()
             .map(|(idx, f_ty)| {
                 let self_field = field_fns[idx].apply(self.vcx, [self.self_ex]);
-                let args = f_ty.ref_to_args(self.vcx, self_field);
                 FieldApp {
-                    self_field_pred: f_ty.ref_to_pred(self.vcx, args, None),
-                    self_field_snap: f_ty.ref_to_snap(self.vcx, args),
+                    self_field_pred: f_ty.ref_to_pred(self.vcx, self_field, None),
+                    self_field_snap: f_ty.ref_to_snap(self.vcx, self_field),
                 }
             })
             .collect()

@@ -298,10 +298,9 @@ impl<'tcx, 'vir, 'enc> ImpureEncVisitor<'tcx, 'vir, 'enc> {
                     let place_ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(place_ty.ty).unwrap();
 
                     let ref_p = self.encode_place(place).expr;
-                    let args = place_ty_out.ref_to_args(self.vcx, ref_p);
                     self.stmt(
                         self.vcx
-                            .mk_exhale_stmt(place_ty_out.ref_to_pred(self.vcx, &args, None)),
+                            .mk_exhale_stmt(place_ty_out.ref_to_pred(self.vcx, ref_p, None)),
                     );
                 }
                 unsupported_op => panic!("unsupported repack op: {unsupported_op:?}"),
@@ -341,22 +340,20 @@ impl<'tcx, 'vir, 'enc> ImpureEncVisitor<'tcx, 'vir, 'enc> {
             &mir::Operand::Move(source) => {
                 let ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(ty).unwrap();
                 let result = self.encode_place(Place::from(source));
-                let args = ty_out.ref_to_args(self.vcx, result.expr);
-                let snap_val = ty_out.ref_to_snap(self.vcx, &args);
+                let snap_val = ty_out.ref_to_snap(self.vcx, result.expr);
 
                 let tmp_exp = self.new_tmp(ty_out.snapshot()).1;
                 self.stmt(self.vcx.mk_pure_assign_stmt(tmp_exp, snap_val));
                 self.stmt(
                     self.vcx
-                        .mk_exhale_stmt(ty_out.ref_to_pred(self.vcx, &args, None)),
+                        .mk_exhale_stmt(ty_out.ref_to_pred(self.vcx, result.expr, None)),
                 );
                 tmp_exp
             }
             &mir::Operand::Copy(source) => {
                 let ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(ty).unwrap();
                 let result = self.encode_place(Place::from(source));
-                let args = ty_out.ref_to_args(self.vcx, result.expr);
-                let snap_val = ty_out.ref_to_snap(self.vcx, args);
+                let snap_val = ty_out.ref_to_snap(self.vcx, result.expr);
                 let tmp_exp = self.new_tmp(ty_out.snapshot()).1;
                 self.stmt(self.vcx.mk_pure_assign_stmt(tmp_exp, snap_val));
                 self.undo_impure_casts(result);
@@ -380,7 +377,7 @@ impl<'tcx, 'vir, 'enc> ImpureEncVisitor<'tcx, 'vir, 'enc> {
             &mir::Operand::Copy(source) => {
                 let ty_out = self.deps.require_ref::<RustTyPredicatesEnc>(ty).unwrap();
                 let mut result = self.encode_place(Place::from(source));
-                result.map_expr(|e| ty_out.ref_to_snap(self.vcx, &[e]));
+                result.map_expr(|e| ty_out.ref_to_snap(self.vcx, e));
                 (result, ty_out)
             }
             mir::Operand::Constant(box constant) => {
@@ -697,7 +694,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for ImpureEncVisitor<'tcx, 'vir
                         match ty.generic_predicate.get_enumlike().filter(|_| place_ty.variant_index.is_none()) {
                             Some(el) => {
                                 let discr_expr = self.vcx.mk_field_expr(place_expr, el.as_ref().unwrap().discr);
-                                self.vcx.mk_unfolding_expr(ty.ref_to_pred_app(self.vcx, &[place_expr], Some(self.vcx.mk_wildcard())), discr_expr)
+                                self.vcx.mk_unfolding_expr(ty.ref_to_pred_app(self.vcx, place_expr, Some(self.vcx.mk_wildcard())), discr_expr)
                             }
                             None => {
                                 // mir::Rvalue::Discriminant documents "Returns zero for types without discriminant"
