@@ -367,7 +367,7 @@ impl<'tcx> VirCtxt<'tcx> {
         ))
     }
 
-    pub const fn mk_bool<'vir, const VALUE: bool, Curr, Next>(&'vir self) -> ExprGen<'vir, Curr, Next> {
+    pub const fn mk_bool<'vir, const VALUE: bool>(&'vir self) -> Expr<'vir> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Bool(VALUE)))
     }
 
@@ -717,7 +717,7 @@ impl<'tcx> VirCtxt<'tcx> {
             rest.iter().rfold(*last, |acc, e| {
                 self.mk_bin_op_expr(BinOpKind::And, *e, acc)
             })
-        }).unwrap_or_else(|| self.mk_bool::<true, !, !>())
+        }).unwrap_or_else(|| self.mk_bool::<true>())
     }
 
     pub fn mk_disj<'vir>(&'vir self, elems: &[Expr<'vir>]) -> Expr<'vir> {
@@ -725,7 +725,7 @@ impl<'tcx> VirCtxt<'tcx> {
             rest.iter().rfold(*last, |acc, e| {
                 self.mk_bin_op_expr(BinOpKind::Or, *e, acc)
             })
-        }).unwrap_or_else(|| self.mk_bool::<false, !, !>())
+        }).unwrap_or_else(|| self.mk_bool::<false>())
     }
 
     const fn get_int_data(rust_ty: &ty::TyKind) -> (u32, bool) {

@@ -198,7 +198,7 @@ impl<'tcx, 'vir, 'enc> ImpureEncVisitor<'tcx, 'vir, 'enc> {
     }
 
     fn unreachable(&mut self) -> vir::TerminatorStmt<'vir> {
-        self.stmt(self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()));
+        self.stmt(self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>()));
         self.vcx.mk_assume_false_stmt()
     }
 
@@ -362,8 +362,7 @@ impl<'tcx, 'vir, 'enc> ImpureEncVisitor<'tcx, 'vir, 'enc> {
             mir::Operand::Constant(box constant) => self
                 .deps
                 .require_local::<ConstEnc>((constant.literal, 0, self.def_id))
-                .unwrap()
-            ,
+                .unwrap(),
         }
     }
 
@@ -517,7 +516,7 @@ impl<'tcx, 'vir, 'enc> mir::visit::Visitor<'tcx> for ImpureEncVisitor<'tcx, 'vir
                         vir::vir_format!(self.vcx, "_reach_bb{}", block.as_usize()),
                         &vir::TypeData::Bool,
                     ),
-                    self.vcx.mk_bool::<true, !, !>()
+                    self.vcx.mk_bool::<true>()
                 )
             );
         }

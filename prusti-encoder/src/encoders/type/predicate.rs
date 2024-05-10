@@ -717,7 +717,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             Vec<(abi::VariantIdx, Vec<RustTyPredicatesEncOutputRef<'vir>>)>,
         )>,
     ) -> PredicateEncOutput<'vir> {
-        let mut predicate_body = self.vcx.mk_bool::<false, !, !>();
+        let mut predicate_body = self.vcx.mk_bool::<false>();
         let fn_snap_body = data.map(|(data, fields)| {
             let discr_acc = self.vcx.mk_acc_field_expr(self.self_ex, data.discr, None);
             let discr = data
@@ -797,7 +797,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
         );
         // unreachable_to_snap
         let name = self.unreachable_to_snap.name();
-        let false_ = self.vcx.alloc_slice(&[self.vcx.mk_bool::<false, !, !>()]);
+        let false_ = self.vcx.alloc_slice(&[self.vcx.mk_bool::<false>()]);
         let unreachable_to_snap =
             self.vcx
                 .mk_function(name.to_str(), &[], self.snap_inst, false_, false_, None);
