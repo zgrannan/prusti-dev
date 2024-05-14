@@ -1,5 +1,5 @@
 use prusti_rustc_interface::middle::mir;
-use task_encoder::{TaskEncoder, TaskEncoderDependencies};
+use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity, ViperIdent};
 
 use crate::encoders::{
@@ -33,15 +33,18 @@ where
 {
     /// Generates the identifier for the method; for a monomorphic encoding,
     /// this should be a name including (mangled) type arguments
-    fn mk_method_ident<'vir, 'tcx>(
-        vcx: &'vir vir::VirCtxt<'tcx>,
-        task_key: &Self::TaskKey<'tcx>,
+    fn mk_method_ident<'vir>(
+        vcx: &'vir vir::VirCtxt<'vir>,
+        task_key: &Self::TaskKey<'vir>,
     ) -> ViperIdent<'vir>;
 
-    fn encode<'vir, 'tcx: 'vir>(
-        task_key: Self::TaskKey<'tcx>,
-        deps: &mut TaskEncoderDependencies<'vir>,
-    ) -> ImpureFunctionEncOutput<'vir> {
+    fn encode<'vir>(
+        task_key: Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> Result<
+        ImpureFunctionEncOutput<'vir>,
+        EncodeFullError<'vir, Self>,
+    > {
         unimplemented!()
     }
 }

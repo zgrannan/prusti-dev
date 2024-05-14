@@ -11,7 +11,7 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
-use task_encoder::{TaskEncoder, TaskEncoderDependencies};
+use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, MethodIdent, UnknownArity};
 
 pub struct SymImpureEnc;
@@ -64,18 +64,14 @@ impl TaskEncoder for SymImpureEnc {
         *task
     }
 
-    fn do_encode_full<'tcx: 'vir, 'vir>(
-        task_key: &Self::TaskKey<'tcx>,
-        deps: &mut TaskEncoderDependencies<'vir>,
+    fn do_encode_full<'vir>(
+        task_key: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> Result<
         (
             Self::OutputFullLocal<'vir>,
             Self::OutputFullDependency<'vir>,
-        ),
-        (
-            Self::EncodingError,
-            Option<Self::OutputFullDependency<'vir>>,
-        ),
+        ), EncodeFullError<'vir, Self>
     > {
         let (local_def_id, substs, caller_def_id) = *task_key;
         let def_id = local_def_id.to_def_id();
@@ -95,7 +91,7 @@ impl TaskEncoder for SymImpureEnc {
 
             let method_ident = vir::MethodIdent::new(method_name, UnknownArity::new(&[]));
 
-            deps.emit_output_ref::<SymImpureEnc>(
+            deps.emit_output_ref(
                 *task_key,
                 MirImpureEncOutputRef {
                     method_ref: method_ident,
@@ -242,18 +238,18 @@ where
     'vir: 'enc,
 {
     vcx: &'vir vir::VirCtxt<'tcx>,
-    deps: &'enc mut TaskEncoderDependencies<'vir>,
+    deps: &'enc mut TaskEncoderDependencies<'vir, SymImpureEnc>,
     def_id: DefId,
     local_decls: &'enc mir::LocalDecls<'tcx>,
     symvars: Vec<vir::Expr<'vir>>,
 }
 
-impl<'tcx, 'vir, 'enc> MirBaseEnc<'tcx, 'vir, 'enc> for EncVisitor<'tcx, 'vir, 'enc> {
-    fn get_local_decl(&self, local: mir::Local) -> &mir::LocalDecl<'tcx> {
+impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'vir, 'vir, 'enc> {
+    fn get_local_decl(&self, local: mir::Local) -> &mir::LocalDecl<'vir> {
         &self.local_decls[local]
     }
 
-    fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir> {
+    fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir, SymImpureEnc> {
         self.deps
     }
 }
@@ -263,7 +259,7 @@ type EncodePCAtomResult<'vir> = Result<vir::Expr<'vir>, String>;
 type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
 type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
 
-impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
+impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn encode_sym_value(&mut self, sym_value: &SymValue<'tcx>) -> EncodeSymValueResult<'vir> {
         match sym_value {
             SymValue::Var(idx, _) => self

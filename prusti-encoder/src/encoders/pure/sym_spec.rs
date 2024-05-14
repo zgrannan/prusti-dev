@@ -34,8 +34,8 @@ type SymSpecEncTask<'tcx> = (
 );
 
 impl SymSpecEnc {
-    pub fn encode<'tcx, 'vir>(
-        deps: &mut TaskEncoderDependencies<'vir>,
+    pub fn encode<'tcx, 'vir, T: TaskEncoder>(
+        deps: &mut TaskEncoderDependencies<'vir, T>,
         task_key: SymSpecEncTask<'tcx>,
     ) -> SymSpecEncOutput<'tcx> {
         let (def_id, substs, caller_def_id) = task_key;

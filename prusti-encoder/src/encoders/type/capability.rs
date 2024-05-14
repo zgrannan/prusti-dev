@@ -3,8 +3,7 @@ use prusti_rustc_interface::{
     middle::ty::{self, TypeFoldable},
 };
 use task_encoder::{
-    TaskEncoder,
-    TaskEncoderDependencies,
+    EncodeFullError, TaskEncoder, TaskEncoderDependencies
 };
 
 /// TODO: doc
@@ -24,16 +23,13 @@ impl TaskEncoder for CapabilityEnc {
         *task
     }
 
-    fn do_encode_full<'tcx: 'vir, 'vir>(
-        task_key: &Self::TaskKey<'tcx>,
-        deps: &mut TaskEncoderDependencies<'vir>,
+    fn do_encode_full<'vir>(
+        task_key: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> Result<(
         Self::OutputFullLocal<'vir>,
         Self::OutputFullDependency<'vir>,
-    ), (
-        Self::EncodingError,
-        Option<Self::OutputFullDependency<'vir>>,
-    )> {
+    ), EncodeFullError<'vir, Self>> {
         vir::with_vcx(|vcx| {
             // let mut folder = RegionRenumberVisitor {
             //     tcx: vcx.tcx(),
