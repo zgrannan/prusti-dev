@@ -32,13 +32,17 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{ConstEnc, MirBuiltinEnc};
+use crate::encoders::{lifted::{cast::CastToEnc, casters::CastTypePure}, ConstEnc, MirBuiltinEnc};
 
 use super::{
-    lifted::{
-        cast::{CastArgs, PureGenericCastEnc},
-        rust_ty_cast::RustTyGenericCastEnc,
-    }, mir_base::MirBaseEnc, mir_pure::PureKind, rust_ty_snapshots::RustTySnapshotsEnc, sym_pure::{DefaultPurityChecker, SymPureEncResult}, sym_spec::SymSpecEnc, MirBuiltinEncTask, MirPureEnc, PureFunctionEnc, SpecEnc, SpecEncTask, SymPureEnc, SymPureEncTask
+    lifted::{cast::CastArgs, rust_ty_cast::RustTyCastersEnc},
+    mir_base::MirBaseEnc,
+    mir_pure::PureKind,
+    rust_ty_snapshots::RustTySnapshotsEnc,
+    sym_pure::{DefaultPurityChecker, SymPureEncResult},
+    sym_spec::SymSpecEnc,
+    FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc,
+    SpecEncTask, SymPureEnc, SymPureEncTask,
 };
 
 impl TaskEncoder for SymImpureEnc {
@@ -107,7 +111,7 @@ impl TaskEncoder for SymImpureEnc {
                 &body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
-                DefaultPurityChecker
+                DefaultPurityChecker,
             );
 
             let symvar_locals = symbolic_execution
@@ -303,9 +307,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 let expr = self.encode_sym_value(expr)?;
                 let viper_fn = self
                     .deps
-                    .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::UnOp(
-                        *ty, *op, *ty
-                    ))
+                    .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::UnOp(*ty, *op, *ty))
                     .unwrap()
                     .function;
                 Ok(viper_fn.apply(self.vcx, &[expr]))
@@ -385,14 +387,14 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                                 );
                                 Ok(self
                                     .deps
-                                    .require_ref::<PureGenericCastEnc>(cast_args)
+                                    .require_ref::<CastToEnc<CastTypePure>>(cast_args)
                                     .unwrap()
                                     .apply_cast_if_necessary(self.vcx, proj_app))
                             }
                             ty::TyKind::Tuple(_) => {
                                 let generic_cast = self
                                     .deps
-                                    .require_local::<RustTyGenericCastEnc>(*field_ty)
+                                    .require_local::<RustTyCastersEnc<CastTypePure>>(*field_ty)
                                     .unwrap();
                                 Ok(generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app))
                             }
@@ -421,11 +423,15 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     .iter()
                     .map(|arg| self.encode_sym_value(arg).unwrap())
                     .collect::<Vec<_>>();
-                let function_ref = self.deps.require_ref::<PureFunctionEnc>((
-                    *fn_def_id,
-                    GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id),
-                    self.def_id
-                )).unwrap().function_ref;
+                let function_ref = self
+                    .deps
+                    .require_ref::<PureFunctionEnc>(FunctionCallTaskDescription {
+                        def_id: *fn_def_id,
+                        substs: GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id),
+                        caller_def_id: self.def_id,
+                    })
+                    .unwrap()
+                    .function_ref;
                 Ok(function_ref.apply(self.vcx, &args))
             }
         }

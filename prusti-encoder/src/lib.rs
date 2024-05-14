@@ -18,7 +18,10 @@ use prusti_rustc_interface::{
 };
 use task_encoder::TaskEncoder;
 
-use crate::encoders::{lifted::ty_constructor::TyConstructorEnc, predicate::PredicateEnc};
+use crate::encoders::{lifted::{
+    casters::{CastTypeImpure, CastTypePure, CastersEnc},
+    ty_constructor::TyConstructorEnc
+}, predicate::PredicateEnc, MirPolyImpureEnc};
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -99,11 +102,19 @@ pub fn test_entrypoint<'tcx>(
         program_domains.push(output.param_snapshot);
     }
 
-    header(&mut viper_code, "generic casts");
-    for output in crate::encoders::lifted::cast_functions::CastFunctionsEnc::all_outputs() {
-        for cast_function in output {
+    header(&mut viper_code, "pure generic casts");
+    for cast_functions in CastersEnc::<CastTypePure>::all_outputs() {
+        for cast_function in cast_functions {
             viper_code.push_str(&format!("{:?}\n", cast_function));
             program_functions.push(cast_function);
+        }
+    }
+
+    header(&mut viper_code, "impure generic casts");
+    for cast_methods in CastersEnc::<CastTypeImpure>:: all_outputs() {
+        for cast_method in cast_methods {
+            viper_code.push_str(&format!("{:?}\n", cast_method));
+            program_methods.push(cast_method);
         }
     }
 
