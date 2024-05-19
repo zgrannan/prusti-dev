@@ -1,8 +1,8 @@
 use crate::{
-    debug_info::DebugInfo, viper_ident::ViperIdent, with_vcx, DomainParamData, ExprGen, Function, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt
+    debug_info::DebugInfo, viper_ident::ViperIdent, with_vcx, DomainParamData, ExprGen, LocalDecl, MethodCallGenData, PredicateAppGen, PredicateAppGenData, StmtGenData, Type, TypeData, VirCtxt, typecheck_error
 };
 use sealed::sealed;
-use std::{backtrace::Backtrace, fmt::Debug};
+use std::fmt::Debug;
 
 pub trait CallableIdent<'vir, A: Arity<'vir>, ResultTy> {
     fn new(name: ViperIdent<'vir>, args: A, result_ty: ResultTy) -> Self;
@@ -281,10 +281,8 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>> + Debug> FunctionIdent<'vir, A> {
         vcx: &'vir VirCtxt<'tcx>,
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> ExprGen<'vir, Curr, Next> {
-        if self.1.types_match(args) {
-            vcx.mk_func_app(self.name().to_str(), args, self.result_ty())
-        } else {
-            panic!(
+        if !self.1.types_match(args) {
+            typecheck_error!(
                 "Function {} could not be applied. Expected: {:?}, Actual Exprs: {:?}, Actual Types: {:?}, debug info: {}",
                 self.name(),
                 self.arity(),
@@ -293,6 +291,7 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>> + Debug> FunctionIdent<'vir, A> {
                 self.debug_info()
             );
         }
+        vcx.mk_func_app(self.name().to_str(), args, self.result_ty())
     }
 }
 
@@ -303,14 +302,8 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>> + Debug> PredicateIdent<'vir, A> {
         args: &[ExprGen<'vir, Curr, Next>],
         perm: Option<ExprGen<'vir, Curr, Next>>,
     ) -> PredicateAppGen<'vir, Curr, Next> {
-        if self.1.types_match(args) {
-            vcx.alloc(PredicateAppGenData {
-                target: self.name().to_str(),
-                args: vcx.alloc_slice(args),
-                perm,
-            })
-        } else {
-            panic!(
+        if !self.1.types_match(args) {
+            typecheck_error!(
                 "Predicate {} could not be applied. Expected arg types: {:?}, Actual arg types: {:?}, Debug info: {}",
                 self.name(),
                 self.arity(),
@@ -318,6 +311,11 @@ impl<'vir, A: Arity<'vir, Arg = Type<'vir>> + Debug> PredicateIdent<'vir, A> {
                 self.debug_info()
             );
         }
+        vcx.alloc(PredicateAppGenData {
+            target: self.name().to_str(),
+            args: vcx.alloc_slice(args),
+            perm,
+        })
     }
 }
 
@@ -337,7 +335,15 @@ impl<'vir, const N: usize> MethodIdent<'vir, KnownArity<'vir, N>> {
         vcx: &'vir VirCtxt<'tcx>,
         args: [ExprGen<'vir, Curr, Next>; N],
     ) -> StmtGenData<'vir, Curr, Next> {
-        assert!(self.1.types_match(&args));
+        if !self.1.types_match(&args) {
+            typecheck_error!(
+                "Method {} could not be applied. Expected arg types: {:?}, Actual arg types: {:?}, Debug info: {}",
+                self.name(),
+                self.arity(),
+                args.iter().map(|a| a.ty()).collect::<Vec<_>>(),
+                self.debug_info()
+            );
+        }
         StmtGenData::MethodCall(vcx.alloc(MethodCallGenData {
             targets: &[],
             method: self.name().to_str(),
@@ -381,7 +387,7 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
         args: &[ExprGen<'vir, Curr, Next>],
     ) -> StmtGenData<'vir, Curr, Next> {
         if !self.1.types_match(args) {
-            panic!(
+            typecheck_error!(
                 "Method {} could not be applied. Expected arg types: {:?}, Actual arg types: {:?}, Debug info: {}",
                 self.name(),
                 self.arity(),
@@ -398,7 +404,28 @@ impl<'vir> MethodIdent<'vir, UnknownArity<'vir>> {
 }
 impl<'vir> DomainIdent<'vir, UnknownArityAny<'vir, DomainParamData<'vir>>> {
     pub fn apply<'tcx>(&self, vcx: &'vir VirCtxt<'tcx>, args: &[Type<'vir>]) -> Type<'vir> {
-        assert!(self.1.len_matches(args.len()));
+        if !self.1.len_matches(args.len()) {
+            typecheck_error!(
+                "Domain {} could not be applied. Expected # args: {}, Actual # args: {}",
+                self.name(),
+                self.1.len(),
+                args.len(),
+            );
+        }
         vcx.alloc(TypeData::Domain(self.0.to_str(), vcx.alloc_slice(args)))
     }
+}
+#[macro_export]
+macro_rules! typecheck_error {
+    ($($arg:tt)*) => {
+        if cfg!(feature = "vir_panic_on_typecheck_error") {
+            panic!($($arg)*);
+        } else {
+            tracing::error!(
+                "{}\nThe error occurred at: {}",
+                format_args!($($arg)*),
+                std::backtrace::Backtrace::capture()
+            );
+        }
+    };
 }
