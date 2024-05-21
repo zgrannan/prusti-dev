@@ -1,15 +1,13 @@
 use rustc_hash::FxHashMap;
 
-use super::{
-    typed::{
-        DefSpecificationMap, GhostBegin, GhostEnd, LoopSpecification, ProcedureSpecification,
-        ProcedureSpecificationKind, ProcedureSpecificationKindError, PrustiAssertion,
-        PrustiAssumption, PrustiRefutation, SpecificationItem, TypeSpecification,
-    },
+use super::typed::{
+    DefSpecificationMap, GhostBegin, GhostEnd, LoopSpecification, ProcedureSpecification,
+    PrustiAssertion, PrustiAssumption, PrustiRefutation, TypeSpecification,
 };
-use crate::{data::ProcedureDefId, environment::Environment, specs::typed::Refinable, PrustiError};
+use crate::{data::ProcedureDefId, specs::typed::Refinable};
 use prusti_rustc_interface::{
-    errors::MultiSpan, hir::def_id::DefId, middle::ty::{self, GenericArgsRef}, span::Span,
+    hir::def_id::DefId,
+    middle::ty::{self, GenericArgsRef},
 };
 
 /// Defines the context for which we perform refinement.
@@ -156,10 +154,8 @@ impl<'tcx> Specifications<'tcx> {
 
         match RefinementContext::try_from(tcx, &query) {
             Some(context) => {
-                let refined = self.perform_proc_spec_refinement(
-                    context.impl_query,
-                    &context.trait_query,
-                );
+                let refined =
+                    self.perform_proc_spec_refinement(context.impl_query, &context.trait_query);
                 assert!(
                     refined.is_some(),
                     "Could not perform refinement for {query:?}"
@@ -191,10 +187,7 @@ impl<'tcx> Specifications<'tcx> {
         self.get_proc_spec(impl_query)
     }
 
-    fn get_proc_spec<'a>(
-        &'a self,
-        query: &SpecQuery<'tcx>,
-    ) -> Option<&'a ProcedureSpecification> {
+    fn get_proc_spec<'a>(&'a self, query: &SpecQuery<'tcx>) -> Option<&'a ProcedureSpecification> {
         self.refined_specs.get(query).or_else(|| {
             self.user_typed_specs
                 .get_proc_spec(&query.referred_def_id())
@@ -213,7 +206,7 @@ impl<'tcx> Specifications<'tcx> {
 pub fn find_trait_method_substs<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
     impl_method_def_id: ProcedureDefId, // what are we calling?
-    impl_method_substs: GenericArgsRef<'tcx>,           // what are the substs on the call?
+    impl_method_substs: GenericArgsRef<'tcx>, // what are the substs on the call?
 ) -> Option<(ProcedureDefId, GenericArgsRef<'tcx>)> {
     let impl_def_id = tcx.impl_of_method(impl_method_def_id)?;
     let trait_ref = tcx.impl_trait_ref(impl_def_id)?.skip_binder();
@@ -224,8 +217,7 @@ pub fn find_trait_method_substs<'tcx>(
     // For the `get_assoc_item` call, we therefore `unwrap`, as not finding
     // the associated item would be a (compiler) internal error.
     let trait_def_id = trait_ref.def_id;
-    let trait_method_def_id =
-        get_assoc_item(tcx, trait_def_id, impl_method_def_id)
+    let trait_method_def_id = get_assoc_item(tcx, trait_def_id, impl_method_def_id)
         .unwrap()
         .def_id;
 
@@ -258,15 +250,20 @@ pub fn find_trait_method_substs<'tcx>(
     //
     // We also need to subst the prefix (`[Struct<B, C>, A]` in the example
     // above) with call substs, so that we get the trait's type parameters
-    // more precisely. We can do this directly with `impl_method_substs`
-    // because they contain the substs for the `impl` block as a prefix.
-    let call_trait_substs =
-        ty::EarlyBinder::bind(trait_ref.args).instantiate(tcx, impl_method_substs);
-    let impl_substs = ty::List::identity_for_item(tcx, impl_def_id);
+    // more precisely.
+    //
+    // [GenericArgsRef::rebase_onto] does almost want we want, except it does
+    // not include the substitution of e.g. Struct<B,C> for Self.
+    let impl_method_substs = ty::List::identity_for_item(tcx, impl_method_def_id);
+    let trait_method_substs = ty::List::identity_for_item(tcx, trait_method_def_id);
+    let trait_method_substs =
+        trait_method_substs.rebase_onto(tcx, trait_def_id, impl_method_substs);
+
+    // Preface the substs from `rebase_onto` with the substitution of the struct type
+    // for `Self` in the trait.
     let trait_method_substs = tcx.mk_args_from_iter(
-        call_trait_substs
-            .iter()
-            .chain(impl_method_substs.iter().skip(impl_substs.len())),
+        std::iter::once(tcx.type_of(impl_def_id).instantiate_identity().into())
+            .chain(trait_method_substs.iter()),
     );
 
     // sanity check: do we now have the correct number of substs?
@@ -283,8 +280,7 @@ pub fn get_assoc_item<'tcx>(
 ) -> Option<ty::AssocItem> {
     // FIXME: Probably we should use https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.AssociatedItems.html#method.find_by_name_and_namespace
     // instead.
-    tcx
-        .associated_items(trait_id)
+    tcx.associated_items(trait_id)
         .filter_by_name_unhygienic(tcx.item_name(item_id))
         .next()
         .cloned()
