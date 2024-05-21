@@ -9,20 +9,21 @@ extern crate rustc_type_ir;
 
 mod encoders;
 mod encoder_traits;
+mod generic_args_support;
 mod trait_support;
 pub mod request;
 
 use prusti_interface::{environment::EnvBody, specs::specifications::SpecQuery};
 use prusti_rustc_interface::{
     middle::ty,
-    hir,
+    hir::{self, intravisit::{self, Visitor}},
 };
 use task_encoder::TaskEncoder;
 
 use crate::encoders::{lifted::{
     casters::{CastTypeImpure, CastTypePure, CastersEnc},
     ty_constructor::TyConstructorEnc
-}, MirPolyImpureEnc};
+}, MirPolyImpureEnc, TraitEnc};
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -33,6 +34,22 @@ pub fn test_entrypoint<'tcx>(
     vir::init_vcx(vir::VirCtxt::new(tcx, body, def_spec));
 
     // TODO: this should be a "crate" encoder, which will deps.require all the methods in the crate
+
+    struct TraitVisitor<'tcx>{
+        tcx: ty::TyCtxt<'tcx>,
+    };
+
+    impl <'tcx> Visitor<'tcx> for TraitVisitor<'tcx> {
+        fn visit_item(&mut self, item: &'tcx hir::Item<'tcx>) {
+            if let hir::ItemKind::Trait(..) = item.kind {
+                let res = TraitEnc::encode(item.owner_id.def_id.to_def_id(), false);
+                assert!(res.is_ok());
+            }
+            intravisit::walk_item(self, item);
+        }
+    }
+
+    tcx.hir().visit_all_item_likes_in_crate(&mut TraitVisitor { tcx });
 
     for def_id in tcx.hir().body_owners() {
         tracing::debug!("test_entrypoint item: {def_id:?}");
@@ -159,6 +176,12 @@ pub fn test_entrypoint<'tcx>(
         }
         viper_code.push_str(&format!("{:?}\n", output.method_assign));
         program_methods.push(output.method_assign);
+    }
+
+    header(&mut viper_code, "traits");
+    for output in crate::encoders::TraitEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output));
+        program_domains.push(output);
     }
 
     std::fs::write("local-testing/simple.vpr", viper_code).unwrap();

@@ -1,12 +1,22 @@
 use prusti_interface::specs::specifications::SpecQuery;
-use prusti_rustc_interface::middle::mir;
+use prusti_rustc_interface::middle::{
+    mir,
+    ty::{ClauseKind, PredicateKind},
+};
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity, ViperIdent};
 
-use crate::{encoders::{
-    lifted::func_def_ty_params::LiftedTyParamsEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc,
-    MirSpecEnc,
-}, trait_support::is_function_with_body};
+use crate::{
+    encoders::{
+        lifted::{
+            func_def_ty_params::LiftedTyParamsEnc,
+            ty::{EncodeGenericsAsLifted, LiftedTyEnc},
+        },
+        ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc,
+    },
+    generic_args_support::get_unique_param_tys_in_order,
+    trait_support::is_function_with_body,
+};
 
 use super::function_enc::FunctionEnc;
 
@@ -47,6 +57,7 @@ where
         use mir::visit::Visitor;
         vir::with_vcx(|vcx| {
             let def_id = Self::get_def_id(&task_key);
+
             let caller_def_id = Self::get_caller_def_id(&task_key);
             let trusted = crate::encoders::with_proc_spec(
                 SpecQuery::GetProcKind(def_id, Self::get_substs(vcx, &task_key)),
@@ -172,6 +183,29 @@ where
                 }
             }
             args.extend(param_ty_decls.iter());
+
+            let constraints = vcx.tcx().predicates_of(def_id);
+            for (constraint, _) in constraints.predicates {
+                match constraint.as_predicate().kind().skip_binder() {
+                    PredicateKind::Clause(ClauseKind::Trait(trait_ref)) => {
+                        eprintln!(
+                            "Type {:?} must implement trait {:?}",
+                            trait_ref.self_ty(),
+                            trait_ref.def_id()
+                        );
+                        let vir_trait = deps.require_ref::<TraitEnc>(trait_ref.def_id())?;
+                        pres.push(vir_trait.implements_fn.apply(
+                            vcx,
+                            [deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(
+                                trait_ref.self_ty(),
+                            )?.expr(vcx)],
+                        ))
+                    }
+                    _ => todo!(),
+                }
+                eprintln!("Constraint: {:?}", constraint);
+            }
+
             pres.extend(spec_pres);
 
             let mut posts = Vec::with_capacity(spec_posts.len() + 1);
