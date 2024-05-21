@@ -6,7 +6,7 @@ use vir::{MethodIdent, UnknownArity, ViperIdent};
 use crate::{encoders::{
     lifted::func_def_ty_params::LiftedTyParamsEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc,
     MirSpecEnc,
-}, trait_support::is_trait_fn_without_impl};
+}, trait_support::is_function_with_body};
 
 use super::function_enc::FunctionEnc;
 
@@ -85,7 +85,7 @@ where
             // a call stub, or a trait function without a default implementation
             let local_def_id = def_id
                 .as_local()
-                .filter(|_| !trusted && !is_trait_fn_without_impl(vcx.tcx(), def_id));
+                .filter(|_| !trusted && is_function_with_body(vcx.tcx(), def_id));
             let blocks = if let Some(local_def_id) = local_def_id {
                 let body = vcx
                     .body_mut()

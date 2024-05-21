@@ -9,7 +9,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies, EncodeFullResult};
 use crate::{encoders::{
     rust_ty_predicates::{RustTyPredicatesEnc, RustTyPredicatesEncOutputRef},
     PredicateEncOutputRef,
-}, trait_support::is_trait_fn_without_impl};
+}, trait_support::is_function_with_body};
 
 pub struct MirLocalDefEnc;
 #[derive(Clone, Copy)]
@@ -72,7 +72,7 @@ impl TaskEncoder for MirLocalDefEnc {
 
         vir::with_vcx(|vcx| {
             if let Some(local_def_id) = def_id.as_local() {
-                if !is_trait_fn_without_impl(vcx.tcx(), def_id) {
+                if is_function_with_body(vcx.tcx(), def_id) {
                     let body = vcx.body_mut().get_impure_fn_body(local_def_id, substs, caller_def_id);
                     let locals = IndexVec::from_fn_n(|arg: mir::Local| {
                         let local = vir::vir_format!(vcx, "_{}p", arg.index());
