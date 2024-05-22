@@ -5,7 +5,13 @@ use prusti_rustc_interface::{
 use task_encoder::TaskEncoder;
 use vir::{vir_format_identifier, BinOpKind};
 
-use crate::{encoders::lifted::{generic::LiftedGenericEnc, ty::{EncodeGenericsAsLifted, LiftedTyEnc}}, generic_args_support::{extract_ty_params, get_unique_param_tys_in_order, unique}};
+use crate::{
+    encoders::lifted::{
+        generic::LiftedGenericEnc,
+        ty::{EncodeGenericsAsLifted, LiftedTyEnc},
+    },
+    generic_args_support::{extract_ty_params, get_unique_param_tys_in_order, unique},
+};
 
 use super::{TraitEnc, TraitTyArgsEnc};
 
@@ -38,7 +44,7 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
                 .expr(vcx);
             let implements_expr = encoded_trait_ref.implements(
                 lifted_ty_expr,
-                deps.require_local::<TraitTyArgsEnc>(trait_ref).unwrap()
+                deps.require_local::<TraitTyArgsEnc>(trait_ref).unwrap(),
             );
 
             let constraints = vcx.tcx().predicates_of(task_key);
@@ -46,17 +52,21 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
             for (constraint, _) in constraints.predicates {
                 match constraint.as_predicate().kind().skip_binder() {
                     PredicateKind::Clause(ClauseKind::Trait(trait_clause)) => {
-                        let predicate_trait_ref = deps.require_ref::<TraitEnc>(trait_clause.def_id())?;
+                        let predicate_trait_ref =
+                            deps.require_ref::<TraitEnc>(trait_clause.def_id())?;
                         let type_to_implement = deps
-                            .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(trait_clause.self_ty())?
+                            .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(
+                                trait_clause.self_ty(),
+                            )?
                             .expr(vcx);
                         let implements_expr = predicate_trait_ref.implements(
                             type_to_implement,
-                            deps.require_local::<TraitTyArgsEnc>(trait_clause.trait_ref).unwrap()
+                            deps.require_local::<TraitTyArgsEnc>(trait_clause.trait_ref)
+                                .unwrap(),
                         );
                         reqs.push(implements_expr);
-                    },
-                    _ => todo!()
+                    }
+                    _ => todo!(),
                 }
             }
 
@@ -64,17 +74,9 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
 
             let conditional_implements_expr = if let Some(first) = reqs_iter.next() {
                 let precondition = reqs_iter.fold(first, |acc, req| {
-                    vcx.mk_bin_op_expr(
-                        BinOpKind::And,
-                        acc,
-                        req
-                    )
+                    vcx.mk_bin_op_expr(BinOpKind::And, acc, req)
                 });
-                vcx.mk_bin_op_expr(
-                    BinOpKind::Implies,
-                    precondition,
-                    implements_expr
-                )
+                vcx.mk_bin_op_expr(BinOpKind::Implies, precondition, implements_expr)
             } else {
                 implements_expr
             };
@@ -82,14 +84,15 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
             let axiom_expr = if ty_params.is_empty() {
                 conditional_implements_expr
             } else {
-                let generics = ty_params.iter().map(|param| {
-                    deps.require_ref::<LiftedGenericEnc>(*param).unwrap()
-                }).collect::<Vec<_>>();
-                let decls = generics.iter().map(|g|g.decl()).collect::<Vec<_>>();
+                let generics = ty_params
+                    .iter()
+                    .map(|param| deps.require_ref::<LiftedGenericEnc>(*param).unwrap())
+                    .collect::<Vec<_>>();
+                let decls = generics.iter().map(|g| g.decl()).collect::<Vec<_>>();
                 vcx.mk_forall_expr(
                     vcx.alloc_slice(&decls),
                     vcx.alloc_slice(&[vcx.mk_trigger(&[implements_expr])]),
-                    conditional_implements_expr
+                    conditional_implements_expr,
                 )
             };
             let axiom = vcx.mk_domain_axiom(
@@ -99,7 +102,7 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
                     ty,
                     vcx.tcx().def_path_str(trait_ref.def_id)
                 ),
-                axiom_expr
+                axiom_expr,
             );
             let domain = vcx.mk_domain(
                 vir_format_identifier!(

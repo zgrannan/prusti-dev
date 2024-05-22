@@ -2,11 +2,11 @@ use prusti_interface::specs::specifications::SpecQuery;
 use prusti_rustc_interface::{
     infer::{
         infer::TyCtxtInferExt,
-        traits::{self, Obligation, ObligationCause, Reveal},
+        traits::{self, Obligation, ObligationCause},
     },
     middle::{
         mir,
-        ty::{ClauseKind, List, ParamEnv, PredicateKind},
+        ty::{ClauseKind, PredicateKind},
     },
     trait_selection::traits::SelectionContext,
 };
@@ -22,7 +22,6 @@ use crate::{
         BuiltinTraitImplEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc,
         TraitTyArgsEnc, UserDefinedTraitImplEnc,
     },
-    generic_args_support::get_unique_param_tys_in_order,
     trait_support::is_function_with_body,
 };
 
@@ -192,6 +191,9 @@ where
             }
             args.extend(param_ty_decls.iter());
 
+            // Add trait constraints to types
+            // e.g for a function f<T: Clone>(t: T) we want to add a constraint
+            // `implements_clone(T)` as a precondition
             let constraints = vcx
                 .tcx()
                 .predicates_of(def_id)
@@ -199,11 +201,6 @@ where
             for constraint in constraints.predicates {
                 match constraint.as_predicate().kind().no_bound_vars().unwrap() {
                     PredicateKind::Clause(ClauseKind::Trait(trait_predicate)) => {
-                        eprintln!(
-                            "Type {:?} must implement trait {:?}",
-                            trait_predicate.self_ty(),
-                            trait_predicate.def_id()
-                        );
                         let vir_trait = deps.require_ref::<TraitEnc>(trait_predicate.def_id())?;
                         pres.push(
                             vir_trait.implements(
@@ -215,6 +212,10 @@ where
                                     .unwrap(),
                             ),
                         );
+
+                        // Attempt to determine how the typechecker knows where to look find an
+                        // implementation of a trait. We use this information to trigger encoding
+                        // the trait impls to generate the necessary Viper axioms
 
                         let obligation = Obligation {
                             cause: ObligationCause::dummy(),
@@ -232,10 +233,7 @@ where
                                 }
                                 traits::ImplSource::Param(_) => {}
                                 traits::ImplSource::Builtin(_, _) => {
-                                    deps.require_dep::<BuiltinTraitImplEnc>((
-                                        trait_predicate.self_ty(),
-                                        trait_predicate.def_id(),
-                                    ))?;
+                                    deps.require_dep::<BuiltinTraitImplEnc>(trait_predicate.trait_ref)?;
                                 }
                             },
                             other => panic!("{:?}", other),
@@ -243,7 +241,6 @@ where
                     }
                     _ => todo!(),
                 }
-                eprintln!("Constraint: {:?}", constraint);
             }
 
             pres.extend(spec_pres);
