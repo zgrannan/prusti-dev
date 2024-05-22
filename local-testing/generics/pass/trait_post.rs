@@ -16,6 +16,11 @@ fn go<T: Foo>(t: T) -> u32 {
     t.baz()
 }
 
+#[ensures(result == 5)]
+fn go_int() -> u32 {
+   go(1)
+}
+
 fn main(){
 
 }

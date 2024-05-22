@@ -184,6 +184,18 @@ pub fn test_entrypoint<'tcx>(
         program_domains.push(output);
     }
 
+    header(&mut viper_code, "builtin trait impls");
+    for output in crate::encoders::BuiltinTraitImplEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output));
+        program_domains.push(output);
+    }
+
+    header(&mut viper_code, "trait impls");
+    for output in crate::encoders::TraitImplEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output));
+        program_domains.push(output);
+    }
+
     std::fs::write("local-testing/simple.vpr", viper_code).unwrap();
 
     let program = vir::with_vcx(|vcx| vcx.mk_program(

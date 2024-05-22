@@ -11,6 +11,8 @@ mod r#type;
 mod r#const;
 mod mono;
 mod r#trait;
+mod builtin_trait_impl;
+mod trait_impl;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "mono_function_encoding")] {
@@ -58,3 +60,5 @@ pub use viper_tuple::{
 };
 pub use r#const::ConstEnc;
 pub use r#trait::TraitEnc;
+pub use builtin_trait_impl::BuiltinTraitImplEnc;
+pub use trait_impl::TraitImplEnc;

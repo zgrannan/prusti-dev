@@ -75,8 +75,6 @@ impl TaskEncoder for TraitEnc {
 
                         let other_name = vcx.tcx().def_path_str(trait_ref.def_id());
 
-                        eprintln!("{} implements {}", trait_name, other_name);
-
                         axioms.push(vcx.mk_domain_axiom(
                             vir::vir_format_identifier!(
                                 vcx,

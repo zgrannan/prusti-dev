@@ -695,6 +695,7 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                 )
             );
         }
+
         self.vcx.mk_domain(
             self.domain.name(),
             &[],
