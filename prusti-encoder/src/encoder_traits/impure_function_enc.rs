@@ -1,15 +1,10 @@
 use prusti_interface::specs::specifications::SpecQuery;
-use prusti_rustc_interface::{
-    infer::{
-        infer::TyCtxtInferExt,
-        traits::{self, Obligation, ObligationCause},
-    },
+use prusti_rustc_interface::
     middle::{
         mir,
         ty::{ClauseKind, PredicateKind},
-    },
-    trait_selection::traits::SelectionContext,
-};
+    }
+;
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity, ViperIdent};
 
@@ -19,8 +14,8 @@ use crate::{
             func_def_ty_params::LiftedTyParamsEnc,
             ty::{EncodeGenericsAsLifted, LiftedTyEnc},
         },
-        BuiltinTraitImplEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc,
-        TraitTyArgsEnc, UserDefinedTraitImplEnc,
+        ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc,
+        TraitTyArgsEnc,
     },
     trait_support::is_function_with_body,
 };
@@ -212,32 +207,6 @@ where
                                     .unwrap(),
                             ),
                         );
-
-                        // Attempt to determine how the typechecker knows where to look find an
-                        // implementation of a trait. We use this information to trigger encoding
-                        // the trait impls to generate the necessary Viper axioms
-
-                        // let obligation = Obligation {
-                        //     cause: ObligationCause::dummy(),
-                        //     param_env: vcx.tcx().param_env(def_id),
-                        //     predicate: trait_predicate,
-                        //     recursion_depth: 0,
-                        // };
-
-                        // let infcx = vcx.tcx().infer_ctxt().build();
-                        // let mut selcx = SelectionContext::new(&infcx);
-                        // match selcx.select(&obligation) {
-                        //     Ok(Some(sel)) => match sel {
-                        //         traits::ImplSource::UserDefined(ud) => {
-                        //             deps.require_dep::<UserDefinedTraitImplEnc>(ud.impl_def_id)?;
-                        //         }
-                        //         traits::ImplSource::Param(_) => {}
-                        //         traits::ImplSource::Builtin(_, _) => {
-                        //             deps.require_dep::<BuiltinTraitImplEnc>(trait_predicate.trait_ref)?;
-                        //         }
-                        //     },
-                        //     other => panic!("{:?}", other),
-                        // }
                     }
                     _ => todo!(),
                 }
