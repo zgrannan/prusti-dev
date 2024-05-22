@@ -2,9 +2,15 @@ use prusti_rustc_interface::middle::ty::TraitRef;
 use task_encoder::TaskEncoder;
 use vir::vir_format_identifier;
 
-use crate::encoders::lifted::ty::{EncodeGenericsAsLifted, LiftedTyEnc};
+use crate::{
+    encoders::lifted::ty::{EncodeGenericsAsLifted, LiftedTyEnc},
+    generic_args_support::get_unique_param_tys_in_order,
+};
 
-use super::{TraitEnc, TraitTyArgsEnc};
+use super::{
+    lifted::{func_def_ty_params::LiftedTyParamsEnc, generic::LiftedGenericEnc},
+    GenericEnc, TraitEnc, TraitTyArgsEnc,
+};
 
 pub struct BuiltinTraitImplEnc;
 
@@ -30,6 +36,25 @@ impl TaskEncoder for BuiltinTraitImplEnc {
             let lifted_ty_expr = deps
                 .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(task_key.self_ty())?
                 .expr(vcx);
+            let ty_params = get_unique_param_tys_in_order(task_key.args).collect::<Vec<_>>();
+            let implements_expr = encoded_trait.implements(
+                lifted_ty_expr,
+                deps.require_local::<TraitTyArgsEnc>(*task_key)?,
+            );
+            let implements_expr = if ty_params.len() > 0 {
+                vcx.mk_forall_expr(
+                    vcx.alloc_slice(
+                        &ty_params
+                            .iter()
+                            .map(|p| deps.require_ref::<LiftedGenericEnc>(*p).unwrap().decl())
+                            .collect::<Vec<_>>(),
+                    ),
+                    vcx.alloc_slice(&[vcx.mk_trigger(vcx.alloc_slice(&[implements_expr]))]),
+                    implements_expr
+                )
+            } else {
+                implements_expr
+            };
             let axiom = vcx.mk_domain_axiom(
                 vir_format_identifier!(
                     vcx,
@@ -37,10 +62,7 @@ impl TaskEncoder for BuiltinTraitImplEnc {
                     vcx.tcx().def_path_str(task_key.def_id),
                     task_key.args
                 ),
-                encoded_trait.implements(
-                    lifted_ty_expr,
-                    deps.require_local::<TraitTyArgsEnc>(*task_key)?
-                ),
+                implements_expr,
             );
             let domain = vcx.mk_domain(
                 vir_format_identifier!(
