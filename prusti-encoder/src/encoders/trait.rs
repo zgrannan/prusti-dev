@@ -1,21 +1,13 @@
-use prusti_rustc_interface::{
-    hir::def_id::DefId,
-    middle::ty::{ClauseKind, PredicateKind},
-};
+use prusti_rustc_interface::
+    hir::def_id::DefId
+;
 use rustc_middle::ty;
 use task_encoder::{OutputRefAny, TaskEncoder};
 use vir::{
-    vir_format_identifier, BinOpKind, CallableIdent, FunctionIdent, UnaryArity, UnknownArity,
+    vir_format_identifier, CallableIdent, FunctionIdent, UnknownArity,
 };
 
-use super::{
-    lifted::{
-        func_def_ty_params::LiftedTyParamsEnc,
-        generic::LiftedGenericEnc,
-        ty::{EncodeGenericsAsLifted, LiftedTyEnc},
-    },
-    GenericEnc, TraitTyArgsEnc,
-};
+use super::GenericEnc;
 
 pub struct TraitEnc;
 
@@ -60,9 +52,7 @@ impl TaskEncoder for TraitEnc {
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
             let trait_name = vcx.tcx().def_path_str(*task_key);
-            eprintln!("trait_name: {}", trait_name);
             let trait_generics = vcx.tcx().generics_of(*task_key);
-            eprintln!("generics: {:?}", trait_generics);
             let trait_ty_params = trait_generics
                 .params
                 .iter()
@@ -97,7 +87,6 @@ impl TaskEncoder for TraitEnc {
                 &[],
                 vcx.alloc_slice(&[implements_fn]),
             );
-            eprintln!("trait_name done: {}", trait_name);
             Ok((domain, ()))
         })
     }
