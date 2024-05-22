@@ -23,7 +23,7 @@ use task_encoder::TaskEncoder;
 use crate::encoders::{lifted::{
     casters::{CastTypeImpure, CastTypePure, CastersEnc},
     ty_constructor::TyConstructorEnc
-}, MirPolyImpureEnc, TraitEnc};
+}, MirPolyImpureEnc, TraitEnc, UserDefinedTraitImplEnc};
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -41,9 +41,16 @@ pub fn test_entrypoint<'tcx>(
 
     impl <'tcx> Visitor<'tcx> for TraitVisitor<'tcx> {
         fn visit_item(&mut self, item: &'tcx hir::Item<'tcx>) {
-            if let hir::ItemKind::Trait(..) = item.kind {
-                let res = TraitEnc::encode(item.owner_id.def_id.to_def_id(), false);
-                assert!(res.is_ok());
+            match item.kind {
+                hir::ItemKind::Trait(..) => {
+                    let res = TraitEnc::encode(item.owner_id.def_id.to_def_id(), false);
+                    assert!(res.is_ok());
+                },
+                hir::ItemKind::Impl(hir_impl) if hir_impl.of_trait.is_some() => {
+                    let res = UserDefinedTraitImplEnc::encode(item.owner_id.def_id.to_def_id(), false);
+                    assert!(res.is_ok());
+                }
+                _ => {}
             }
             intravisit::walk_item(self, item);
         }
@@ -190,8 +197,8 @@ pub fn test_entrypoint<'tcx>(
         program_domains.push(output);
     }
 
-    header(&mut viper_code, "trait impls");
-    for output in crate::encoders::TraitImplEnc::all_outputs() {
+    header(&mut viper_code, "user-defined trait impls");
+    for output in crate::encoders::UserDefinedTraitImplEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output));
         program_domains.push(output);
     }

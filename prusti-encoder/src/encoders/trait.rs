@@ -2,16 +2,39 @@ use prusti_rustc_interface::{
     hir::def_id::DefId,
     middle::ty::{ClauseKind, PredicateKind},
 };
+use rustc_middle::ty;
 use task_encoder::{OutputRefAny, TaskEncoder};
-use vir::{vir_format_identifier, BinOpKind, CallableIdent, FunctionIdent, UnaryArity};
+use vir::{
+    vir_format_identifier, BinOpKind, CallableIdent, FunctionIdent, UnaryArity, UnknownArity,
+};
 
-use super::GenericEnc;
+use super::{
+    lifted::{
+        func_def_ty_params::LiftedTyParamsEnc,
+        generic::LiftedGenericEnc,
+        ty::{EncodeGenericsAsLifted, LiftedTyEnc},
+    },
+    GenericEnc, TraitTyArgsEnc,
+};
 
 pub struct TraitEnc;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct TraitEncOutputRef<'vir> {
-    pub implements_fn: FunctionIdent<'vir, UnaryArity<'vir>>,
+    implements_fn: FunctionIdent<'vir, UnknownArity<'vir>>,
+}
+
+impl<'vir> TraitEncOutputRef<'vir> {
+    pub fn implements(
+        &self,
+        ty: vir::Expr<'vir>,
+        trait_ty_args: &'vir [vir::Expr<'vir>],
+    ) -> vir::Expr<'vir> {
+        let args = std::iter::once(ty)
+            .chain(trait_ty_args.iter().copied())
+            .collect::<Vec<_>>();
+        vir::with_vcx(|vcx| self.implements_fn.apply(vcx, &args))
+    }
 }
 
 impl<'vir> OutputRefAny for TraitEncOutputRef<'vir> {}
@@ -37,74 +60,44 @@ impl TaskEncoder for TraitEnc {
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
             let trait_name = vcx.tcx().def_path_str(*task_key);
+            eprintln!("trait_name: {}", trait_name);
+            let trait_generics = vcx.tcx().generics_of(*task_key);
+            eprintln!("generics: {:?}", trait_generics);
+            let trait_ty_params = trait_generics
+                .params
+                .iter()
+                .skip(1) // skip `Self`
+                .filter_map(|param| {
+                    if matches!(param.kind, ty::GenericParamDefKind::Type { .. }) {
+                        Some(ty::ParamTy::for_def(param))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
 
             let generics = deps.require_ref::<GenericEnc>(())?;
 
             let implements_fn = FunctionIdent::new(
                 vir_format_identifier!(vcx, "implements_{}", trait_name),
-                UnaryArity::new(vcx.alloc([generics.type_snapshot])),
+                UnknownArity::new(
+                    vcx.alloc_slice(&vec![generics.type_snapshot; trait_ty_params.len() + 1]),
+                ),
                 &vir::TypeData::Bool,
             );
 
-            deps.emit_output_ref(*task_key, TraitEncOutputRef { implements_fn })?;
-
-            let mut axioms = vec![];
-
-            let constraints = vcx.tcx().predicates_of(*task_key);
-
-            let constraint_ty_decl = vcx.mk_local_decl("ty", generics.type_snapshot);
-            let constraint_ty_expr =
-                vcx.mk_local_ex(constraint_ty_decl.name, generics.type_snapshot);
-            let axiom_qvars = vcx.alloc_slice(&[constraint_ty_decl]);
-            let implements_this = implements_fn.apply(vcx, [constraint_ty_expr]);
-
-            for (constraint, _) in constraints.predicates {
-                match constraint.as_predicate().kind().skip_binder() {
-                    PredicateKind::Clause(ClauseKind::Trait(trait_ref)) => {
-
-                        if trait_ref.def_id() == *task_key {
-                            continue;
-                        }
-
-                        let implements_other_fn =
-                            deps.require_ref::<Self>(trait_ref.def_id())?.implements_fn;
-
-                        let implements_other = implements_other_fn.apply(vcx, [constraint_ty_expr]);
-
-                        let trigger = vcx.mk_trigger(vcx.alloc_slice(&[implements_other]));
-
-                        let other_name = vcx.tcx().def_path_str(trait_ref.def_id());
-
-                        axioms.push(vcx.mk_domain_axiom(
-                            vir::vir_format_identifier!(
-                                vcx,
-                                "{}_implements_{}",
-                                trait_name,
-                                other_name,
-                            ),
-                            vcx.mk_forall_expr(
-                                axiom_qvars,
-                                vcx.alloc_slice(&[trigger]),
-                                vcx.mk_bin_op_expr(
-                                    BinOpKind::Implies,
-                                    implements_this,
-                                    implements_other
-                                ),
-                            ),
-                        ))
-                    }
-                    _ => todo!(),
-                }
-            }
+            let output_ref = TraitEncOutputRef { implements_fn };
+            deps.emit_output_ref(*task_key, output_ref)?;
 
             let implements_fn = vcx.mk_domain_function(implements_fn, false);
 
             let domain = vcx.mk_domain(
                 vir::vir_format_identifier!(vcx, "{}", trait_name),
                 &[],
-                vcx.alloc_slice(&axioms),
+                &[],
                 vcx.alloc_slice(&[implements_fn]),
             );
+            eprintln!("trait_name done: {}", trait_name);
             Ok((domain, ()))
         })
     }

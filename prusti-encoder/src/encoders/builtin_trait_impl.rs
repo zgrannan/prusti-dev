@@ -28,7 +28,7 @@ impl TaskEncoder for BuiltinTraitImplEnc {
         deps: &mut task_encoder::TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task_key, ())?;
-        let implements_fn = deps.require_ref::<TraitEnc>(task_key.1)?.implements_fn;
+        let trait_ref = deps.require_ref::<TraitEnc>(task_key.1)?;
         vir::with_vcx(|vcx| {
             let lifted_ty_expr = deps
                 .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(task_key.0)?
@@ -40,7 +40,7 @@ impl TaskEncoder for BuiltinTraitImplEnc {
                     task_key.0,
                     vcx.tcx().def_path_str(task_key.1)
                 ),
-                implements_fn.apply(vcx, [lifted_ty_expr]),
+                trait_ref.implements(lifted_ty_expr, &[]),
             );
             let domain = vcx.mk_domain(
                 vir_format_identifier!(

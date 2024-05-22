@@ -1,11 +1,15 @@
 use prusti_interface::specs::specifications::SpecQuery;
 use prusti_rustc_interface::{
+    infer::{
+        infer::TyCtxtInferExt,
+        traits::{self, Obligation, ObligationCause, Reveal},
+    },
     middle::{
-    mir,
-    ty::{ClauseKind, PredicateKind, ParamEnv, List},
-}, infer::traits::{self,Obligation, ObligationCause, Reveal},
-infer::infer::TyCtxtInferExt,
-trait_selection::traits::SelectionContext};
+        mir,
+        ty::{ClauseKind, List, ParamEnv, PredicateKind},
+    },
+    trait_selection::traits::SelectionContext,
+};
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity, ViperIdent};
 
@@ -14,7 +18,9 @@ use crate::{
         lifted::{
             func_def_ty_params::LiftedTyParamsEnc,
             ty::{EncodeGenericsAsLifted, LiftedTyEnc},
-        }, BuiltinTraitImplEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc, TraitImplEnc
+        },
+        BuiltinTraitImplEnc, ImpureEncVisitor, MirImpureEnc, MirLocalDefEnc, MirSpecEnc, TraitEnc,
+        TraitTyArgsEnc, UserDefinedTraitImplEnc,
     },
     generic_args_support::get_unique_param_tys_in_order,
     trait_support::is_function_with_body,
@@ -186,46 +192,52 @@ where
             }
             args.extend(param_ty_decls.iter());
 
-            let constraints = vcx.tcx().predicates_of(def_id).instantiate(vcx.tcx(), substs);
+            let constraints = vcx
+                .tcx()
+                .predicates_of(def_id)
+                .instantiate(vcx.tcx(), substs);
             for constraint in constraints.predicates {
                 match constraint.as_predicate().kind().no_bound_vars().unwrap() {
-                    PredicateKind::Clause(ClauseKind::Trait(trait_ref)) => {
+                    PredicateKind::Clause(ClauseKind::Trait(trait_predicate)) => {
                         eprintln!(
                             "Type {:?} must implement trait {:?}",
-                            trait_ref.self_ty(),
-                            trait_ref.def_id()
+                            trait_predicate.self_ty(),
+                            trait_predicate.def_id()
                         );
-                        let vir_trait = deps.require_ref::<TraitEnc>(trait_ref.def_id())?;
-                        pres.push(vir_trait.implements_fn.apply(
-                            vcx,
-                            [deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(
-                                trait_ref.self_ty()
-                            )?.expr(vcx)],
-                        ));
+                        let vir_trait = deps.require_ref::<TraitEnc>(trait_predicate.def_id())?;
+                        pres.push(
+                            vir_trait.implements(
+                                deps.require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(
+                                    trait_predicate.self_ty(),
+                                )?
+                                .expr(vcx),
+                                deps.require_local::<TraitTyArgsEnc>(trait_predicate.trait_ref)
+                                    .unwrap(),
+                            ),
+                        );
 
                         let obligation = Obligation {
                             cause: ObligationCause::dummy(),
                             param_env: vcx.tcx().param_env(def_id),
-                            predicate: trait_ref,
-                            recursion_depth: 0
+                            predicate: trait_predicate,
+                            recursion_depth: 0,
                         };
 
                         let infcx = vcx.tcx().infer_ctxt().build();
                         let mut selcx = SelectionContext::new(&infcx);
                         match selcx.select(&obligation) {
-                            Ok(Some(sel)) => {
-                                match sel {
-                                    traits::ImplSource::UserDefined(ud) => {
-                                        deps.require_dep::<TraitImplEnc>(ud.impl_def_id)?;
-                                    }
-                                    traits::ImplSource::Param(_) => {},
-                                    traits::ImplSource::Builtin(_, _) => {
-                                        deps.require_dep::<BuiltinTraitImplEnc>(
-                                            (trait_ref.self_ty(), trait_ref.def_id())
-                                        )?;
-                                    }
+                            Ok(Some(sel)) => match sel {
+                                traits::ImplSource::UserDefined(ud) => {
+                                    deps.require_dep::<UserDefinedTraitImplEnc>(ud.impl_def_id)?;
                                 }
-                            }
+                                traits::ImplSource::Param(_) => {}
+                                traits::ImplSource::Builtin(_, _) => {
+                                    deps.require_dep::<BuiltinTraitImplEnc>((
+                                        trait_predicate.self_ty(),
+                                        trait_predicate.def_id(),
+                                    ))?;
+                                }
+                            },
                             other => panic!("{:?}", other),
                         }
                     }

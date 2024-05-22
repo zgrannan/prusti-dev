@@ -16,7 +16,7 @@ pub fn get_unique_param_tys_in_order<'tcx>(
     )
 }
 
-fn extract_ty_params(ty: Ty<'_>) -> Vec<ParamTy> {
+pub fn extract_ty_params(ty: Ty<'_>) -> Vec<ParamTy> {
     match ty.kind() {
         TyKind::Param(p) => vec![*p],
         TyKind::Adt(_, args) => args
@@ -36,7 +36,7 @@ fn extract_ty_params(ty: Ty<'_>) -> Vec<ParamTy> {
     }
 }
 
-fn unique(iter: impl IntoIterator<Item = ParamTy>) -> impl Iterator<Item = ParamTy> {
+pub fn unique(iter: impl IntoIterator<Item = ParamTy>) -> impl Iterator<Item = ParamTy> {
     let mut seen = HashSet::new();
     iter.into_iter().filter(move |item| seen.insert(*item))
 }
