@@ -256,19 +256,24 @@ pub fn find_trait_method_substs<'tcx>(
     // not include the substitution of e.g. Struct<B,C> for Self.
     let impl_method_substs = ty::List::identity_for_item(tcx, impl_method_def_id);
     let trait_method_substs = ty::List::identity_for_item(tcx, trait_method_def_id);
-    let trait_method_substs =
-        trait_method_substs.rebase_onto(tcx, trait_def_id, impl_method_substs);
+    eprintln!("!!impl method substs {:?} trait_method_substs: {:?}", impl_method_substs, trait_method_substs);
+    let trait_method_substs = impl_method_substs.rebase_onto(tcx, trait_def_id, trait_method_substs);
 
     // Preface the substs from `rebase_onto` with the substitution of the struct type
     // for `Self` in the trait.
-    let trait_method_substs = tcx.mk_args_from_iter(
-        std::iter::once(tcx.type_of(impl_def_id).instantiate_identity().into())
-            .chain(trait_method_substs.iter()),
-    );
+    // let trait_method_substs = tcx.mk_args_from_iter(
+    //     std::iter::once(tcx.type_of(impl_def_id).instantiate_identity().into())
+    //         .chain(trait_method_substs.iter()),
+    // );
 
     // sanity check: do we now have the correct number of substs?
     let identity_trait_method = ty::List::identity_for_item(tcx, trait_method_def_id);
-    assert_eq!(trait_method_substs.len(), identity_trait_method.len());
+    assert_eq!(
+        trait_method_substs.len(),
+        identity_trait_method.len(),
+        "impldefid: {:?} impl method substs: {:?}, trait method substs: {:?}",
+        impl_method_def_id, impl_method_substs, trait_method_substs
+    );
 
     Some((trait_method_def_id, trait_method_substs))
 }
