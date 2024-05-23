@@ -203,8 +203,7 @@ where
                                     trait_predicate.self_ty(),
                                 )?
                                 .expr(vcx),
-                                deps.require_local::<TraitTyArgsEnc>(trait_predicate.trait_ref)
-                                    .unwrap(),
+                                deps.require_local::<TraitTyArgsEnc>(trait_predicate.trait_ref)?
                             ),
                         );
                     }

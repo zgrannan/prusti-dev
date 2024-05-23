@@ -3,6 +3,9 @@ use task_encoder::TaskEncoder;
 
 use crate::encoders::lifted::ty::{EncodeGenericsAsLifted, LiftedTyEnc};
 
+/// Encodes the type arguments of a trait (e.g the `U` in `Into<U>`). The result
+/// of this encoder should be used as the type arguments for
+/// [super::r#trait::TraitEncOutputRef::implements].
 pub struct TraitTyArgsEnc;
 
 impl TaskEncoder for TraitTyArgsEnc {
@@ -21,7 +24,7 @@ impl TaskEncoder for TraitTyArgsEnc {
         task_key: &Self::TaskKey<'vir>,
         deps: &mut task_encoder::TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
-        deps.emit_output_ref(*task_key, ());
+        deps.emit_output_ref(*task_key, ())?;
         vir::with_vcx(|vcx| {
             let args = vcx.alloc_slice(
                 &task_key

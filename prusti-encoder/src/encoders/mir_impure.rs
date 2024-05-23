@@ -821,16 +821,11 @@ impl<'vir, 'enc, E: TaskEncoder> mir::visit::Visitor<'vir> for ImpureEncVisitor<
             } => {
                 let (func_def_id, caller_substs) = self.get_def_id_and_caller_substs(func);
 
-                // Determine how the typechecker knows where to look find an
-                // implementation of a trait. We use this information to trigger
-                // encoding the trait impls to generate the necessary Viper
-                // axioms
-                //
-                // For example suppose we are calling f<T: Copy>(t: T)
-                // via a call f(bool). Then, we need to ensure there is an
-                // axiom asserting `implements_Copy(s_Bool_type())`.
-
-
+                // Locate the impl for any trait bounds on the callee (w.r.t to
+                // input args), and encode the appropriate axiom(s). For example
+                // suppose we are calling f<T: Copy>(t: T) via a call f(bool).
+                // Then, we need to ensure there is an axiom asserting
+                // `implements_Copy(s_Bool_type())`.
                 let constraints = self.vcx
                     .tcx()
                     .predicates_of(func_def_id)
@@ -859,7 +854,7 @@ impl<'vir, 'enc, E: TaskEncoder> mir::visit::Visitor<'vir> for ImpureEncVisitor<
                                     }
                                 },
                                 other => panic!(
-                                    "{:?} when trying obligation {:?} in fn {:?} calling {:?}",
+                                    "{:?} when locating impl {:?} in fn {:?} calling {:?}",
                                      other,
                                      obligation,
                                      self.def_id,

@@ -9,6 +9,17 @@ use vir::{
 
 use super::GenericEnc;
 
+/// Given a trait definition, defines an domain with an uninterpreted function
+/// indicating whether a type implements the trait. The function takes as
+/// parameters the type to check and the type parameters of the trait. For
+/// example, a trait CoerceTo<T> would result in a domain such as
+/// ```viper
+///   domain CoerceTo {
+///     function implements_CoerceTo(Type, Type)
+///   }
+/// ```
+/// Accordingly, the expression `implements_CoerceTo(s_u32_type(), s_u64_type())`
+/// would be true iff u32 implements CoerceTo<u64>.
 pub struct TraitEnc;
 
 #[derive(Clone, Copy)]
@@ -17,6 +28,10 @@ pub struct TraitEncOutputRef<'vir> {
 }
 
 impl<'vir> TraitEncOutputRef<'vir> {
+    /// Generates a Viper expression that is true iff the lifted type `ty`
+    /// implements the trait w/ args `trait_ty_args`. For example, if the trait
+    /// is `CoerceTo<T>`, `ty` corresponds to  `u32` and `trait_ty_args` to
+    /// `u64`, then the expr is true iff `u32` implements `CoerceTo<u64>`.
     pub fn implements(
         &self,
         ty: vir::Expr<'vir>,

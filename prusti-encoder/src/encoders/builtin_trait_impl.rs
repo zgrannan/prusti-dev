@@ -8,10 +8,15 @@ use crate::{
 };
 
 use super::{
-    lifted::{func_def_ty_params::LiftedTyParamsEnc, generic::LiftedGenericEnc},
-    GenericEnc, TraitEnc, TraitTyArgsEnc,
+    lifted::generic::LiftedGenericEnc,
+    TraitEnc, TraitTyArgsEnc,
 };
 
+/// Encodes axioms for types that implement traits via the compiler's "builtin"
+/// logic, i.e. not via a user-defined `impl`. For example, `u32` implements the
+/// `Sized` trait because it is builtin. User-defined types may also implement a
+/// trait in this manner, for example, an ADT composed of sized types also
+/// automatically implements `Sized`
 pub struct BuiltinTraitImplEnc;
 
 impl TaskEncoder for BuiltinTraitImplEnc {

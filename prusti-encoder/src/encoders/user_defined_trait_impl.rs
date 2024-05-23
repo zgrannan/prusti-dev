@@ -10,11 +10,12 @@ use crate::{
         generic::LiftedGenericEnc,
         ty::{EncodeGenericsAsLifted, LiftedTyEnc},
     },
-    generic_args_support::{extract_ty_params, get_unique_param_tys_in_order, unique},
+    generic_args_support::{extract_ty_params, unique},
 };
 
 use super::{TraitEnc, TraitTyArgsEnc};
 
+/// Encodes axioms for traits implementations via user-written `impl` blocks.
 pub struct UserDefinedTraitImplEnc;
 
 impl TaskEncoder for UserDefinedTraitImplEnc {
@@ -48,7 +49,7 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
             );
 
             let constraints = vcx.tcx().predicates_of(task_key);
-            let mut reqs = vec![];
+            let mut encoded_ty_constraints = vec![];
             for (constraint, _) in constraints.predicates {
                 match constraint.as_predicate().kind().skip_binder() {
                     PredicateKind::Clause(ClauseKind::Trait(trait_clause)) => {
@@ -64,13 +65,13 @@ impl TaskEncoder for UserDefinedTraitImplEnc {
                             deps.require_local::<TraitTyArgsEnc>(trait_clause.trait_ref)
                                 .unwrap(),
                         );
-                        reqs.push(implements_expr);
+                        encoded_ty_constraints.push(implements_expr);
                     }
                     _ => todo!(),
                 }
             }
 
-            let mut reqs_iter = reqs.into_iter();
+            let mut reqs_iter = encoded_ty_constraints.into_iter();
 
             let conditional_implements_expr = if let Some(first) = reqs_iter.next() {
                 let precondition = reqs_iter.fold(first, |acc, req| {

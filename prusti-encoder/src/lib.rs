@@ -35,11 +35,9 @@ pub fn test_entrypoint<'tcx>(
 
     // TODO: this should be a "crate" encoder, which will deps.require all the methods in the crate
 
-    struct TraitVisitor<'tcx>{
-        tcx: ty::TyCtxt<'tcx>,
-    };
+    struct TraitAndImplVisitor;
 
-    impl <'tcx> Visitor<'tcx> for TraitVisitor<'tcx> {
+    impl <'tcx> Visitor<'tcx> for TraitAndImplVisitor {
         fn visit_item(&mut self, item: &'tcx hir::Item<'tcx>) {
             match item.kind {
                 hir::ItemKind::Trait(..) => {
@@ -56,7 +54,7 @@ pub fn test_entrypoint<'tcx>(
         }
     }
 
-    tcx.hir().visit_all_item_likes_in_crate(&mut TraitVisitor { tcx });
+    tcx.hir().visit_all_item_likes_in_crate(&mut TraitAndImplVisitor);
 
     for def_id in tcx.hir().body_owners() {
         tracing::debug!("test_entrypoint item: {def_id:?}");
