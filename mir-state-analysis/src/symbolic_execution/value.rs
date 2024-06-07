@@ -5,10 +5,14 @@ use prusti_rustc_interface::{
         mir::{self, Place, ProjectionElem},
         ty::{self},
     },
+    span::def_id::DefId,
 };
 
 use std::{
-    cmp::Ordering, collections::BTreeMap, hash::{Hash, Hasher}, marker::PhantomData
+    cmp::Ordering,
+    collections::BTreeMap,
+    hash::{Hash, Hasher},
+    marker::PhantomData,
 };
 
 #[derive(Debug)]
@@ -43,12 +47,18 @@ pub enum SymValue<'tcx> {
         Box<SymValue<'tcx>>,
         Box<SymValue<'tcx>>,
     ),
+    UnaryOp(
+        ty::Ty<'tcx>,
+        mir::UnOp,
+        Box<SymValue<'tcx>>,
+    ),
     Projection(
         ProjectionElem<mir::Local, ty::Ty<'tcx>>,
         Box<SymValue<'tcx>>,
     ),
     Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx>>),
     Discriminant(Box<SymValue<'tcx>>),
+    PureFnCall(DefId, Vec<SymValue<'tcx>>),
 }
 
 pub type Substs<'tcx> = BTreeMap<usize, SymValue<'tcx>>;
@@ -58,8 +68,12 @@ impl<'tcx> SymValue<'tcx> {
         eprintln!("subst {:?} with substs: {:?}", self, substs);
         match self {
             SymValue::Var(idx, ty) => {
-                assert_eq!(ty, substs[&idx].ty(tcx).rust_ty());
-                substs[&idx].clone()
+                if let Some(subst) = substs.get(&idx) {
+                    assert_eq!(ty, subst.ty(tcx).rust_ty());
+                    subst.clone()
+                } else {
+                    self
+                }
             }
             c @ SymValue::Constant(_) => c,
             SymValue::CheckedBinaryOp(ty, op, lhs, rhs) => SymValue::CheckedBinaryOp(
@@ -83,6 +97,11 @@ impl<'tcx> SymValue<'tcx> {
             }
             SymValue::Discriminant(val) => SymValue::Discriminant(Box::new(val.subst(tcx, substs))),
             SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(tcx, substs))),
+            SymValue::PureFnCall(def_id, args) => SymValue::PureFnCall(
+                def_id,
+                args.into_iter().map(|arg| arg.subst(tcx, substs)).collect(),
+            ),
+            SymValue::UnaryOp(ty, op, expr) => SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
         }
     }
 }
@@ -112,6 +131,13 @@ impl<'tcx> SymValue<'tcx> {
             SymValue::Discriminant(sym_val) => {
                 Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
             }
+            SymValue::PureFnCall(def_id, args) => {
+                Ty::new(
+                    tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
+                    None
+                )
+            }
+            SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
         }
     }
 }

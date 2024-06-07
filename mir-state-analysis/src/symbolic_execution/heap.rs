@@ -1,14 +1,14 @@
-use crate::symbolic_execution::place::Place;
-use crate::symbolic_execution::value::{SymValue, Constant};
+use crate::symbolic_execution::{
+    place::Place,
+    value::{Constant, SymValue},
+};
 use prusti_rustc_interface::middle::mir;
 use std::collections::BTreeMap;
-
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SymbolicHeap<'tcx>(BTreeMap<Place<'tcx>, SymValue<'tcx>>);
 
 impl<'tcx> SymbolicHeap<'tcx> {
-
     pub fn check_eq_debug(&self, other: &Self) {
         for (p, v) in self.0.iter() {
             if !other.0.contains_key(&p) {
@@ -50,9 +50,10 @@ impl<'tcx> SymbolicHeap<'tcx> {
 
     pub fn encode_operand(&self, operand: &mir::Operand<'tcx>) -> SymValue<'tcx> {
         match *operand {
-            mir::Operand::Copy(place) | mir::Operand::Move(place) => {
-                self.get(&place.into()).unwrap().clone()
-            }
+            mir::Operand::Copy(place) | mir::Operand::Move(place) => self
+                .get(&place.into())
+                .unwrap_or_else(|| panic!("{place:?} not found in heap {:#?}", self.0))
+                .clone(),
             mir::Operand::Constant(box c) => SymValue::Constant(Constant(c.clone())),
         }
     }

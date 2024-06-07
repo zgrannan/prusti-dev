@@ -38,13 +38,7 @@ use super::{
     lifted::{
         cast::{CastArgs, PureGenericCastEnc},
         rust_ty_cast::RustTyGenericCastEnc,
-    },
-    mir_base::MirBaseEnc,
-    mir_pure::PureKind,
-    rust_ty_snapshots::RustTySnapshotsEnc,
-    sym_pure::SymPureEncResult,
-    sym_spec::SymSpecEnc,
-    MirBuiltinEncTask, SpecEnc, SpecEncTask, SymPureEnc, SymPureEncTask,
+    }, mir_base::MirBaseEnc, mir_pure::PureKind, rust_ty_snapshots::RustTySnapshotsEnc, sym_pure::{DefaultPurityChecker, SymPureEncResult}, sym_spec::SymSpecEnc, MirBuiltinEncTask, MirPureEnc, PureFunctionEnc, SpecEnc, SpecEncTask, SymPureEnc, SymPureEncTask
 };
 
 impl TaskEncoder for SymImpureEnc {
@@ -109,12 +103,11 @@ impl TaskEncoder for SymImpureEnc {
                 .get_impure_fn_body_identity(local_def_id)
                 .body();
 
-            let mut fpcs_analysis = mir_state_analysis::run_free_pcs(&body, vcx.tcx());
-            fpcs_analysis.analysis_for_bb(mir::START_BLOCK);
             let symbolic_execution = mir_state_analysis::run_symbolic_execution(
                 &body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
+                DefaultPurityChecker
             );
 
             let symvar_locals = symbolic_execution
@@ -164,7 +157,7 @@ impl TaskEncoder for SymImpureEnc {
             );
 
             for pre in spec.pres {
-                let pre = visitor.encode_pure_spec(&pre, None);
+                let pre = visitor.encode_pure_spec(&pre, None).unwrap();
                 stmts.push(vcx.mk_inhale_stmt(pre));
             }
 
@@ -175,7 +168,7 @@ impl TaskEncoder for SymImpureEnc {
                     stmts.push(assertion);
                 } else {
                     let if_stmt = vcx.mk_if_stmt(
-                        visitor.encode_path_condition(pcs),
+                        visitor.encode_path_condition(pcs).unwrap(),
                         vcx.alloc_slice(&[assertion]),
                         &[],
                     );
@@ -184,21 +177,34 @@ impl TaskEncoder for SymImpureEnc {
             }
             for (path, pcs, expr) in symbolic_execution.paths.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
+
+                // Generate assertions ensuring that `expr` satisfies each
+                // postcondition attached to the function definition
                 let assertions: Vec<_> = spec
                     .posts
                     .iter()
                     .map(|p| {
-                        visitor.encode_pure_spec(p, Some(&std::iter::once((body.arg_count, expr.clone())).collect()))
+                        // The postcondition may refer to `result`; in this case
+                        // `expr` should be considered as the result. The
+                        // postcondition is encoded as a fn taking all arguments
+                        // of this function plus an extra argument corresponding
+                        // Therefore, the symbolic value at argument `body.arg_count`
+                        // corresponds to the spec's symbolic input argument.
+                        visitor.encode_pure_spec(
+                            p,
+                            Some(&std::iter::once((body.arg_count, expr.clone())).collect()),
+                        )
+                        .unwrap_or_else(|err| {
+                            panic!("Error when encoding the postcondition {:?} of {:?} for path {:?}: {}", p, def_id, path, err)
+                        })
                     })
                     .collect();
-                let assertions = vcx.mk_exhale_stmt(vcx.mk_conj(
-                    vcx.alloc(&assertions)
-                ));
+                let assertions = vcx.mk_exhale_stmt(vcx.mk_conj(vcx.alloc(&assertions)));
                 if pcs.is_empty() {
                     stmts.push(assertions);
                 } else {
                     let if_stmt = vcx.mk_if_stmt(
-                        visitor.encode_path_condition(pcs),
+                        visitor.encode_path_condition(pcs).unwrap(),
                         vcx.alloc_slice(&[assertions]),
                         &[],
                     );
@@ -248,19 +254,28 @@ impl<'tcx, 'vir, 'enc> MirBaseEnc<'tcx, 'vir, 'enc> for EncVisitor<'tcx, 'vir, '
     }
 }
 
+type EncodeSymValueResult<'vir> = Result<vir::Expr<'vir>, String>;
+type EncodePCAtomResult<'vir> = Result<vir::Expr<'vir>, String>;
+type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
+type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
+
 impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
-    fn encode_sym_value(&mut self, sym_value: &SymValue<'tcx>) -> vir::Expr<'vir> {
-        let result = match sym_value {
-            SymValue::Var(idx, _) => self.symvars[*idx],
-            SymValue::Constant(c) => self
+    fn encode_sym_value(&mut self, sym_value: &SymValue<'tcx>) -> EncodeSymValueResult<'vir> {
+        match sym_value {
+            SymValue::Var(idx, _) => self
+                .symvars
+                .get(*idx)
+                .cloned()
+                .ok_or(format!("No symvar at idx {}", *idx)),
+            SymValue::Constant(c) => Ok(self
                 .deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
-                .unwrap(),
+                .unwrap()),
             SymValue::CheckedBinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                let lhs = self.encode_sym_value(lhs);
-                let rhs = self.encode_sym_value(rhs);
+                let lhs = self.encode_sym_value(lhs)?;
+                let rhs = self.encode_sym_value(rhs)?;
                 let viper_fn = self
                     .deps
                     .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::CheckedBinOp(
@@ -268,13 +283,13 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     ))
                     .unwrap()
                     .function;
-                viper_fn.apply(self.vcx, &[lhs, rhs])
+                Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
             }
             SymValue::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                let lhs = self.encode_sym_value(lhs);
-                let rhs = self.encode_sym_value(rhs);
+                let lhs = self.encode_sym_value(lhs)?;
+                let rhs = self.encode_sym_value(rhs)?;
                 let viper_fn = self
                     .deps
                     .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::BinOp(
@@ -282,12 +297,23 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     ))
                     .unwrap()
                     .function;
-                viper_fn.apply(self.vcx, &[lhs, rhs])
+                Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
+            }
+            SymValue::UnaryOp(ty, op, expr) => {
+                let expr = self.encode_sym_value(expr)?;
+                let viper_fn = self
+                    .deps
+                    .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::UnOp(
+                        *ty, *op, *ty
+                    ))
+                    .unwrap()
+                    .function;
+                Ok(viper_fn.apply(self.vcx, &[expr]))
             }
             SymValue::Aggregate(kind, exprs) => {
                 let exprs = exprs
                     .iter()
-                    .map(|e| self.encode_sym_value(e))
+                    .map(|e| self.encode_sym_value(e).unwrap())
                     .collect::<Vec<_>>();
                 let ty = self
                     .deps
@@ -295,15 +321,15 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     .unwrap();
                 match ty.generic_snapshot.specifics {
                     super::domain::DomainEncSpecifics::StructLike(dds) => {
-                        dds.field_snaps_to_snap.apply(self.vcx, &exprs)
+                        Ok(dds.field_snaps_to_snap.apply(self.vcx, &exprs))
                     }
                     super::domain::DomainEncSpecifics::EnumLike(Some(de)) => {
                         if let Some(variant_idx) = sym_value.ty(self.vcx.tcx()).variant_index() {
                             let variant_idx: usize = variant_idx.into();
-                            de.variants[variant_idx]
+                            Ok(de.variants[variant_idx]
                                 .fields
                                 .field_snaps_to_snap
-                                .apply(self.vcx, &exprs)
+                                .apply(self.vcx, &exprs))
                         } else {
                             panic!("{:?} doesn't have a variant idx", sym_value);
                         }
@@ -339,7 +365,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                             }
                             _ => todo!("projection to {:?}", ty_out.generic_snapshot.specifics),
                         };
-                        let proj_app = proj_fn.apply(self.vcx, [expr]);
+                        let proj_app = proj_fn.apply(self.vcx, [expr.unwrap()]);
                         match ty.rust_ty().kind() {
                             ty::TyKind::Adt(def, _) => {
                                 // The ADT type for the field might be generic, concretize if necessary
@@ -357,40 +383,52 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                                     "CASTING {:?} to {:?} for {:?}",
                                     *field_ty, generic_field_ty, def
                                 );
-                                self.deps
+                                Ok(self
+                                    .deps
                                     .require_ref::<PureGenericCastEnc>(cast_args)
                                     .unwrap()
-                                    .apply_cast_if_necessary(self.vcx, proj_app)
+                                    .apply_cast_if_necessary(self.vcx, proj_app))
                             }
                             ty::TyKind::Tuple(_) => {
                                 let generic_cast = self
                                     .deps
                                     .require_local::<RustTyGenericCastEnc>(*field_ty)
                                     .unwrap();
-                                generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app)
+                                Ok(generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app))
                             }
-                            _ => proj_app,
+                            _ => Ok(proj_app),
                         }
                     }
                     _ => todo!(),
                 }
             }
             SymValue::Discriminant(expr) => {
-                let base = self.encode_sym_value(expr);
+                let base = self.encode_sym_value(expr)?;
                 let ty = self
                     .deps
                     .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
                     .unwrap();
                 match ty.generic_snapshot.specifics {
                     super::domain::DomainEncSpecifics::EnumLike(Some(de)) => {
-                        de.snap_to_discr_snap.apply(self.vcx, [base])
+                        Ok(de.snap_to_discr_snap.apply(self.vcx, [base]))
                     }
                     _ => unreachable!(),
                 }
             }
             SymValue::Ref(_) => todo!(),
-        };
-        result
+            SymValue::PureFnCall(fn_def_id, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| self.encode_sym_value(arg).unwrap())
+                    .collect::<Vec<_>>();
+                let function_ref = self.deps.require_ref::<PureFunctionEnc>((
+                    *fn_def_id,
+                    GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id),
+                    self.def_id
+                )).unwrap().function_ref;
+                Ok(function_ref.apply(self.vcx, &args))
+            }
+        }
     }
 
     fn encode_target_literal(&mut self, target: u128, ty: ty::Ty<'tcx>) -> vir::Expr<'vir> {
@@ -403,8 +441,10 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             .unwrap()
     }
 
-    fn encode_pc(&mut self, pc: &PathConditionAtom<'tcx>) -> vir::Expr<'vir> {
-        let expr = self.encode_sym_value(&pc.expr);
+    fn encode_pc_atom(&mut self, pc: &PathConditionAtom<'tcx>) -> EncodePCAtomResult<'vir> {
+        let expr = self
+            .encode_sym_value(&pc.expr)
+            .map_err(|err| format!("Failed to encode pc atom target for pc {:?}: {}", pc, err))?;
         match &pc.predicate {
             PathConditionPredicate::Postcondition(def_id, args) => {
                 let mut args = args.clone();
@@ -421,6 +461,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 .into_iter()
                 .map(|p| {
                     self.encode_pure_spec(&p, Some(&args.iter().cloned().enumerate().collect()))
+                        .unwrap()
                 })
                 .collect::<Vec<_>>();
                 let is_pure = self
@@ -441,24 +482,27 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         caller_def_id: None, // TODO
                     });
                     for (path, value) in body.iter() {
-                        encoded_posts.push(self.vcx.mk_implies_expr(
-                            self.encode_path_condition(path),
-                            self.vcx.mk_eq_expr(
-                                self.encode_sym_value(&pc.expr),
-                                self.encode_sym_value(&value.clone().subst(
-                                    self.vcx.tcx(),
-                                    &args.iter().cloned().enumerate().collect(),
-                                )),
+                        encoded_posts.push(
+                            self.vcx.mk_implies_expr(
+                                self.encode_path_condition(path).unwrap(),
+                                self.vcx.mk_eq_expr(
+                                    self.encode_sym_value(&pc.expr).unwrap(),
+                                    self.encode_sym_value(&value.clone().subst(
+                                        self.vcx.tcx(),
+                                        &args.iter().cloned().enumerate().collect(),
+                                    ))
+                                    .unwrap(),
+                                ),
                             ),
-                        ));
+                        );
                     }
                 }
-                self.vcx.mk_conj(&encoded_posts)
+                Ok(self.vcx.mk_conj(&encoded_posts))
             }
-            PathConditionPredicate::Eq(target, ty) => self
+            PathConditionPredicate::Eq(target, ty) => Ok(self
                 .vcx
-                .mk_eq_expr(expr, self.encode_target_literal(*target, *ty)),
-            PathConditionPredicate::Ne(targets, ty) => self.vcx.mk_conj(
+                .mk_eq_expr(expr, self.encode_target_literal(*target, *ty))),
+            PathConditionPredicate::Ne(targets, ty) => Ok(self.vcx.mk_conj(
                 &targets
                     .iter()
                     .map(|t| {
@@ -469,7 +513,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                         )
                     })
                     .collect::<Vec<_>>(),
-            ),
+            )),
         }
     }
 
@@ -486,28 +530,29 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         };
         eprintln!("Expr is {:?}", expr);
         eprintln!("Symvars: {:?}", self.symvars);
-        snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr)])
+        snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr).unwrap()])
     }
 
     fn encode_pure_spec(
         &mut self,
         spec: &SymPureEncResult<'tcx>,
         substs: Option<&Substs<'tcx>>,
-    ) -> vir::Expr<'vir> {
+    ) -> EncodePureSpecResult<'vir> {
+        let spec = if let Some(substs) = substs {
+            spec.clone().subst(self.vcx.tcx(), substs)
+        } else {
+            spec.clone()
+        };
         let clauses = spec
             .iter()
             .map(|(pc, value)| {
-                let encoded_pc = self.encode_path_condition(pc);
-                let value = if let Some(substs) = substs {
-                    value.clone().subst(self.vcx.tcx(), substs)
-                } else {
-                    value.clone()
-                };
+                let encoded_pc = self.encode_path_condition(pc)?;
                 let encoded_value = self.encode_sym_value_as_prim(&value);
-                self.vcx.mk_implies_expr(encoded_pc, encoded_value)
+                let impl_expr = self.vcx.mk_implies_expr(encoded_pc, encoded_value);
+                Ok::<vir::Expr<'vir>, String>(impl_expr)
             })
-            .collect::<Vec<_>>();
-        self.vcx.mk_conj(&clauses)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(self.vcx.mk_conj(&clauses))
     }
 
     fn encode_assertion(&mut self, assertion: &Assertion<'tcx>) -> vir::Stmt<'vir> {
@@ -526,7 +571,8 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 .map(|p| {
                     self.encode_pure_spec(&p, Some(&args.iter().cloned().enumerate().collect()))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
                 self.vcx.mk_conj(&encoded_pres)
             }
             Assertion::Eq(expr, val) => {
@@ -541,11 +587,16 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         self.vcx.mk_exhale_stmt(expr)
     }
 
-    fn encode_path_condition(&mut self, pc: &PathConditions<'tcx>) -> vir::Expr<'vir> {
+    fn encode_path_condition(&mut self, pc: &PathConditions<'tcx>) -> EncodePCResult<'vir> {
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            exprs.push(self.encode_pc(&atom));
+            exprs.push(self.encode_pc_atom(&atom).map_err(|err| {
+                format!(
+                    "Failed to encode pc atom {:?} for pc {:?}: {}",
+                    atom, pc, err
+                )
+            })?);
         }
-        self.vcx.mk_conj(&exprs)
+        Ok(self.vcx.mk_conj(&exprs))
     }
 }

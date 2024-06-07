@@ -26,17 +26,18 @@ use prusti_rustc_interface::{
         ty::TyCtxt,
     },
 };
-use symbolic_execution::{SymbolicExecution, SymbolicExecutionResult};
+use symbolic_execution::{PurityChecker, SymbolicExecution, SymbolicExecutionResult};
 
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
 
-#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis))]
+#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, purity_checker))]
 pub fn run_symbolic_execution<'mir, 'tcx>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
+    purity_checker: impl PurityChecker
 ) -> SymbolicExecutionResult<'tcx> {
-    SymbolicExecution::new(tcx, mir, fpcs_analysis).execute()
+    SymbolicExecution::new(tcx, mir, fpcs_analysis, purity_checker).execute()
 }
 
 #[tracing::instrument(name = "run_free_pcs", level = "debug", skip(mir, tcx))]

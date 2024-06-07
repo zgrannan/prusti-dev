@@ -1,5 +1,5 @@
 use mir_state_analysis::symbolic_execution::{
-    path_conditions::PathConditions, value::SymValue, ResultPath,
+    path_conditions::PathConditions, value::{Substs, SymValue}, PurityChecker, ResultPath
 };
 use prusti_rustc_interface::{
     ast,
@@ -53,6 +53,27 @@ impl<'tcx> SymPureEncResult<'tcx> {
     pub fn iter(&self) -> impl Iterator<Item = &(PathConditions<'tcx>, SymValue<'tcx>)> {
         self.0.iter()
     }
+
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+        let mut result = BTreeSet::new();
+        for (path_conditions, value) in self.0 {
+            let path_conditions = path_conditions.subst(tcx, substs);
+            let value = value.subst(tcx, substs);
+            result.insert((path_conditions, value));
+        }
+        Self(result)
+    }
+}
+
+pub struct DefaultPurityChecker;
+
+impl PurityChecker for DefaultPurityChecker {
+    fn is_pure(&self, def_id: DefId) -> bool {
+        crate::encoders::with_proc_spec(def_id, |proc_spec| {
+            proc_spec.kind.is_pure().unwrap_or_default()
+        })
+        .unwrap_or_default()
+    }
 }
 
 impl SymPureEnc {
@@ -73,12 +94,11 @@ impl SymPureEnc {
                 PureKind::Constant(promoted) => todo!(),
             };
             let body = &*body.body();
-            let mut fpcs_analysis = mir_state_analysis::run_free_pcs(body, vcx.tcx());
-            fpcs_analysis.analysis_for_bb(mir::START_BLOCK);
             let symbolic_execution = mir_state_analysis::run_symbolic_execution(
                 body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
+                DefaultPurityChecker
             );
             SymPureEncResult(
                 symbolic_execution

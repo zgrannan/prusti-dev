@@ -1,6 +1,6 @@
 use std::collections::{btree_set::Iter, BTreeMap, BTreeSet};
 
-use super::value::SymValue;
+use super::value::{Substs, SymValue};
 use prusti_rustc_interface::{hir::def_id::DefId, middle::ty};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -16,6 +16,23 @@ pub enum PathConditionPredicate<'tcx> {
     Postcondition(DefId, Vec<SymValue<'tcx>>),
 }
 
+impl<'tcx> PathConditionPredicate<'tcx> {
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+        match self {
+            PathConditionPredicate::Eq(..) | PathConditionPredicate::Ne(..) => self,
+            PathConditionPredicate::Postcondition(def_id, values) => {
+                PathConditionPredicate::Postcondition(
+                    def_id,
+                    values
+                        .into_iter()
+                        .map(|value| value.subst(tcx, substs))
+                        .collect(),
+                )
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct PathConditionAtom<'tcx> {
     pub expr: SymValue<'tcx>,
@@ -25,6 +42,12 @@ pub struct PathConditionAtom<'tcx> {
 impl<'tcx> PathConditionAtom<'tcx> {
     pub fn new(expr: SymValue<'tcx>, predicate: PathConditionPredicate<'tcx>) -> Self {
         PathConditionAtom { expr, predicate }
+    }
+
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+        let expr = self.expr.subst(tcx, substs);
+        let predicate = self.predicate.subst(tcx, substs);
+        PathConditionAtom::new(expr, predicate)
     }
 }
 
@@ -50,5 +73,15 @@ impl<'tcx> PathConditions<'tcx> {
 
     pub fn iter(&self) -> Iter<'_, PathConditionAtom<'tcx>> {
         self.atoms.iter()
+    }
+
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+        let mut atoms = BTreeSet::new();
+        for atom in &self.atoms {
+            let expr = atom.expr.clone().subst(tcx, substs);
+            let predicate = atom.predicate.clone();
+            atoms.insert(PathConditionAtom::new(expr, predicate));
+        }
+        PathConditions { atoms }
     }
 }

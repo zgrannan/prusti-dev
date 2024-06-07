@@ -32,7 +32,10 @@ use crate::{
 };
 
 use self::{
-    path::{AcyclicPath, Path}, path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions}, place::Place, value::AggregateKind
+    path::{AcyclicPath, Path},
+    path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
+    place::Place,
+    value::AggregateKind,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -51,19 +54,25 @@ pub struct SymbolicExecutionResult<'tcx> {
     pub symvars: Vec<ty::Ty<'tcx>>,
 }
 
-pub struct SymbolicExecution<'mir, 'tcx> {
+pub struct SymbolicExecution<'mir, 'tcx, T: PurityChecker> {
     tcx: TyCtxt<'tcx>,
     body: &'mir BodyWithBorrowckFacts<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
     havoc: HavocData,
     symvars: Vec<ty::Ty<'tcx>>,
+    purity_checker: T,
 }
 
-impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
+pub trait PurityChecker {
+    fn is_pure(&self, def_id: DefId) -> bool;
+}
+
+impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
         body: &'mir BodyWithBorrowckFacts<'tcx>,
         fpcs_analysis: FpcsOutput<'mir, 'tcx>,
+        purity_checker: T,
     ) -> Self {
         SymbolicExecution {
             tcx,
@@ -71,6 +80,7 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
             fpcs_analysis,
             havoc: HavocData::new(&body.body),
             symvars: Vec::with_capacity(body.body.arg_count),
+            purity_checker,
         }
     }
 
@@ -147,16 +157,23 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                         .iter()
                         .map(|arg| path.heap.encode_operand(arg))
                         .collect();
+
                     assertions.insert((
                         path.path.clone(),
                         path.pcs.clone(),
                         Assertion::Precondition(*def_id, args.clone()),
                     ));
-                    let sym_var = self
-                        .mk_fresh_symvar(destination.ty(&self.body.body.local_decls, self.tcx).ty);
-                    path.heap.insert((*destination).into(), sym_var.clone());
+
+                    let result = if self.purity_checker.is_pure(*def_id) {
+                        SymValue::PureFnCall(*def_id, args.clone())
+                    } else {
+                        self.mk_fresh_symvar(
+                            destination.ty(&self.body.body.local_decls, self.tcx).ty,
+                        )
+                    };
+                    path.heap.insert((*destination).into(), result.clone());
                     path.pcs.insert(PathConditionAtom::new(
-                        sym_var,
+                        result,
                         PathConditionPredicate::Postcondition(*def_id, args),
                     ));
                     if let Some(target) = target {
@@ -279,6 +296,14 @@ impl<'mir, 'tcx> SymbolicExecution<'mir, 'tcx> {
                     )),
                     mir::Rvalue::Ref(_, _, place) => {
                         SymValue::Ref(Box::new(heap.get(&(*place).into()).unwrap().clone()))
+                    }
+                    mir::Rvalue::UnaryOp(op, operand) => {
+                        let operand = heap.encode_operand(operand);
+                        SymValue::UnaryOp(
+                            place.ty(&self.body.body.local_decls, self.tcx).ty,
+                            *op,
+                            Box::new(operand),
+                        )
                     }
                     _ => todo!("{rvalue:?}"),
                 };
