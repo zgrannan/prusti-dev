@@ -96,7 +96,7 @@ impl TaskEncoder for SymImpureEnc {
                 MirImpureEncOutputRef {
                     method_ref: method_ident,
                 },
-            );
+            )?;
 
             let body = vcx
                 .body_mut()
@@ -156,7 +156,7 @@ impl TaskEncoder for SymImpureEnc {
                 vcx.mk_local_decl_stmt(vcx.mk_local_decl(result_local.name, result_local.ty), None),
             );
 
-            for pre in spec.pres {
+            for pre in spec.pres.into_iter() {
                 let pre = visitor.encode_pure_spec(&pre, None).unwrap();
                 stmts.push(vcx.mk_inhale_stmt(pre));
             }
@@ -448,14 +448,14 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             .encode_sym_value(&pc.expr)
             .map_err(|err| format!("Failed to encode pc atom target for pc {:?}: {}", pc, err))?;
         match &pc.predicate {
-            PathConditionPredicate::Postcondition(def_id, args) => {
+            PathConditionPredicate::Postcondition(def_id, substs, args) => {
                 let mut args = args.clone();
                 args.push(pc.expr.clone());
                 let mut encoded_posts = SymSpecEnc::encode(
                     self.deps,
                     (
                         *def_id,
-                        ty::List::identity_for_item(self.vcx.tcx(), *def_id),
+                        substs,
                         None,
                     ),
                 )
@@ -559,12 +559,12 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
 
     fn encode_assertion(&mut self, assertion: &Assertion<'tcx>) -> vir::Stmt<'vir> {
         let expr = match assertion {
-            Assertion::Precondition(def_id, args) => {
+            Assertion::Precondition(def_id, substs, args) => {
                 let encoded_pres = SymSpecEnc::encode(
                     self.deps,
                     (
                         *def_id,
-                        ty::List::identity_for_item(self.vcx.tcx(), *def_id),
+                        substs,
                         None,
                     ),
                 )

@@ -1,9 +1,8 @@
-use middle::mir::{
-    interpret::{ConstValue, Scalar},
-    Constant,
-};
+use middle::mir::interpret::{ConstValue, Scalar};
 use mir_state_analysis::symbolic_execution::{
-    path_conditions::PathConditions, value::SymValue, ResultPath,
+    path_conditions::PathConditions,
+    value::{Constant, SymValue, Ty},
+    ResultPath,
 };
 use prusti_rustc_interface::{
     hir::lang_items,
@@ -20,7 +19,25 @@ use crate::encoders::{
 };
 pub struct SymSpecEnc;
 
-type SymSpec<'tcx> = BTreeSet<SymPureEncResult<'tcx>>;
+#[derive(Clone)]
+pub struct SymSpec<'tcx>(BTreeSet<SymPureEncResult<'tcx>>);
+
+impl<'tcx> SymSpec<'tcx> {
+    pub fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+    pub fn singleton(value: SymPureEncResult<'tcx>) -> Self {
+        Self(vec![value].into_iter().collect())
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = SymPureEncResult<'tcx>> {
+        self.0.into_iter()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SymPureEncResult<'tcx>> {
+        self.0.iter()
+    }
+}
 
 #[derive(Clone)]
 pub struct SymSpecEncOutput<'vir> {
@@ -34,6 +51,30 @@ type SymSpecEncTask<'tcx> = (
 );
 
 impl SymSpecEnc {
+    pub fn spec_bool<'tcx>(tcx: ty::TyCtxt<'tcx>, b: bool) -> SymSpec<'tcx> {
+        let constant = SymValue::Constant(Constant::from_bool(tcx, b));
+        SymSpec::singleton(SymPureEncResult::from_sym_value(constant))
+    }
+
+    fn partial_eq_spec<'tcx>(
+        tcx: ty::TyCtxt<'tcx>,
+        ty: ty::Ty<'tcx>,
+        result: SymValue<'tcx>,
+    ) -> SymSpecEncOutput<'tcx> {
+        match ty.kind() {
+            ty::TyKind::Tuple(tys) if tys.is_empty() => {
+                return SymSpecEncOutput {
+                    pres: SymSpec::new(),
+                    posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
+                };
+            }
+            ty::TyKind::Ref(_, ty, _) => {
+                return Self::partial_eq_spec(tcx, *ty, result);
+            }
+            other => todo!("{:#?}", other),
+        }
+    }
+
     pub fn encode<'tcx, 'vir, T: TaskEncoder>(
         deps: &mut TaskEncoderDependencies<'vir, T>,
         task_key: SymSpecEncTask<'tcx>,
@@ -45,21 +86,30 @@ impl SymSpecEnc {
                 vcx.tcx().lang_items().panic_fn().unwrap(),
                 vcx.tcx().lang_items().begin_panic_fn().unwrap(),
             ];
+
             if panic_lang_items.contains(&def_id) {
-                let false_constant = mir::Constant {
-                    span: DUMMY_SP,
-                    user_ty: None,
-                    literal: mir::ConstantKind::from_bool(vcx.tcx(), false),
-                };
                 return SymSpecEncOutput {
-                    pres: vec![SymPureEncResult::from_sym_value(SymValue::Constant(
-                        false_constant.into(),
-                    ))]
-                    .into_iter()
-                    .collect(),
-                    posts: BTreeSet::new(),
+                    pres: Self::spec_bool(vcx.tcx(), false),
+                    posts: SymSpec::new(),
                 };
             }
+
+            if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq" {
+                let sig = vcx.tcx().subst_and_normalize_erasing_regions(
+                    substs,
+                    vcx.tcx().param_env(def_id),
+                    vcx.tcx().fn_sig(def_id),
+                );
+                eprintln!("substs: {:#?}", substs);
+                eprintln!("sig: {:#?}", sig);
+                let input_ty = sig.input(0).skip_binder();
+                return Self::partial_eq_spec(
+                    vcx.tcx(),
+                    input_ty,
+                    SymValue::Var(2, vcx.tcx().types.bool)
+                );
+            }
+
             let specs = deps
                 .require_local::<crate::encoders::SpecEnc>(crate::encoders::SpecEncTask { def_id })
                 .unwrap();
@@ -95,7 +145,10 @@ impl SymSpecEnc {
                     post
                 })
                 .collect::<BTreeSet<_>>();
-            SymSpecEncOutput { pres, posts }
+            SymSpecEncOutput {
+                pres: SymSpec(pres),
+                posts: SymSpec(posts),
+            }
         })
     }
 }

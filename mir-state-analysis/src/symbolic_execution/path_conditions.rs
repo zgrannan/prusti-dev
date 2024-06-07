@@ -1,7 +1,10 @@
 use std::collections::{btree_set::Iter, BTreeMap, BTreeSet};
 
 use super::value::{Substs, SymValue};
-use prusti_rustc_interface::{hir::def_id::DefId, middle::ty};
+use prusti_rustc_interface::{
+    hir::def_id::DefId,
+    middle::ty::{self, GenericArgsRef},
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum PathConditionPredicate<'tcx> {
@@ -13,16 +16,17 @@ pub enum PathConditionPredicate<'tcx> {
     Ne(Vec<u128>, ty::Ty<'tcx>),
     /// The postcondition of the function defined by the DefId, applied to the arguments
     /// The compared-to expr is the result of the fn
-    Postcondition(DefId, Vec<SymValue<'tcx>>),
+    Postcondition(DefId, GenericArgsRef<'tcx>, Vec<SymValue<'tcx>>),
 }
 
 impl<'tcx> PathConditionPredicate<'tcx> {
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
         match self {
             PathConditionPredicate::Eq(..) | PathConditionPredicate::Ne(..) => self,
-            PathConditionPredicate::Postcondition(def_id, values) => {
+            PathConditionPredicate::Postcondition(def_id, args, values) => {
                 PathConditionPredicate::Postcondition(
                     def_id,
+                    args,
                     values
                         .into_iter()
                         .map(|value| value.subst(tcx, substs))

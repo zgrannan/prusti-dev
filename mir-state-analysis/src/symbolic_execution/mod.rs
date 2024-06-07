@@ -18,7 +18,7 @@ use prusti_rustc_interface::{
     hir::def_id::DefId,
     middle::{
         mir::{self, Body},
-        ty::{self, TyCtxt},
+        ty::{self, TyCtxt, GenericArgsRef},
     },
 };
 use std::{
@@ -41,7 +41,7 @@ use self::{
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Assertion<'tcx> {
     Eq(SymValue<'tcx>, bool),
-    Precondition(DefId, Vec<SymValue<'tcx>>),
+    Precondition(DefId, GenericArgsRef<'tcx>, Vec<SymValue<'tcx>>),
 }
 
 pub type ResultPath<'tcx> = (AcyclicPath, PathConditions<'tcx>, SymValue<'tcx>);
@@ -152,7 +152,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
                 target,
                 ..
             } => match func.ty(&self.body.body.local_decls, self.tcx).kind() {
-                ty::TyKind::FnDef(def_id, _) => {
+                ty::TyKind::FnDef(def_id, substs) => {
                     let args: Vec<SymValue<'_>> = args
                         .iter()
                         .map(|arg| path.heap.encode_operand(arg))
@@ -161,7 +161,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
                     assertions.insert((
                         path.path.clone(),
                         path.pcs.clone(),
-                        Assertion::Precondition(*def_id, args.clone()),
+                        Assertion::Precondition(*def_id, substs, args.clone()),
                     ));
 
                     let result = if self.purity_checker.is_pure(*def_id) {
@@ -174,7 +174,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
                     path.heap.insert((*destination).into(), result.clone());
                     path.pcs.insert(PathConditionAtom::new(
                         result,
-                        PathConditionPredicate::Postcondition(*def_id, args),
+                        PathConditionPredicate::Postcondition(*def_id, substs, args),
                     ));
                     if let Some(target) = target {
                         if let Some(path) = path.push_if_acyclic(*target) {

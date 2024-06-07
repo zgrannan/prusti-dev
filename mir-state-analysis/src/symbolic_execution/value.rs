@@ -5,7 +5,7 @@ use prusti_rustc_interface::{
         mir::{self, Place, ProjectionElem},
         ty::{self},
     },
-    span::def_id::DefId,
+    span::{def_id::DefId, DUMMY_SP}
 };
 
 use std::{
@@ -47,11 +47,7 @@ pub enum SymValue<'tcx> {
         Box<SymValue<'tcx>>,
         Box<SymValue<'tcx>>,
     ),
-    UnaryOp(
-        ty::Ty<'tcx>,
-        mir::UnOp,
-        Box<SymValue<'tcx>>,
-    ),
+    UnaryOp(ty::Ty<'tcx>, mir::UnOp, Box<SymValue<'tcx>>),
     Projection(
         ProjectionElem<mir::Local, ty::Ty<'tcx>>,
         Box<SymValue<'tcx>>,
@@ -101,7 +97,9 @@ impl<'tcx> SymValue<'tcx> {
                 def_id,
                 args.into_iter().map(|arg| arg.subst(tcx, substs)).collect(),
             ),
-            SymValue::UnaryOp(ty, op, expr) => SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
+            SymValue::UnaryOp(ty, op, expr) => {
+                SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
+            }
         }
     }
 }
@@ -131,12 +129,10 @@ impl<'tcx> SymValue<'tcx> {
             SymValue::Discriminant(sym_val) => {
                 Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
             }
-            SymValue::PureFnCall(def_id, args) => {
-                Ty::new(
-                    tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
-                    None
-                )
-            }
+            SymValue::PureFnCall(def_id, args) => Ty::new(
+                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
+                None,
+            ),
             SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
         }
     }
@@ -164,6 +160,14 @@ impl<'tcx> Constant<'tcx> {
 
     pub fn ty(&self) -> ty::Ty<'tcx> {
         self.0.literal.ty()
+    }
+
+    pub fn from_bool(tcx: ty::TyCtxt<'tcx>, b: bool) -> Self {
+        Constant(mir::Constant {
+            span: DUMMY_SP,
+            user_ty: None,
+            literal: mir::ConstantKind::from_bool(tcx, b),
+        })
     }
 }
 
