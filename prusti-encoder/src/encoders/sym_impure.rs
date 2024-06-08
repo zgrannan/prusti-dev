@@ -377,10 +377,6 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                                     expected: *field_ty,
                                     actual: generic_field_ty,
                                 };
-                                eprintln!(
-                                    "CASTING {:?} to {:?} for {:?}",
-                                    *field_ty, generic_field_ty, def
-                                );
                                 Ok(self
                                     .deps
                                     .require_ref::<CastToEnc<CastTypePure>>(cast_args)
@@ -430,6 +426,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     .function_ref;
                 Ok(function_ref.apply(self.vcx, &args))
             }
+            SymValue::And(_, _) => todo!(),
         }
     }
 
@@ -530,8 +527,6 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             super::domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
-        eprintln!("Expr is {:?}", expr);
-        eprintln!("Symvars: {:?}", self.symvars);
         snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr).unwrap()])
     }
 

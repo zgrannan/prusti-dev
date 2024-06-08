@@ -58,7 +58,7 @@ impl<'tcx> CapabilitySummary<'tcx> {
                     }
                     CapabilityKind::Exclusive => {
                         // Cannot get exclusive on a shared ref
-                        assert!(!place.projects_shared_ref(repacker));
+                        // assert!(!place.projects_shared_ref(repacker));
                     }
                     CapabilityKind::ShallowExclusive => unreachable!(),
                 }

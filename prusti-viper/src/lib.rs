@@ -124,7 +124,6 @@ impl<'vir, 'v> ToViperVec<'vir, 'v> for vir::CfgBlock<'vir> {
         Some(1 + self.stmts.len() + self.terminator.size_hint().unwrap_or(1))
     }
     fn to_viper_extend(&self, vec: &mut Vec<Self::Output>, ctx: &ToViperContext<'vir, 'v>) {
-        eprintln!("HIHI {:?}", self.stmts);
         vec.push(self.label.to_viper(ctx));
         vec.extend(self.stmts.iter().map(|v| v.to_viper(ctx)));
         self.terminator.to_viper_extend(vec, ctx);

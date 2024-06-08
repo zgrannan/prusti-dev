@@ -6,7 +6,7 @@ use mir_state_analysis::symbolic_execution::{
 };
 use prusti_rustc_interface::{
     hir::lang_items,
-    middle::{self, mir, ty},
+    middle::{self, mir::{self, PlaceElem}, ty},
     span::{def_id::DefId, DUMMY_SP},
 };
 
@@ -56,6 +56,43 @@ impl SymSpecEnc {
         SymSpec::singleton(SymPureEncResult::from_sym_value(constant))
     }
 
+    fn partial_eq_expr<'tcx>(
+        tcx: ty::TyCtxt<'tcx>,
+        ty: ty::Ty<'tcx>,
+        lhs: SymValue<'tcx>,
+        rhs: SymValue<'tcx>,
+    ) -> Option<SymValue<'tcx>> {
+        match ty.kind() {
+            ty::TyKind::Tuple(tys) => {
+                let exprs = tys.iter().enumerate().map(|(i, ty)| {
+                    let field = PlaceElem::Field(i.into(), ty);
+                    let lhs_field = SymValue::Projection(field, Box::new(lhs.clone()));
+                    let rhs_field = SymValue::Projection(field, Box::new(rhs.clone()));
+                    Self::partial_eq_expr(tcx, ty, lhs_field, rhs_field)
+                }).collect::<Option<Vec<_>>>()?;
+                Some(SymValue::mk_conj(tcx, exprs))
+            }
+            ty::TyKind::Adt(adt_def, substs) => {
+                if tcx.has_structural_eq_impls(ty) {
+                    let lhs_discriminant = SymValue::Discriminant(Box::new(lhs));
+                    let rhs_discriminant = SymValue::Discriminant(Box::new(rhs));
+                    let discriminants_match = SymValue::BinaryOp(
+                        tcx.types.bool,
+                        mir::BinOp::Eq,
+                        Box::new(lhs_discriminant),
+                        Box::new(rhs_discriminant),
+                    );
+                    todo!()
+                    // adt_def.variants.iter().map(|variant| {
+                    // });
+                } else {
+                    None
+                }
+            }
+            other => todo!("{:#?}", other),
+        }
+    }
+
     fn partial_eq_spec<'tcx>(
         tcx: ty::TyCtxt<'tcx>,
         ty: ty::Ty<'tcx>,
@@ -70,6 +107,9 @@ impl SymSpecEnc {
             }
             ty::TyKind::Ref(_, ty, _) => {
                 return Self::partial_eq_spec(tcx, *ty, result);
+            }
+            ty::TyKind::Adt(def_id, substs) => {
+                todo!()
             }
             other => todo!("{:#?}", other),
         }
@@ -100,8 +140,6 @@ impl SymSpecEnc {
                     vcx.tcx().param_env(def_id),
                     vcx.tcx().fn_sig(def_id),
                 );
-                eprintln!("substs: {:#?}", substs);
-                eprintln!("sig: {:#?}", sig);
                 let input_ty = sig.input(0).skip_binder();
                 return Self::partial_eq_spec(
                     vcx.tcx(),
@@ -141,7 +179,6 @@ impl SymSpecEnc {
                         // TODO: should this be `def_id` or `caller_def_id`
                         caller_def_id: Some(def_id),
                     });
-                    eprintln!("post: {:#?}", post);
                     post
                 })
                 .collect::<BTreeSet<_>>();

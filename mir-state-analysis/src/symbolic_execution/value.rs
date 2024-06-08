@@ -55,13 +55,25 @@ pub enum SymValue<'tcx> {
     Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx>>),
     Discriminant(Box<SymValue<'tcx>>),
     PureFnCall(DefId, Vec<SymValue<'tcx>>),
+    And(Box<SymValue<'tcx>>, Box<SymValue<'tcx>>),
 }
 
 pub type Substs<'tcx> = BTreeMap<usize, SymValue<'tcx>>;
 
 impl<'tcx> SymValue<'tcx> {
+
+    pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx>>) -> Self {
+        let mut iter = sym_values.into_iter();
+        if let Some(value) = iter.next() {
+            iter.fold(value, |acc, val| {
+                SymValue::And(Box::new(acc), Box::new(val))
+            })
+        } else {
+            return SymValue::Constant(Constant::from_bool(tcx, true));
+        }
+    }
+
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
-        eprintln!("subst {:?} with substs: {:?}", self, substs);
         match self {
             SymValue::Var(idx, ty) => {
                 if let Some(subst) = substs.get(&idx) {
@@ -100,6 +112,10 @@ impl<'tcx> SymValue<'tcx> {
             SymValue::UnaryOp(ty, op, expr) => {
                 SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
             }
+            SymValue::And(lhs, rhs) => SymValue::And(
+                Box::new(lhs.subst(tcx, substs)),
+                Box::new(rhs.subst(tcx, substs)),
+            ),
         }
     }
 }
@@ -134,6 +150,7 @@ impl<'tcx> SymValue<'tcx> {
                 None,
             ),
             SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
+            SymValue::And(_, _) => Ty::new(tcx.types.bool, None),
         }
     }
 }
