@@ -6,6 +6,7 @@
 
 #![feature(rustc_private)]
 #![feature(box_patterns, hash_extract_if, extract_if)]
+#![allow(unused_imports)]
 
 pub mod free_pcs;
 pub mod utils;
@@ -30,7 +31,7 @@ use symbolic_execution::{VerifierSemantics, SymbolicExecution, SymbolicExecution
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
 
 #[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, verifier_semantics))]
-pub fn run_symbolic_execution<'mir, 'tcx, S: VerifierSemantics>(
+pub fn run_symbolic_execution<'mir, 'tcx, S: VerifierSemantics<'tcx>>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,

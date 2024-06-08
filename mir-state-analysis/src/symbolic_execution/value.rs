@@ -29,8 +29,8 @@ impl<'tcx> Ty<'tcx> {
     }
 }
 
-trait SyntheticSymValue<'tcx>: Sized {
-    fn subst(&self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self;
+pub trait SyntheticSymValue<'tcx>: Sized {
+    fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self;
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx>;
 }
 
@@ -58,27 +58,25 @@ pub enum SymValue<'tcx, T> {
     ),
     Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx, T>>),
     Discriminant(Box<SymValue<'tcx, T>>),
-    PureFnCall(DefId, Vec<SymValue<'tcx, T>>),
-    And(Box<SymValue<'tcx, T>>, Box<SymValue<'tcx, T>>),
     Synthetic(T),
 }
 
 pub type Substs<'tcx, T> = BTreeMap<usize, SymValue<'tcx, T>>;
 
 impl<'tcx, T> SymValue<'tcx, T> {
-    pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx, T>>) -> Self {
-        let mut iter = sym_values.into_iter();
-        if let Some(value) = iter.next() {
-            iter.fold(value, |acc, val| {
-                SymValue::And(Box::new(acc), Box::new(val))
-            })
-        } else {
-            return SymValue::Constant(Constant::from_bool(tcx, true));
-        }
-    }
+    // pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx, T>>) -> Self {
+    //     let mut iter = sym_values.into_iter();
+    //     if let Some(value) = iter.next() {
+    //         iter.fold(value, |acc, val| {
+    //             SymValue::And(Box::new(acc), Box::new(val))
+    //         })
+    //     } else {
+    //         return SymValue::Constant(Constant::from_bool(tcx, true));
+    //     }
+    // }
 }
 
-impl<'tcx, T> SymValue<'tcx, T> {
+impl<'tcx, T: SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match self {
             SymValue::Var(_, ty) => Ty::new(*ty, None),
@@ -103,18 +101,13 @@ impl<'tcx, T> SymValue<'tcx, T> {
             SymValue::Discriminant(sym_val) => {
                 Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
             }
-            SymValue::PureFnCall(def_id, args) => Ty::new(
-                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
-                None,
-            ),
             SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
-            SymValue::And(_, _) => Ty::new(tcx.types.bool, None),
-            SymValue::Synthetic(_) => todo!(),
+            SymValue::Synthetic(sym_val) => sym_val.ty(tcx),
         }
     }
 }
 
-impl<'tcx, T: Clone> SymValue<'tcx, T> {
+impl<'tcx, T: Clone + SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
         match self {
             SymValue::Var(idx, ty) => {
@@ -147,18 +140,10 @@ impl<'tcx, T: Clone> SymValue<'tcx, T> {
             }
             SymValue::Discriminant(val) => SymValue::Discriminant(Box::new(val.subst(tcx, substs))),
             SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(tcx, substs))),
-            SymValue::PureFnCall(def_id, args) => SymValue::PureFnCall(
-                def_id,
-                args.into_iter().map(|arg| arg.subst(tcx, substs)).collect(),
-            ),
             SymValue::UnaryOp(ty, op, expr) => {
                 SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
             }
-            SymValue::And(lhs, rhs) => SymValue::And(
-                Box::new(lhs.subst(tcx, substs)),
-                Box::new(rhs.subst(tcx, substs)),
-            ),
-            SymValue::Synthetic(_) => todo!(),
+            SymValue::Synthetic(sym_val) => SymValue::Synthetic(sym_val.subst(tcx, substs)),
         }
     }
 }

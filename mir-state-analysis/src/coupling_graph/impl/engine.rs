@@ -121,10 +121,10 @@ pub(crate) struct CgEngine<'a, 'tcx> {
 
 impl<'a, 'tcx> CgEngine<'a, 'tcx> {
     pub(crate) fn new(cgx: Rc<CgContext<'a, 'tcx>>, top_crates: bool) -> Self {
-        if cfg!(debug_assertions) && !top_crates {
-            std::fs::remove_dir_all("log/coupling").ok();
-            std::fs::create_dir_all("log/coupling/individual").unwrap();
-        }
+        // if cfg!(debug_assertions) && !top_crates {
+        //     std::fs::remove_dir_all("log/coupling").ok();
+        //     std::fs::create_dir_all("log/coupling/individual").unwrap();
+        // }
 
         let borrow_set = &cgx.mir.borrow_set;
         let regioncx = &*cgx.mir.region_inference_context;

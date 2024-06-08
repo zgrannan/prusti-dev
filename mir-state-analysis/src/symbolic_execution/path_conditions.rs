@@ -1,6 +1,6 @@
 use std::collections::{btree_set::Iter, BTreeSet};
 
-use super::value::{Substs, SymValue};
+use super::value::{Substs, SymValue, SyntheticSymValue};
 use prusti_rustc_interface::{
     hir::def_id::DefId,
     middle::ty::{self, GenericArgsRef},
@@ -19,7 +19,7 @@ pub enum PathConditionPredicate<'tcx, T> {
     Postcondition(DefId, GenericArgsRef<'tcx>, Vec<SymValue<'tcx, T>>),
 }
 
-impl<'tcx, T: Clone> PathConditionPredicate<'tcx, T> {
+impl<'tcx, T: Clone + SyntheticSymValue<'tcx>> PathConditionPredicate<'tcx, T> {
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
         match self {
             PathConditionPredicate::Eq(..) | PathConditionPredicate::Ne(..) => self,
@@ -43,11 +43,13 @@ pub struct PathConditionAtom<'tcx, T> {
     pub predicate: PathConditionPredicate<'tcx, T>,
 }
 
-impl<'tcx, T: Clone> PathConditionAtom<'tcx, T> {
+impl<'tcx, T> PathConditionAtom<'tcx, T> {
     pub fn new(expr: SymValue<'tcx, T>, predicate: PathConditionPredicate<'tcx, T>) -> Self {
         PathConditionAtom { expr, predicate }
     }
+}
 
+impl<'tcx, T: Clone + SyntheticSymValue<'tcx>> PathConditionAtom<'tcx, T> {
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
         let expr = self.expr.subst(tcx, substs);
         let predicate = self.predicate.subst(tcx, substs);
@@ -75,12 +77,13 @@ impl <'tcx, T> PathConditions<'tcx, T> {
     }
 }
 
-impl<'tcx, T: Clone + Ord> PathConditions<'tcx, T> {
-
+impl<'tcx, T: Ord>  PathConditions<'tcx, T> {
     pub fn insert(&mut self, atom: PathConditionAtom<'tcx, T>) {
         self.atoms.insert(atom);
     }
+}
 
+impl<'tcx, T: Clone + Ord + SyntheticSymValue<'tcx>> PathConditions<'tcx, T> {
 
     pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
         let mut atoms = BTreeSet::new();

@@ -415,7 +415,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 }
             }
             SymValue::Ref(_) => todo!(),
-            SymValue::PureFnCall(fn_def_id, args) => {
+            SymValue::Synthetic(PrustiSymValSynthetic::PureFnCall(fn_def_id, args)) => {
                 let args = args
                     .iter()
                     .map(|arg| self.encode_sym_value(arg).unwrap())
@@ -431,8 +431,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                     .function_ref;
                 Ok(function_ref.apply(self.vcx, &args))
             }
-            SymValue::And(_, _) => todo!(),
-            SymValue::Synthetic(_) => todo!(),
+            SymValue::Synthetic(PrustiSymValSynthetic::And(_, _)) => todo!(),
         }
     }
 

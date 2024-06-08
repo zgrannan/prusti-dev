@@ -15,7 +15,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
 use crate::encoders::{
-    mir_pure::PureKind, sym_pure::{PrustiSymValue, SymPureEncResult}, CapabilityEnc, MirPureEnc, SymPureEnc,
+    mir_pure::PureKind, sym_pure::{PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult}, CapabilityEnc, MirPureEnc, SymPureEnc,
 };
 pub struct SymSpecEnc;
 
@@ -50,6 +50,22 @@ type SymSpecEncTask<'tcx> = (
     Option<DefId>,            // ID of the caller function, if any
 );
 
+pub fn mk_conj<'tcx>(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<PrustiSymValue<'tcx>>) -> PrustiSymValue<'tcx> {
+    let mut iter = sym_values.into_iter();
+    if let Some(value) = iter.next() {
+        iter.fold(value, |acc, val| {
+            PrustiSymValue::Synthetic(
+                PrustiSymValSynthetic::And(
+                    Box::new(acc.clone()),
+                    Box::new(val.clone()),
+                ),
+            )
+        })
+    } else {
+        return SymValue::Constant(Constant::from_bool(tcx, true));
+    }
+}
+
 impl SymSpecEnc {
     pub fn spec_bool<'tcx>(tcx: ty::TyCtxt<'tcx>, b: bool) -> SymSpec<'tcx> {
         let constant = SymValue::Constant(Constant::from_bool(tcx, b));
@@ -70,7 +86,7 @@ impl SymSpecEnc {
                     let rhs_field = SymValue::Projection(field, Box::new(rhs.clone()));
                     Self::partial_eq_expr(tcx, ty, lhs_field, rhs_field)
                 }).collect::<Option<Vec<_>>>()?;
-                Some(SymValue::mk_conj(tcx, exprs))
+                Some(mk_conj(tcx, exprs))
             }
             ty::TyKind::Adt(adt_def, substs) => {
                 if tcx.has_structural_eq_impls(ty) {

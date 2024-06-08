@@ -24,7 +24,7 @@ use self::{
     path::{AcyclicPath, Path},
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     place::Place,
-    value::AggregateKind,
+    value::{AggregateKind, SyntheticSymValue},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -43,7 +43,7 @@ pub struct SymbolicExecutionResult<'tcx, T> {
     pub symvars: Vec<ty::Ty<'tcx>>,
 }
 
-pub struct SymbolicExecution<'mir, 'tcx, S: VerifierSemantics> {
+pub struct SymbolicExecution<'mir, 'tcx, S: VerifierSemantics<'tcx>> {
     tcx: TyCtxt<'tcx>,
     body: &'mir BodyWithBorrowckFacts<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
@@ -52,12 +52,15 @@ pub struct SymbolicExecution<'mir, 'tcx, S: VerifierSemantics> {
     verifier_semantics: S,
 }
 
-pub trait VerifierSemantics {
-    type SymValSynthetic: Clone + Ord + std::fmt::Debug;
-    fn is_pure(&self, def_id: DefId) -> bool;
+pub trait VerifierSemantics<'tcx> {
+    type SymValSynthetic: Clone + Ord + std::fmt::Debug + SyntheticSymValue<'tcx>;
+    fn encode_fn_call(
+        def_id: DefId,
+        args: Vec<SymValue<'tcx, Self::SymValSynthetic>>,
+    ) -> Option<SymValue<'tcx, Self::SymValSynthetic>>;
 }
 
-impl<'mir, 'tcx, S: VerifierSemantics> SymbolicExecution<'mir, 'tcx, S> {
+impl<'mir, 'tcx, S: VerifierSemantics<'tcx>> SymbolicExecution<'mir, 'tcx, S> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
         body: &'mir BodyWithBorrowckFacts<'tcx>,
@@ -154,13 +157,11 @@ impl<'mir, 'tcx, S: VerifierSemantics> SymbolicExecution<'mir, 'tcx, S> {
                         Assertion::Precondition(*def_id, substs, args.clone()),
                     ));
 
-                    let result = if self.verifier_semantics.is_pure(*def_id) {
-                        SymValue::PureFnCall(*def_id, args.clone())
-                    } else {
+                    let result = S::encode_fn_call(*def_id, args.clone()).unwrap_or_else(|| {
                         self.mk_fresh_symvar(
                             destination.ty(&self.body.body.local_decls, self.tcx).ty,
                         )
-                    };
+                    });
                     path.heap.insert((*destination).into(), result.clone());
                     path.pcs.insert(PathConditionAtom::new(
                         result,

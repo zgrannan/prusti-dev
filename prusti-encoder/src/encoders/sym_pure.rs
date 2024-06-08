@@ -1,5 +1,5 @@
 use mir_state_analysis::symbolic_execution::{
-    path_conditions::PathConditions, value::{Substs, SymValue}, VerifierSemantics, ResultPath
+    path_conditions::PathConditions, value::{Substs, SymValue, SyntheticSymValue, Ty}, ResultPath, VerifierSemantics
 };
 use prusti_rustc_interface::{
     ast,
@@ -72,19 +72,53 @@ pub enum PrustiSymValSynthetic<'tcx> {
     And(Box<PrustiSymValue<'tcx>>, Box<PrustiSymValue<'tcx>>),
     PureFnCall(DefId, Vec<PrustiSymValue<'tcx>>),
 }
+
+impl <'tcx> SyntheticSymValue<'tcx> for PrustiSymValSynthetic<'tcx> {
+    fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self {
+        match self {
+            PrustiSymValSynthetic::And(l, r) => PrustiSymValSynthetic::And(
+                Box::new(l.subst(tcx, substs)),
+                Box::new(r.subst(tcx, substs)),
+            ),
+            PrustiSymValSynthetic::PureFnCall(def_id, args) => PrustiSymValSynthetic::PureFnCall(
+                def_id,
+                args.into_iter().map(|arg| arg.subst(tcx, substs)).collect(),
+            ),
+        }
+    }
+
+    fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
+        match &self {
+            PrustiSymValSynthetic::And(_, _) => Ty::new(tcx.types.bool, None),
+            PrustiSymValSynthetic::PureFnCall(def_id, _) => Ty::new(
+                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
+                None,
+            ),
+        }
+    }
+}
+
 pub type PrustiPathConditions<'tcx> = PathConditions<'tcx, PrustiSymValSynthetic<'tcx>>;
 pub type PrustiSymValue<'tcx> = SymValue<'tcx, PrustiSymValSynthetic<'tcx>>;
 pub type PrustiSubsts<'tcx> = Substs<'tcx, PrustiSymValSynthetic<'tcx>>;
 
-impl <'tcx> VerifierSemantics for PrustiSemantics<'tcx> {
-    fn is_pure(&self, def_id: DefId) -> bool {
-        crate::encoders::with_proc_spec(def_id, |proc_spec| {
+impl <'tcx> VerifierSemantics<'tcx> for PrustiSemantics<'tcx> {
+    type SymValSynthetic = PrustiSymValSynthetic<'tcx>;
+
+    fn encode_fn_call(
+        def_id: DefId,
+        args: Vec<SymValue<'tcx, Self::SymValSynthetic>>,
+    ) -> Option<SymValue<'tcx, Self::SymValSynthetic>> {
+        let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
             proc_spec.kind.is_pure().unwrap_or_default()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+        if is_pure {
+            Some(SymValue::Synthetic(PrustiSymValSynthetic::PureFnCall(def_id, args)))
+        } else {
+            None
+        }
     }
-
-    type SymValSynthetic = PrustiSymValSynthetic<'tcx>;
 }
 
 impl SymPureEnc {
