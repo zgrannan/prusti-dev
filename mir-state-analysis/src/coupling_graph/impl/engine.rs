@@ -246,10 +246,10 @@ impl<'a, 'tcx> Analysis<'tcx> for CgEngine<'a, 'tcx> {
         state.visit_statement(statement, location);
 
         let l = format!("{location:?}").replace('[', "_").replace(']', "");
-        state.output_to_dot(
-            format!("log/coupling/individual/{l}_v{}.dot", state.sum_version()),
-            false,
-        );
+        // state.output_to_dot(
+        //     format!("log/coupling/individual/{l}_v{}.dot", state.sum_version()),
+        //     false,
+        // );
     }
 
     #[tracing::instrument(
@@ -271,13 +271,13 @@ impl<'a, 'tcx> Analysis<'tcx> for CgEngine<'a, 'tcx> {
             state.is_pre = false;
             // println!("\nblock: {:?}", location.block);
             let l = format!("{location:?}").replace('[', "_").replace(']', "");
-            state.output_to_dot(
-                format!(
-                    "log/coupling/individual/{l}_v{}_start.dot",
-                    state.sum_version()
-                ),
-                false,
-            );
+            // state.output_to_dot(
+            //     format!(
+            //         "log/coupling/individual/{l}_v{}_start.dot",
+            //         state.sum_version()
+            //     ),
+            //     false,
+            // );
         }
         let oos = self.cgx.borrows_killed_at_location(location);
         state.handle_kills(oos, location, terminator.kind.assigns_to());

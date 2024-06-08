@@ -9,7 +9,7 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
-use std::collections::{BTreeSet, HashMap};
+use std::{collections::{BTreeSet, HashMap}, marker::PhantomData};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
 use crate::encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc};
@@ -65,14 +65,18 @@ impl<'tcx> SymPureEncResult<'tcx> {
     }
 }
 
-pub struct PrustiSemantics;
+pub struct PrustiSemantics<'tcx>(pub PhantomData<&'tcx ()>);
 
-pub type PrustiSymValSynthetic = ();
-pub type PrustiPathConditions<'tcx> = PathConditions<'tcx, PrustiSymValSynthetic>;
-pub type PrustiSymValue<'tcx> = SymValue<'tcx, PrustiSymValSynthetic>;
-pub type PrustiSubsts<'tcx> = Substs<'tcx, PrustiSymValSynthetic>;
+#[derive(Ord, Eq, Debug, PartialEq, PartialOrd, Clone)]
+pub enum PrustiSymValSynthetic<'tcx> {
+    And(Box<PrustiSymValue<'tcx>>, Box<PrustiSymValue<'tcx>>),
+    PureFnCall(DefId, Vec<PrustiSymValue<'tcx>>),
+}
+pub type PrustiPathConditions<'tcx> = PathConditions<'tcx, PrustiSymValSynthetic<'tcx>>;
+pub type PrustiSymValue<'tcx> = SymValue<'tcx, PrustiSymValSynthetic<'tcx>>;
+pub type PrustiSubsts<'tcx> = Substs<'tcx, PrustiSymValSynthetic<'tcx>>;
 
-impl VerifierSemantics for PrustiSemantics {
+impl <'tcx> VerifierSemantics for PrustiSemantics<'tcx> {
     fn is_pure(&self, def_id: DefId) -> bool {
         crate::encoders::with_proc_spec(def_id, |proc_spec| {
             proc_spec.kind.is_pure().unwrap_or_default()
@@ -80,7 +84,7 @@ impl VerifierSemantics for PrustiSemantics {
         .unwrap_or_default()
     }
 
-    type SymValSynthetic = PrustiSymValSynthetic;
+    type SymValSynthetic = PrustiSymValSynthetic<'tcx>;
 }
 
 impl SymPureEnc {
@@ -105,7 +109,7 @@ impl SymPureEnc {
                 body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
-                PrustiSemantics
+                PrustiSemantics(PhantomData)
             );
             SymPureEncResult(
                 symbolic_execution

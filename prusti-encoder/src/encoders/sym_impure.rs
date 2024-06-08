@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use mir_state_analysis::symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     value::{Substs, SymValue},
@@ -45,8 +47,8 @@ use super::{
     SpecEncTask, SymPureEnc, SymPureEncTask,
 };
 
-type PrustiPathConditionAtom<'tcx> = PathConditionAtom<'tcx, PrustiSymValSynthetic>;
-type PrustiAssertion<'tcx> = Assertion<'tcx, PrustiSymValSynthetic>;
+type PrustiPathConditionAtom<'tcx> = PathConditionAtom<'tcx, PrustiSymValSynthetic<'tcx>>;
+type PrustiAssertion<'tcx> = Assertion<'tcx, PrustiSymValSynthetic<'tcx>>;
 
 impl TaskEncoder for SymImpureEnc {
     task_encoder::encoder_cache!(SymImpureEnc);
@@ -110,7 +112,7 @@ impl TaskEncoder for SymImpureEnc {
                 &body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
-                PrustiSemantics,
+                PrustiSemantics(PhantomData),
             );
 
             let symvar_locals = symbolic_execution
