@@ -15,7 +15,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
 use crate::encoders::{
-    mir_pure::PureKind, sym_pure::SymPureEncResult, CapabilityEnc, MirPureEnc, SymPureEnc,
+    mir_pure::PureKind, sym_pure::{PrustiSymValue, SymPureEncResult}, CapabilityEnc, MirPureEnc, SymPureEnc,
 };
 pub struct SymSpecEnc;
 
@@ -59,9 +59,9 @@ impl SymSpecEnc {
     fn partial_eq_expr<'tcx>(
         tcx: ty::TyCtxt<'tcx>,
         ty: ty::Ty<'tcx>,
-        lhs: SymValue<'tcx>,
-        rhs: SymValue<'tcx>,
-    ) -> Option<SymValue<'tcx>> {
+        lhs: PrustiSymValue<'tcx>,
+        rhs: PrustiSymValue<'tcx>,
+    ) -> Option<PrustiSymValue<'tcx>> {
         match ty.kind() {
             ty::TyKind::Tuple(tys) => {
                 let exprs = tys.iter().enumerate().map(|(i, ty)| {
@@ -96,7 +96,7 @@ impl SymSpecEnc {
     fn partial_eq_spec<'tcx>(
         tcx: ty::TyCtxt<'tcx>,
         ty: ty::Ty<'tcx>,
-        result: SymValue<'tcx>,
+        result: PrustiSymValue<'tcx>,
     ) -> SymSpecEncOutput<'tcx> {
         match ty.kind() {
             ty::TyKind::Tuple(tys) if tys.is_empty() => {

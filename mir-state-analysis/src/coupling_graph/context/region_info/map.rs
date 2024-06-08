@@ -4,15 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::{fmt::Display, marker::PhantomData};
+use std::fmt::Display;
 
 use prusti_rustc_interface::{
-    borrowck::{
-        borrow_set::BorrowData,
-        consumers::{BorrowIndex, Borrows, OutlivesConstraint},
-    },
-    data_structures::fx::FxHashMap,
-    dataflow::{Analysis, ResultsCursor},
+    borrowck::
+        borrow_set::BorrowData
+    ,
     index::IndexVec,
     infer::infer::{
         region_constraints::RegionVariableInfo, LateBoundRegionConversionTime,
@@ -20,16 +17,16 @@ use prusti_rustc_interface::{
     },
     middle::{
         mir::{
-            Body, BorrowKind, Local, Location, Operand, PlaceElem, PlaceRef, Promoted, RETURN_PLACE,
+            BorrowKind, Local, Promoted,
         },
-        ty::{BoundRegionKind, PlaceholderRegion, RegionVid, Ty, TyCtxt, TyKind},
+        ty::{BoundRegionKind, PlaceholderRegion, RegionVid, Ty},
     },
-    span::{def_id::DefId, Span, Symbol},
+    span::{def_id::DefId, Symbol},
 };
 
 use crate::{
     coupling_graph::CgContext,
-    utils::{Place, PlaceRepacker},
+    utils::Place,
 };
 
 #[derive(Debug)]

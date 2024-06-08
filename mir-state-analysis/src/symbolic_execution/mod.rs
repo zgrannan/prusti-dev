@@ -8,28 +8,17 @@ use crate::{
     coupling_graph::BodyWithBorrowckFacts,
     havoc::HavocData,
     symbolic_execution::{heap::SymbolicHeap, value::SymValue},
-    BasicBlock,
 };
 use prusti_rustc_interface::{
-    abi::FIRST_VARIANT,
-    dataflow::{
-        fmt::DebugWithContext, Analysis, AnalysisDomain, JoinSemiLattice, SwitchIntEdgeEffects,
-    },
     hir::def_id::DefId,
     middle::{
-        mir::{self, Body},
-        ty::{self, TyCtxt, GenericArgsRef},
+        mir,
+        ty::{self, GenericArgsRef, TyCtxt},
     },
 };
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Deref,
-};
+use std::{collections::BTreeSet, ops::Deref};
 
-use crate::{
-    free_pcs::{FreePcsBasicBlock, FreePcsLocation, FreePcsTerminator},
-    FpcsOutput,
-};
+use crate::FpcsOutput;
 
 use self::{
     path::{AcyclicPath, Path},
@@ -39,40 +28,41 @@ use self::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub enum Assertion<'tcx> {
-    Eq(SymValue<'tcx>, bool),
-    Precondition(DefId, GenericArgsRef<'tcx>, Vec<SymValue<'tcx>>),
+pub enum Assertion<'tcx, T> {
+    Eq(SymValue<'tcx, T>, bool),
+    Precondition(DefId, GenericArgsRef<'tcx>, Vec<SymValue<'tcx, T>>),
 }
 
-pub type ResultPath<'tcx> = (AcyclicPath, PathConditions<'tcx>, SymValue<'tcx>);
-pub type ResultAssertion<'tcx> = (AcyclicPath, PathConditions<'tcx>, Assertion<'tcx>);
+pub type ResultPath<'tcx, T> = (AcyclicPath, PathConditions<'tcx, T>, SymValue<'tcx, T>);
+pub type ResultAssertion<'tcx, T> = (AcyclicPath, PathConditions<'tcx, T>, Assertion<'tcx, T>);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SymbolicExecutionResult<'tcx> {
-    pub paths: BTreeSet<ResultPath<'tcx>>,
-    pub assertions: BTreeSet<ResultAssertion<'tcx>>,
+pub struct SymbolicExecutionResult<'tcx, T> {
+    pub paths: BTreeSet<ResultPath<'tcx, T>>,
+    pub assertions: BTreeSet<ResultAssertion<'tcx, T>>,
     pub symvars: Vec<ty::Ty<'tcx>>,
 }
 
-pub struct SymbolicExecution<'mir, 'tcx, T: PurityChecker> {
+pub struct SymbolicExecution<'mir, 'tcx, S: VerifierSemantics> {
     tcx: TyCtxt<'tcx>,
     body: &'mir BodyWithBorrowckFacts<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
     havoc: HavocData,
     symvars: Vec<ty::Ty<'tcx>>,
-    purity_checker: T,
+    verifier_semantics: S,
 }
 
-pub trait PurityChecker {
+pub trait VerifierSemantics {
+    type SymValSynthetic: Clone + Ord + std::fmt::Debug;
     fn is_pure(&self, def_id: DefId) -> bool;
 }
 
-impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
+impl<'mir, 'tcx, S: VerifierSemantics> SymbolicExecution<'mir, 'tcx, S> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
         body: &'mir BodyWithBorrowckFacts<'tcx>,
         fpcs_analysis: FpcsOutput<'mir, 'tcx>,
-        purity_checker: T,
+        verifier_semantics: S,
     ) -> Self {
         SymbolicExecution {
             tcx,
@@ -80,17 +70,17 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
             fpcs_analysis,
             havoc: HavocData::new(&body.body),
             symvars: Vec::with_capacity(body.body.arg_count),
-            purity_checker,
+            verifier_semantics,
         }
     }
 
     fn handle_terminator(
         &mut self,
         terminator: &mir::Terminator<'tcx>,
-        paths: &mut Vec<Path<'tcx>>,
-        assertions: &mut BTreeSet<ResultAssertion<'tcx>>,
-        result_paths: &mut BTreeSet<ResultPath<'tcx>>,
-        path: &mut Path<'tcx>,
+        paths: &mut Vec<Path<'tcx, S::SymValSynthetic>>,
+        assertions: &mut BTreeSet<ResultAssertion<'tcx, S::SymValSynthetic>>,
+        result_paths: &mut BTreeSet<ResultPath<'tcx, S::SymValSynthetic>>,
+        path: &mut Path<'tcx, S::SymValSynthetic>,
     ) {
         match &terminator.kind {
             mir::TerminatorKind::Drop { target, .. }
@@ -153,7 +143,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
                 ..
             } => match func.ty(&self.body.body.local_decls, self.tcx).kind() {
                 ty::TyKind::FnDef(def_id, substs) => {
-                    let args: Vec<SymValue<'_>> = args
+                    let args: Vec<_> = args
                         .iter()
                         .map(|arg| path.heap.encode_operand(arg))
                         .collect();
@@ -164,7 +154,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
                         Assertion::Precondition(*def_id, substs, args.clone()),
                     ));
 
-                    let result = if self.purity_checker.is_pure(*def_id) {
+                    let result = if self.verifier_semantics.is_pure(*def_id) {
                         SymValue::PureFnCall(*def_id, args.clone())
                     } else {
                         self.mk_fresh_symvar(
@@ -194,9 +184,9 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
         }
     }
 
-    pub fn execute(&mut self) -> SymbolicExecutionResult<'tcx> {
-        let mut result_paths: BTreeSet<ResultPath<'tcx>> = BTreeSet::new();
-        let mut assertions: BTreeSet<ResultAssertion<'tcx>> = BTreeSet::new();
+    pub fn execute(&mut self) -> SymbolicExecutionResult<'tcx, S::SymValSynthetic> {
+        let mut result_paths: BTreeSet<ResultPath<'tcx, S::SymValSynthetic>> = BTreeSet::new();
+        let mut assertions: BTreeSet<ResultAssertion<'tcx, S::SymValSynthetic>> = BTreeSet::new();
         let mut init_heap = SymbolicHeap::new();
         for (idx, arg) in self.body.body.args_iter().enumerate() {
             let local = &self.body.body.local_decls[arg];
@@ -248,15 +238,19 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
 
     fn add_to_result_paths_if_feasible(
         &mut self,
-        path: &Path<'tcx>,
-        result_paths: &mut BTreeSet<ResultPath<'tcx>>,
+        path: &Path<'tcx, S::SymValSynthetic>,
+        result_paths: &mut BTreeSet<ResultPath<'tcx, S::SymValSynthetic>>,
     ) {
         if let Some(expr) = path.heap.get_return_place_expr() {
             result_paths.insert((path.path.clone(), path.pcs.clone(), expr.clone()));
         }
     }
 
-    fn handle_stmt(&mut self, stmt: &mir::Statement<'tcx>, heap: &mut SymbolicHeap<'tcx>) {
+    fn handle_stmt(
+        &mut self,
+        stmt: &mir::Statement<'tcx>,
+        heap: &mut SymbolicHeap<'tcx, S::SymValSynthetic>,
+    ) {
         match &stmt.kind {
             mir::StatementKind::Assign(box (place, rvalue)) => {
                 let sym_value = match rvalue {
@@ -317,7 +311,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
         }
     }
 
-    fn mk_fresh_symvar(&mut self, ty: ty::Ty<'tcx>) -> SymValue<'tcx> {
+    fn mk_fresh_symvar(&mut self, ty: ty::Ty<'tcx>) -> SymValue<'tcx, S::SymValSynthetic> {
         let var = SymValue::Var(self.symvars.len(), ty);
         self.symvars.push(ty);
         var
@@ -326,7 +320,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
     fn handle_repacks(
         &self,
         repacks: &Vec<crate::free_pcs::RepackOp<'tcx>>,
-        heap: &mut SymbolicHeap<'tcx>,
+        heap: &mut SymbolicHeap<'tcx, S::SymValSynthetic>,
     ) {
         for repack in repacks {
             self.handle_repack(repack, heap)
@@ -336,7 +330,7 @@ impl<'mir, 'tcx, T: PurityChecker> SymbolicExecution<'mir, 'tcx, T> {
     fn handle_repack(
         &self,
         repack: &crate::free_pcs::RepackOp<'tcx>,
-        heap: &mut SymbolicHeap<'tcx>,
+        heap: &mut SymbolicHeap<'tcx, S::SymValSynthetic>,
     ) {
         match repack {
             crate::free_pcs::RepackOp::StorageDead(_) => todo!(),

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use prusti_rustc_interface::middle::mir::{
-    BasicBlock, Body, Local, StatementKind, TerminatorKind, START_BLOCK,
+    BasicBlock, Body, Local, StatementKind, TerminatorKind,
 };
 
 use crate::symbolic_execution::path::AcyclicPath;

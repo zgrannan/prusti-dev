@@ -1,5 +1,5 @@
 use mir_state_analysis::symbolic_execution::{
-    path_conditions::PathConditions, value::{Substs, SymValue}, PurityChecker, ResultPath
+    path_conditions::PathConditions, value::{Substs, SymValue}, VerifierSemantics, ResultPath
 };
 use prusti_rustc_interface::{
     ast,
@@ -30,7 +30,7 @@ type ExprRet<'vir> = vir::ExprGen<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
 
 #[derive(Clone, Debug)]
 pub struct SymPureEncOutput<'vir> {
-    pub expr: SymValue<'vir>,
+    pub expr: PrustiSymValue<'vir>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -43,18 +43,18 @@ pub struct SymPureEncTask<'tcx> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SymPureEncResult<'tcx>(BTreeSet<(PathConditions<'tcx>, SymValue<'tcx>)>);
+pub struct SymPureEncResult<'tcx>(BTreeSet<(PrustiPathConditions<'tcx>, PrustiSymValue<'tcx>)>);
 
 impl<'tcx> SymPureEncResult<'tcx> {
-    pub fn from_sym_value(value: SymValue<'tcx>) -> Self {
+    pub fn from_sym_value(value: PrustiSymValue<'tcx>) -> Self {
         Self(vec![(PathConditions::new(), value)].into_iter().collect())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &(PathConditions<'tcx>, SymValue<'tcx>)> {
+    pub fn iter(&self) -> impl Iterator<Item = &(PrustiPathConditions<'tcx>, PrustiSymValue<'tcx>)> {
         self.0.iter()
     }
 
-    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &PrustiSubsts<'tcx>) -> Self {
         let mut result = BTreeSet::new();
         for (path_conditions, value) in self.0 {
             let path_conditions = path_conditions.subst(tcx, substs);
@@ -65,15 +65,22 @@ impl<'tcx> SymPureEncResult<'tcx> {
     }
 }
 
-pub struct DefaultPurityChecker;
+pub struct PrustiSemantics;
 
-impl PurityChecker for DefaultPurityChecker {
+pub type PrustiSymValSynthetic = ();
+pub type PrustiPathConditions<'tcx> = PathConditions<'tcx, PrustiSymValSynthetic>;
+pub type PrustiSymValue<'tcx> = SymValue<'tcx, PrustiSymValSynthetic>;
+pub type PrustiSubsts<'tcx> = Substs<'tcx, PrustiSymValSynthetic>;
+
+impl VerifierSemantics for PrustiSemantics {
     fn is_pure(&self, def_id: DefId) -> bool {
         crate::encoders::with_proc_spec(def_id, |proc_spec| {
             proc_spec.kind.is_pure().unwrap_or_default()
         })
         .unwrap_or_default()
     }
+
+    type SymValSynthetic = PrustiSymValSynthetic;
 }
 
 impl SymPureEnc {
@@ -98,7 +105,7 @@ impl SymPureEnc {
                 body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
-                DefaultPurityChecker
+                PrustiSemantics
             );
             SymPureEncResult(
                 symbolic_execution

@@ -9,13 +9,10 @@ use prusti_rustc_interface::{
         borrow_set::{BorrowData, BorrowSet, LocalsStateAtExit, TwoPhaseActivation},
         consumers::{BorrowIndex, PlaceExt},
     },
-    data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet},
-    dataflow::fmt::DebugWithContext,
-    index::{bit_set::BitSet, IndexVec},
+    data_structures::fx::{FxIndexMap, FxIndexSet},
     middle::{
         mir::{
-            traversal, visit::Visitor, Body, ConstraintCategory, Local, Location, Place, Rvalue,
-            RETURN_PLACE,
+            traversal, visit::Visitor, Body, Local, Location, Place, Rvalue,
         },
         ty::TyCtxt,
     },

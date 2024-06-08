@@ -39,11 +39,14 @@ use super::{
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
     rust_ty_snapshots::RustTySnapshotsEnc,
-    sym_pure::{DefaultPurityChecker, SymPureEncResult},
+    sym_pure::{PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult},
     sym_spec::SymSpecEnc,
     FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc,
     SpecEncTask, SymPureEnc, SymPureEncTask,
 };
+
+type PrustiPathConditionAtom<'tcx> = PathConditionAtom<'tcx, PrustiSymValSynthetic>;
+type PrustiAssertion<'tcx> = Assertion<'tcx, PrustiSymValSynthetic>;
 
 impl TaskEncoder for SymImpureEnc {
     task_encoder::encoder_cache!(SymImpureEnc);
@@ -107,7 +110,7 @@ impl TaskEncoder for SymImpureEnc {
                 &body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
-                DefaultPurityChecker,
+                PrustiSemantics,
             );
 
             let symvar_locals = symbolic_execution
@@ -260,7 +263,7 @@ type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
 type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
 
 impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
-    fn encode_sym_value(&mut self, sym_value: &SymValue<'tcx>) -> EncodeSymValueResult<'vir> {
+    fn encode_sym_value(&mut self, sym_value: &PrustiSymValue<'tcx>) -> EncodeSymValueResult<'vir> {
         match sym_value {
             SymValue::Var(idx, _) => self
                 .symvars
@@ -427,6 +430,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 Ok(function_ref.apply(self.vcx, &args))
             }
             SymValue::And(_, _) => todo!(),
+            SymValue::Synthetic(_) => todo!(),
         }
     }
 
@@ -440,7 +444,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
             .unwrap()
     }
 
-    fn encode_pc_atom(&mut self, pc: &PathConditionAtom<'tcx>) -> EncodePCAtomResult<'vir> {
+    fn encode_pc_atom(&mut self, pc: &PrustiPathConditionAtom<'tcx>) -> EncodePCAtomResult<'vir> {
         let expr = self
             .encode_sym_value(&pc.expr)
             .map_err(|err| format!("Failed to encode pc atom target for pc {:?}: {}", pc, err))?;
@@ -516,7 +520,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         }
     }
 
-    fn encode_sym_value_as_prim(&mut self, expr: &SymValue<'tcx>) -> vir::Expr<'vir> {
+    fn encode_sym_value_as_prim(&mut self, expr: &PrustiSymValue<'tcx>) -> vir::Expr<'vir> {
         let snap_to_prim = match self
             .deps
             .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
@@ -533,7 +537,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn encode_pure_spec(
         &mut self,
         spec: &SymPureEncResult<'tcx>,
-        substs: Option<&Substs<'tcx>>,
+        substs: Option<&PrustiSubsts<'tcx>>,
     ) -> EncodePureSpecResult<'vir> {
         let spec = if let Some(substs) = substs {
             spec.clone().subst(self.vcx.tcx(), substs)
@@ -552,7 +556,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         Ok(self.vcx.mk_conj(&clauses))
     }
 
-    fn encode_assertion(&mut self, assertion: &Assertion<'tcx>) -> vir::Stmt<'vir> {
+    fn encode_assertion(&mut self, assertion: &PrustiAssertion<'tcx>) -> vir::Stmt<'vir> {
         let expr = match assertion {
             Assertion::Precondition(def_id, substs, args) => {
                 let encoded_pres = SymSpecEnc::encode(
@@ -584,7 +588,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
         self.vcx.mk_exhale_stmt(expr)
     }
 
-    fn encode_path_condition(&mut self, pc: &PathConditions<'tcx>) -> EncodePCResult<'vir> {
+    fn encode_path_condition(&mut self, pc: &PrustiPathConditions<'tcx>) -> EncodePCResult<'vir> {
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
             exprs.push(self.encode_pc_atom(&atom).map_err(|err| {

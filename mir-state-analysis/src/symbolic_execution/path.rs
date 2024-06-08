@@ -1,6 +1,4 @@
-use prusti_rustc_interface::{
-    middle::mir::{BasicBlock, START_BLOCK}
-};
+use prusti_rustc_interface::middle::mir::{BasicBlock, START_BLOCK};
 
 use super::{heap::SymbolicHeap, path_conditions::PathConditions};
 
@@ -47,14 +45,19 @@ impl AcyclicPath {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Path<'tcx> {
+pub struct Path<'tcx, T> {
     pub path: AcyclicPath,
-    pub pcs: PathConditions<'tcx>,
-    pub heap: SymbolicHeap<'tcx>,
+    pub pcs: PathConditions<'tcx, T>,
+    pub heap: SymbolicHeap<'tcx, T>,
 }
 
-impl<'tcx> Path<'tcx> {
-    pub fn new(path: AcyclicPath, pcs: PathConditions<'tcx>, heap: SymbolicHeap<'tcx>) -> Self {
+
+impl<'tcx, T> Path<'tcx, T> {
+    pub fn new(
+        path: AcyclicPath,
+        pcs: PathConditions<'tcx, T>,
+        heap: SymbolicHeap<'tcx, T>,
+    ) -> Self {
         Path { path, pcs, heap }
     }
 
@@ -65,7 +68,10 @@ impl<'tcx> Path<'tcx> {
     pub fn last_block(&self) -> BasicBlock {
         self.path.last()
     }
-    pub fn push_if_acyclic(&self, block: BasicBlock) -> Option<Path<'tcx>> {
+}
+
+impl<'tcx, T: Clone> Path<'tcx, T> {
+    pub fn push_if_acyclic(&self, block: BasicBlock) -> Option<Path<'tcx, T>> {
         let mut result = self.clone();
         if result.path.push_if_acyclic(block) {
             Some(result)

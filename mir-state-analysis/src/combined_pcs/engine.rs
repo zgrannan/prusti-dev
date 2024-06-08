@@ -9,19 +9,17 @@ use std::rc::Rc;
 
 use prusti_rustc_interface::{
     dataflow::{Analysis, AnalysisDomain},
-    index::{Idx, IndexVec},
-    middle::{
+    index::Idx,
+    middle::
         mir::{
-            visit::Visitor, BasicBlock, Body, CallReturnPlaces, Local, Location, Promoted,
-            Statement, Terminator, TerminatorEdges, RETURN_PLACE, START_BLOCK,
-        },
-        ty::TyCtxt,
-    },
+            BasicBlock, Body, CallReturnPlaces, Location, Statement, Terminator, TerminatorEdges, START_BLOCK,
+        }
+    ,
 };
 
 use crate::{
-    free_pcs::{CapabilityKind, CapabilityLocal, FreePlaceCapabilitySummary, engine::FpcsEngine},
-    utils::PlaceRepacker, coupling_graph::{CgContext, engine::CgEngine, coupling::CouplingOp},
+    free_pcs::engine::FpcsEngine,
+    coupling_graph::{CgContext, engine::CgEngine, coupling::CouplingOp},
 };
 
 use super::domain::PlaceCapabilitySummary;

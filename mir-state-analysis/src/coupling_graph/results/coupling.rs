@@ -6,9 +6,7 @@
 
 use std::fmt::{Display, Formatter, Result};
 
-use prusti_rustc_interface::middle::{mir::Local, ty::RegionVid};
-
-use crate::{free_pcs::CapabilityKind, utils::Place};
+use prusti_rustc_interface::middle::ty::RegionVid;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CouplingOp {

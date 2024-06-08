@@ -9,14 +9,9 @@ use prusti_rustc_interface::{
     middle::mir::{BasicBlock, Body, Location},
 };
 
-use crate::{
-    coupling_graph::{engine::CgEngine, graph::Graph, CgContext},
-    free_pcs::{
-        join_semi_lattice::RepackingJoinSemiLattice,
-        CapabilitySummary, RepackOp,
-    },
-    utils::PlaceRepacker,
-};
+use crate::
+    coupling_graph::{engine::CgEngine, graph::Graph}
+;
 
 use super::coupling::CouplingOp;
 

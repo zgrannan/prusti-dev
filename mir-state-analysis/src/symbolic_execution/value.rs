@@ -1,18 +1,17 @@
 use prusti_rustc_interface::{
-    abi::{FieldIdx, VariantIdx, FIRST_VARIANT},
+    abi::VariantIdx,
     data_structures::fx::FxHasher,
     middle::{
-        mir::{self, Place, ProjectionElem},
+        mir::{self, ProjectionElem},
         ty::{self},
     },
-    span::{def_id::DefId, DUMMY_SP}
+    span::{def_id::DefId, DUMMY_SP},
 };
 
 use std::{
     cmp::Ordering,
     collections::BTreeMap,
     hash::{Hash, Hasher},
-    marker::PhantomData,
 };
 
 #[derive(Debug)]
@@ -30,39 +29,44 @@ impl<'tcx> Ty<'tcx> {
     }
 }
 
+trait SyntheticSymValue<'tcx>: Sized {
+    fn subst(&self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self;
+    fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx>;
+}
+
 #[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SymValue<'tcx> {
+pub enum SymValue<'tcx, T> {
     Var(usize, ty::Ty<'tcx>),
-    Ref(Box<SymValue<'tcx>>),
+    Ref(Box<SymValue<'tcx, T>>),
     Constant(Constant<'tcx>),
     CheckedBinaryOp(
         ty::Ty<'tcx>,
         mir::BinOp,
-        Box<SymValue<'tcx>>,
-        Box<SymValue<'tcx>>,
+        Box<SymValue<'tcx, T>>,
+        Box<SymValue<'tcx, T>>,
     ),
     BinaryOp(
         ty::Ty<'tcx>,
         mir::BinOp,
-        Box<SymValue<'tcx>>,
-        Box<SymValue<'tcx>>,
+        Box<SymValue<'tcx, T>>,
+        Box<SymValue<'tcx, T>>,
     ),
-    UnaryOp(ty::Ty<'tcx>, mir::UnOp, Box<SymValue<'tcx>>),
+    UnaryOp(ty::Ty<'tcx>, mir::UnOp, Box<SymValue<'tcx, T>>),
     Projection(
         ProjectionElem<mir::Local, ty::Ty<'tcx>>,
-        Box<SymValue<'tcx>>,
+        Box<SymValue<'tcx, T>>,
     ),
-    Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx>>),
-    Discriminant(Box<SymValue<'tcx>>),
-    PureFnCall(DefId, Vec<SymValue<'tcx>>),
-    And(Box<SymValue<'tcx>>, Box<SymValue<'tcx>>),
+    Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx, T>>),
+    Discriminant(Box<SymValue<'tcx, T>>),
+    PureFnCall(DefId, Vec<SymValue<'tcx, T>>),
+    And(Box<SymValue<'tcx, T>>, Box<SymValue<'tcx, T>>),
+    Synthetic(T),
 }
 
-pub type Substs<'tcx> = BTreeMap<usize, SymValue<'tcx>>;
+pub type Substs<'tcx, T> = BTreeMap<usize, SymValue<'tcx, T>>;
 
-impl<'tcx> SymValue<'tcx> {
-
-    pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx>>) -> Self {
+impl<'tcx, T> SymValue<'tcx, T> {
+    pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx, T>>) -> Self {
         let mut iter = sym_values.into_iter();
         if let Some(value) = iter.next() {
             iter.fold(value, |acc, val| {
@@ -72,8 +76,46 @@ impl<'tcx> SymValue<'tcx> {
             return SymValue::Constant(Constant::from_bool(tcx, true));
         }
     }
+}
 
-    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx>) -> Self {
+impl<'tcx, T> SymValue<'tcx, T> {
+    pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
+        match self {
+            SymValue::Var(_, ty) => Ty::new(*ty, None),
+            SymValue::Ref(val) => todo!(),
+            SymValue::Constant(c) => Ty::new(c.ty(), None),
+            SymValue::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValue::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValue::Projection(elem, val) => match elem {
+                ProjectionElem::Deref => todo!(),
+                ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
+                ProjectionElem::Index(_) => todo!(),
+                ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end,
+                } => todo!(),
+                ProjectionElem::Subslice { from, to, from_end } => todo!(),
+                ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
+                ProjectionElem::OpaqueCast(_) => todo!(),
+            },
+            SymValue::Aggregate(kind, _) => kind.ty(),
+            SymValue::Discriminant(sym_val) => {
+                Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
+            }
+            SymValue::PureFnCall(def_id, args) => Ty::new(
+                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
+                None,
+            ),
+            SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
+            SymValue::And(_, _) => Ty::new(tcx.types.bool, None),
+            SymValue::Synthetic(_) => todo!(),
+        }
+    }
+}
+
+impl<'tcx, T: Clone> SymValue<'tcx, T> {
+    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
         match self {
             SymValue::Var(idx, ty) => {
                 if let Some(subst) = substs.get(&idx) {
@@ -116,41 +158,7 @@ impl<'tcx> SymValue<'tcx> {
                 Box::new(lhs.subst(tcx, substs)),
                 Box::new(rhs.subst(tcx, substs)),
             ),
-        }
-    }
-}
-
-impl<'tcx> SymValue<'tcx> {
-    pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
-        match self {
-            SymValue::Var(_, ty) => Ty::new(*ty, None),
-            SymValue::Ref(val) => todo!(),
-            SymValue::Constant(c) => Ty::new(c.ty(), None),
-            SymValue::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValue::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValue::Projection(elem, val) => match elem {
-                ProjectionElem::Deref => todo!(),
-                ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
-                ProjectionElem::Index(_) => todo!(),
-                ProjectionElem::ConstantIndex {
-                    offset,
-                    min_length,
-                    from_end,
-                } => todo!(),
-                ProjectionElem::Subslice { from, to, from_end } => todo!(),
-                ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
-                ProjectionElem::OpaqueCast(_) => todo!(),
-            },
-            SymValue::Aggregate(kind, _) => kind.ty(),
-            SymValue::Discriminant(sym_val) => {
-                Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
-            }
-            SymValue::PureFnCall(def_id, args) => Ty::new(
-                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
-                None,
-            ),
-            SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
-            SymValue::And(_, _) => Ty::new(tcx.types.bool, None),
+            SymValue::Synthetic(_) => todo!(),
         }
     }
 }

@@ -4,26 +4,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::{
-    borrow::Cow,
-    fmt::{Debug, Display, Formatter, Result},
-};
+use std::fmt::{Debug, Display, Formatter, Result};
 
-use derive_more::{Deref, DerefMut};
 use prusti_rustc_interface::{
-    borrowck::{
-        borrow_set::BorrowData,
-        consumers::{BorrowIndex, OutlivesConstraint},
-    },
-    data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet},
-    dataflow::fmt::DebugWithContext,
-    index::{bit_set::BitSet, IndexVec},
+    borrowck::
+        consumers::OutlivesConstraint
+    ,
     middle::{
         mir::{
-            BasicBlock, ConstraintCategory, Local, Location, Operand, Rvalue, StatementKind,
-            TerminatorKind, RETURN_PLACE,
+            ConstraintCategory, Location, TerminatorKind,
         },
-        ty::{RegionVid, TyKind},
+        ty::RegionVid,
     },
 };
 

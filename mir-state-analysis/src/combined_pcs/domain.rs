@@ -5,21 +5,19 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::{
-    cell::{RefCell, Cell},
     fmt::{Debug, Formatter, Result}, rc::Rc,
 };
 
-use derive_more::{Deref, DerefMut};
 use prusti_rustc_interface::{
     dataflow::JoinSemiLattice,
-    dataflow::fmt::DebugWithContext, index::IndexVec, middle::mir::{BasicBlock, Location, START_BLOCK},
+    dataflow::fmt::DebugWithContext, middle::mir::BasicBlock,
 };
 
 use crate::{
-    free_pcs::{
-        CapabilityLocal, CapabilityProjections, RepackOp, FreePlaceCapabilitySummary, HasFpcs,
-    },
-    utils::{Place, PlaceRepacker}, coupling_graph::{CgContext, triple::CouplingGraph},
+    free_pcs::
+        FreePlaceCapabilitySummary
+    ,
+    coupling_graph::{CgContext, triple::CouplingGraph},
 };
 
 use super::PcsEngine;
