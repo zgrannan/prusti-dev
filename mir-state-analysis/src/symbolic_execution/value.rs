@@ -12,6 +12,7 @@ use std::{
     cmp::Ordering,
     collections::BTreeMap,
     hash::{Hash, Hasher},
+    rc::Rc,
 };
 
 #[derive(Debug)]
@@ -57,7 +58,7 @@ pub enum SymValue<'tcx, T> {
         Box<SymValue<'tcx, T>>,
     ),
     Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx, T>>),
-    Discriminant(Box<SymValue<'tcx, T>>),
+    Discriminant(Rc<SymValue<'tcx, T>>),
     Synthetic(T),
 }
 
@@ -138,7 +139,9 @@ impl<'tcx, T: Clone + SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
                 let vals = vals.into_iter().map(|v| v.subst(tcx, substs)).collect();
                 SymValue::Aggregate(ty, vals)
             }
-            SymValue::Discriminant(val) => SymValue::Discriminant(Box::new(val.subst(tcx, substs))),
+            SymValue::Discriminant(val) => {
+                SymValue::Discriminant(Rc::new((*val).clone().subst(tcx, substs)))
+            }
             SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(tcx, substs))),
             SymValue::UnaryOp(ty, op, expr) => {
                 SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))

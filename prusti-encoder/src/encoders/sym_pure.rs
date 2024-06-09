@@ -1,5 +1,7 @@
 use mir_state_analysis::symbolic_execution::{
-    path_conditions::PathConditions, value::{Substs, SymValue, SyntheticSymValue, Ty}, ResultPath, VerifierSemantics
+    path_conditions::PathConditions,
+    value::{Substs, SymValue, SyntheticSymValue, Ty},
+    ResultPath, VerifierSemantics,
 };
 use prusti_rustc_interface::{
     ast,
@@ -9,7 +11,10 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
-use std::{collections::{BTreeSet, HashMap}, marker::PhantomData};
+use std::{
+    collections::{BTreeSet, HashMap},
+    marker::PhantomData,
+};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
 use crate::encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc};
@@ -50,7 +55,9 @@ impl<'tcx> SymPureEncResult<'tcx> {
         Self(vec![(PathConditions::new(), value)].into_iter().collect())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &(PrustiPathConditions<'tcx>, PrustiSymValue<'tcx>)> {
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = &(PrustiPathConditions<'tcx>, PrustiSymValue<'tcx>)> {
         self.0.iter()
     }
 
@@ -70,10 +77,15 @@ pub struct PrustiSemantics<'tcx>(pub PhantomData<&'tcx ()>);
 #[derive(Ord, Eq, Debug, PartialEq, PartialOrd, Clone)]
 pub enum PrustiSymValSynthetic<'tcx> {
     And(Box<PrustiSymValue<'tcx>>, Box<PrustiSymValue<'tcx>>),
+    If(
+        Box<PrustiSymValue<'tcx>>,
+        Box<PrustiSymValue<'tcx>>,
+        Box<PrustiSymValue<'tcx>>,
+    ),
     PureFnCall(DefId, Vec<PrustiSymValue<'tcx>>),
 }
 
-impl <'tcx> SyntheticSymValue<'tcx> for PrustiSymValSynthetic<'tcx> {
+impl<'tcx> SyntheticSymValue<'tcx> for PrustiSymValSynthetic<'tcx> {
     fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self {
         match self {
             PrustiSymValSynthetic::And(l, r) => PrustiSymValSynthetic::And(
@@ -84,12 +96,18 @@ impl <'tcx> SyntheticSymValue<'tcx> for PrustiSymValSynthetic<'tcx> {
                 def_id,
                 args.into_iter().map(|arg| arg.subst(tcx, substs)).collect(),
             ),
+            PrustiSymValSynthetic::If(cond, then_expr, else_expr) => PrustiSymValSynthetic::If(
+                Box::new(cond.subst(tcx, substs)),
+                Box::new(then_expr.subst(tcx, substs)),
+                Box::new(else_expr.subst(tcx, substs)),
+            ),
         }
     }
 
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match &self {
             PrustiSymValSynthetic::And(_, _) => Ty::new(tcx.types.bool, None),
+            PrustiSymValSynthetic::If(_, t, _) => t.ty(tcx),
             PrustiSymValSynthetic::PureFnCall(def_id, _) => Ty::new(
                 tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
                 None,
@@ -102,7 +120,7 @@ pub type PrustiPathConditions<'tcx> = PathConditions<'tcx, PrustiSymValSynthetic
 pub type PrustiSymValue<'tcx> = SymValue<'tcx, PrustiSymValSynthetic<'tcx>>;
 pub type PrustiSubsts<'tcx> = Substs<'tcx, PrustiSymValSynthetic<'tcx>>;
 
-impl <'tcx> VerifierSemantics<'tcx> for PrustiSemantics<'tcx> {
+impl<'tcx> VerifierSemantics<'tcx> for PrustiSemantics<'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'tcx>;
 
     fn encode_fn_call(
@@ -114,7 +132,9 @@ impl <'tcx> VerifierSemantics<'tcx> for PrustiSemantics<'tcx> {
         })
         .unwrap_or_default();
         if is_pure {
-            Some(SymValue::Synthetic(PrustiSymValSynthetic::PureFnCall(def_id, args)))
+            Some(SymValue::Synthetic(PrustiSymValSynthetic::PureFnCall(
+                def_id, args,
+            )))
         } else {
             None
         }
@@ -143,7 +163,7 @@ impl SymPureEnc {
                 body,
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
-                PrustiSemantics(PhantomData)
+                PrustiSemantics(PhantomData),
             );
             SymPureEncResult(
                 symbolic_execution

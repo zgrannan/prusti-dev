@@ -6,16 +6,22 @@ use mir_state_analysis::symbolic_execution::{
 };
 use prusti_rustc_interface::{
     hir::lang_items,
-    middle::{self, mir::{self, PlaceElem}, ty},
+    middle::{
+        self,
+        mir::{self, PlaceElem},
+        ty,
+    },
     span::{def_id::DefId, DUMMY_SP},
 };
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, rc::Rc};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::Reify;
 
 use crate::encoders::{
-    mir_pure::PureKind, sym_pure::{PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult}, CapabilityEnc, MirPureEnc, SymPureEnc,
+    mir_pure::PureKind,
+    sym_pure::{PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult},
+    CapabilityEnc, MirPureEnc, SymPureEnc,
 };
 pub struct SymSpecEnc;
 
@@ -50,16 +56,17 @@ type SymSpecEncTask<'tcx> = (
     Option<DefId>,            // ID of the caller function, if any
 );
 
-pub fn mk_conj<'tcx>(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<PrustiSymValue<'tcx>>) -> PrustiSymValue<'tcx> {
+pub fn mk_conj<'tcx>(
+    tcx: ty::TyCtxt<'tcx>,
+    sym_values: Vec<PrustiSymValue<'tcx>>,
+) -> PrustiSymValue<'tcx> {
     let mut iter = sym_values.into_iter();
     if let Some(value) = iter.next() {
         iter.fold(value, |acc, val| {
-            PrustiSymValue::Synthetic(
-                PrustiSymValSynthetic::And(
-                    Box::new(acc.clone()),
-                    Box::new(val.clone()),
-                ),
-            )
+            PrustiSymValue::Synthetic(PrustiSymValSynthetic::And(
+                Box::new(acc.clone()),
+                Box::new(val.clone()),
+            ))
         })
     } else {
         return SymValue::Constant(Constant::from_bool(tcx, true));
@@ -74,33 +81,44 @@ impl SymSpecEnc {
 
     fn partial_eq_expr<'tcx>(
         tcx: ty::TyCtxt<'tcx>,
-        ty: ty::Ty<'tcx>,
         lhs: PrustiSymValue<'tcx>,
         rhs: PrustiSymValue<'tcx>,
     ) -> Option<PrustiSymValue<'tcx>> {
+        let ty = lhs.ty(tcx).rust_ty();
         match ty.kind() {
             ty::TyKind::Tuple(tys) => {
-                let exprs = tys.iter().enumerate().map(|(i, ty)| {
-                    let field = PlaceElem::Field(i.into(), ty);
-                    let lhs_field = SymValue::Projection(field, Box::new(lhs.clone()));
-                    let rhs_field = SymValue::Projection(field, Box::new(rhs.clone()));
-                    Self::partial_eq_expr(tcx, ty, lhs_field, rhs_field)
-                }).collect::<Option<Vec<_>>>()?;
+                let exprs = tys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, ty)| {
+                        let field = PlaceElem::Field(i.into(), ty);
+                        let lhs_field = SymValue::Projection(field, Box::new(lhs.clone()));
+                        let rhs_field = SymValue::Projection(field, Box::new(rhs.clone()));
+                        Self::partial_eq_expr(tcx, lhs_field, rhs_field)
+                    })
+                    .collect::<Option<Vec<_>>>()?;
                 Some(mk_conj(tcx, exprs))
             }
             ty::TyKind::Adt(adt_def, substs) => {
                 if tcx.has_structural_eq_impls(ty) {
-                    let lhs_discriminant = SymValue::Discriminant(Box::new(lhs));
-                    let rhs_discriminant = SymValue::Discriminant(Box::new(rhs));
+                    let lhs_discriminant = SymValue::Discriminant(Rc::new(lhs.clone()));
+                    let rhs_discriminant = SymValue::Discriminant(Rc::new(rhs.clone()));
                     let discriminants_match = SymValue::BinaryOp(
                         tcx.types.bool,
                         mir::BinOp::Eq,
                         Box::new(lhs_discriminant),
                         Box::new(rhs_discriminant),
                     );
-                    todo!()
-                    // adt_def.variants.iter().map(|variant| {
-                    // });
+                    let mut iter = adt_def.variants().iter();
+                    let first_variant = iter.next().unwrap();
+                    let first_case = mk_conj(tcx, first_variant.fields.iter_enumerated().map(|(i, field)| {
+                        let field_ty = field.ty(tcx, substs);
+                        let field = PlaceElem::Field(i.into(), field_ty);
+                        let lhs_field = SymValue::Projection(field, Box::new(lhs.clone()));
+                        let rhs_field = SymValue::Projection(field, Box::new(rhs.clone()));
+                        Self::partial_eq_expr(tcx, lhs_field, rhs_field)
+                    }).collect::<Option<Vec<_>>>()?);
+                    None
                 } else {
                     None
                 }
@@ -125,7 +143,25 @@ impl SymSpecEnc {
                 return Self::partial_eq_spec(tcx, *ty, result);
             }
             ty::TyKind::Adt(def_id, substs) => {
-                todo!()
+                if let Some(pure_eq_expr) = Self::partial_eq_expr(
+                    tcx,
+                    PrustiSymValue::Var(0, ty),
+                    PrustiSymValue::Var(1, ty),
+                ) {
+                    return SymSpecEncOutput {
+                        pres: SymSpec::new(),
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
+                            SymValue::BinaryOp(
+                                tcx.types.bool,
+                                mir::BinOp::Eq,
+                                Box::new(result),
+                                Box::new(pure_eq_expr),
+                            ),
+                        )),
+                    };
+                } else {
+                    todo!()
+                }
             }
             other => todo!("{:#?}", other),
         }
@@ -160,7 +196,7 @@ impl SymSpecEnc {
                 return Self::partial_eq_spec(
                     vcx.tcx(),
                     input_ty,
-                    SymValue::Var(2, vcx.tcx().types.bool)
+                    SymValue::Var(2, vcx.tcx().types.bool),
                 );
             }
 

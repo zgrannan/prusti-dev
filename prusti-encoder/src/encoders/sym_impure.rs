@@ -432,6 +432,7 @@ impl<'tcx, 'vir: 'tcx, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
                 Ok(function_ref.apply(self.vcx, &args))
             }
             SymValue::Synthetic(PrustiSymValSynthetic::And(_, _)) => todo!(),
+            SymValue::Synthetic(PrustiSymValSynthetic::If(_, _, _)) => todo!(),
         }
     }
 

@@ -16,7 +16,7 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgsRef, TyCtxt},
     },
 };
-use std::{collections::BTreeSet, ops::Deref};
+use std::{collections::BTreeSet, ops::Deref, rc::Rc};
 
 use crate::FpcsOutput;
 
@@ -286,7 +286,7 @@ impl<'mir, 'tcx, S: VerifierSemantics<'tcx>> SymbolicExecution<'mir, 'tcx, S> {
                             ops,
                         )
                     }
-                    mir::Rvalue::Discriminant(target) => SymValue::Discriminant(Box::new(
+                    mir::Rvalue::Discriminant(target) => SymValue::Discriminant(Rc::new(
                         heap.get(&(*target).into()).unwrap().clone(),
                     )),
                     mir::Rvalue::Ref(_, _, place) => {
