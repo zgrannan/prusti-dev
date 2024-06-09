@@ -1433,6 +1433,7 @@ dependencies = [
 name = "mir-state-analysis"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "derive_more",
  "dot",
  "prusti-rustc-interface",

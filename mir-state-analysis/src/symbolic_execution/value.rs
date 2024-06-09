@@ -15,6 +15,8 @@ use std::{
     rc::Rc,
 };
 
+use super::SymExArena;
+
 #[derive(Debug)]
 pub struct Ty<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
 
@@ -30,62 +32,51 @@ impl<'tcx> Ty<'tcx> {
     }
 }
 
-pub trait SyntheticSymValue<'tcx>: Sized {
-    fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, Self>) -> Self;
+pub trait SyntheticSymValueData<'sym, 'tcx>: Sized {
+    fn subst(&self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'sym, 'tcx, Self>) -> &'sym Self;
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx>;
 }
 
+pub type SymValue<'sym, 'tcx, T> = &'sym SymValueData<'sym, 'tcx, T>;
+
 #[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SymValue<'tcx, T> {
+pub enum SymValueData<'sym, 'tcx, T> {
     Var(usize, ty::Ty<'tcx>),
-    Ref(Box<SymValue<'tcx, T>>),
+    Ref(SymValue<'sym, 'tcx, T>),
     Constant(Constant<'tcx>),
     CheckedBinaryOp(
         ty::Ty<'tcx>,
         mir::BinOp,
-        Box<SymValue<'tcx, T>>,
-        Box<SymValue<'tcx, T>>,
+        SymValue<'sym, 'tcx, T>,
+        SymValue<'sym, 'tcx, T>,
     ),
     BinaryOp(
         ty::Ty<'tcx>,
         mir::BinOp,
-        Box<SymValue<'tcx, T>>,
-        Box<SymValue<'tcx, T>>,
+        SymValue<'sym, 'tcx, T>,
+        SymValue<'sym, 'tcx, T>,
     ),
-    UnaryOp(ty::Ty<'tcx>, mir::UnOp, Box<SymValue<'tcx, T>>),
+    UnaryOp(ty::Ty<'tcx>, mir::UnOp, SymValue<'sym, 'tcx, T>),
     Projection(
         ProjectionElem<mir::Local, ty::Ty<'tcx>>,
-        Box<SymValue<'tcx, T>>,
+        SymValue<'sym, 'tcx, T>,
     ),
-    Aggregate(AggregateKind<'tcx>, Vec<SymValue<'tcx, T>>),
-    Discriminant(Rc<SymValue<'tcx, T>>),
-    Synthetic(T),
+    Aggregate(AggregateKind<'tcx>, &'sym [SymValue<'sym, 'tcx, T>]),
+    Discriminant(SymValue<'sym, 'tcx, T>),
+    Synthetic(&'sym T),
 }
 
-pub type Substs<'tcx, T> = BTreeMap<usize, SymValue<'tcx, T>>;
+pub type Substs<'sym, 'tcx, T> = BTreeMap<usize, SymValueData<'sym, 'tcx, T>>;
 
-impl<'tcx, T> SymValue<'tcx, T> {
-    // pub fn mk_conj(tcx: ty::TyCtxt<'tcx>, sym_values: Vec<SymValue<'tcx, T>>) -> Self {
-    //     let mut iter = sym_values.into_iter();
-    //     if let Some(value) = iter.next() {
-    //         iter.fold(value, |acc, val| {
-    //             SymValue::And(Box::new(acc), Box::new(val))
-    //         })
-    //     } else {
-    //         return SymValue::Constant(Constant::from_bool(tcx, true));
-    //     }
-    // }
-}
-
-impl<'tcx, T: SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
+impl<'sym, 'tcx, T: SyntheticSymValueData<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match self {
-            SymValue::Var(_, ty) => Ty::new(*ty, None),
-            SymValue::Ref(val) => todo!(),
-            SymValue::Constant(c) => Ty::new(c.ty(), None),
-            SymValue::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValue::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValue::Projection(elem, val) => match elem {
+            SymValueData::Var(_, ty) => Ty::new(*ty, None),
+            SymValueData::Ref(val) => todo!(),
+            SymValueData::Constant(c) => Ty::new(c.ty(), None),
+            SymValueData::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValueData::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValueData::Projection(elem, val) => match elem {
                 ProjectionElem::Deref => todo!(),
                 ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
                 ProjectionElem::Index(_) => todo!(),
@@ -98,55 +89,68 @@ impl<'tcx, T: SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
                 ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
                 ProjectionElem::OpaqueCast(_) => todo!(),
             },
-            SymValue::Aggregate(kind, _) => kind.ty(),
-            SymValue::Discriminant(sym_val) => {
+            SymValueData::Aggregate(kind, _) => kind.ty(),
+            SymValueData::Discriminant(sym_val) => {
                 Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
             }
-            SymValue::UnaryOp(ty, op, val) => Ty::new(*ty, None),
-            SymValue::Synthetic(sym_val) => sym_val.ty(tcx),
+            SymValueData::UnaryOp(ty, op, val) => Ty::new(*ty, None),
+            SymValueData::Synthetic(sym_val) => sym_val.ty(tcx),
         }
     }
 }
 
-impl<'tcx, T: Clone + SyntheticSymValue<'tcx>> SymValue<'tcx, T> {
-    pub fn subst(self, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'tcx, T>) -> Self {
+impl<'sym, 'tcx, T: Clone + SyntheticSymValueData<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+    pub fn subst(
+        &'sym self,
+        arena: &'sym SymExArena,
+        tcx: ty::TyCtxt<'tcx>,
+        substs: &'sym Substs<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
         match self {
-            SymValue::Var(idx, ty) => {
+            SymValueData::Var(idx, ty) => {
                 if let Some(subst) = substs.get(&idx) {
-                    assert_eq!(ty, subst.ty(tcx).rust_ty());
-                    subst.clone()
+                    assert_eq!(*ty, subst.ty(tcx).rust_ty());
+                    subst
                 } else {
                     self
                 }
             }
-            c @ SymValue::Constant(_) => c,
-            SymValue::CheckedBinaryOp(ty, op, lhs, rhs) => SymValue::CheckedBinaryOp(
-                ty,
-                op,
-                Box::new(lhs.subst(tcx, substs)),
-                Box::new(rhs.subst(tcx, substs)),
-            ),
-            SymValue::BinaryOp(ty, op, lhs, rhs) => SymValue::BinaryOp(
-                ty,
-                op,
-                Box::new(lhs.subst(tcx, substs)),
-                Box::new(rhs.subst(tcx, substs)),
-            ),
-            SymValue::Projection(kind, val) => {
-                SymValue::Projection(kind, Box::new(val.subst(tcx, substs)))
+            c @ SymValueData::Constant(_) => c,
+            SymValueData::CheckedBinaryOp(ty, op, lhs, rhs) => {
+                arena.alloc(SymValueData::CheckedBinaryOp(
+                    *ty,
+                    *op,
+                    lhs.subst(arena, tcx, substs),
+                    rhs.subst(arena, tcx, substs),
+                ))
             }
-            SymValue::Aggregate(ty, vals) => {
-                let vals = vals.into_iter().map(|v| v.subst(tcx, substs)).collect();
-                SymValue::Aggregate(ty, vals)
+            SymValueData::BinaryOp(ty, op, lhs, rhs) => arena.alloc(SymValueData::BinaryOp(
+                *ty,
+                *op,
+                lhs.subst(arena, tcx, substs),
+                rhs.subst(arena, tcx, substs),
+            )),
+            SymValueData::Projection(kind, val) => arena.alloc(SymValueData::Projection(
+                *kind,
+                val.subst(arena, tcx, substs),
+            )),
+            SymValueData::Aggregate(ty, vals) => {
+                let vals = vals
+                    .iter()
+                    .map(|v| v.subst(arena, tcx, substs))
+                    .collect::<Vec<_>>();
+                arena.alloc(SymValueData::Aggregate(*ty, arena.alloc_slice(&vals)))
             }
-            SymValue::Discriminant(val) => {
-                SymValue::Discriminant(Rc::new((*val).clone().subst(tcx, substs)))
+            SymValueData::Discriminant(val) => {
+                arena.alloc(SymValueData::Discriminant(val.subst(arena, tcx, substs)))
             }
-            SymValue::Ref(val) => SymValue::Ref(Box::new(val.subst(tcx, substs))),
-            SymValue::UnaryOp(ty, op, expr) => {
-                SymValue::UnaryOp(ty, op, Box::new(expr.subst(tcx, substs)))
-            }
-            SymValue::Synthetic(sym_val) => SymValue::Synthetic(sym_val.subst(tcx, substs)),
+            SymValueData::Ref(val) => arena.alloc(SymValueData::Ref(val.subst(arena, tcx, substs))),
+            SymValueData::UnaryOp(ty, op, expr) => arena.alloc(SymValueData::UnaryOp(
+                *ty,
+                *op,
+                expr.subst(arena, tcx, substs),
+            )),
+            SymValueData::Synthetic(sym_val) => arena.alloc(SymValueData::Synthetic(sym_val.subst(arena, tcx, substs))),
         }
     }
 }
@@ -210,7 +214,7 @@ impl<'tcx> PartialOrd for Constant<'tcx> {
     }
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct AggregateKind<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
 
 impl<'tcx> AggregateKind<'tcx> {

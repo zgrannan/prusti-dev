@@ -1,14 +1,16 @@
 use crate::symbolic_execution::{
     place::Place,
-    value::{Constant, SymValue},
+    value::{Constant, SymValueData},
 };
 use prusti_rustc_interface::middle::mir;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct SymbolicHeap<'tcx, T>(BTreeMap<Place<'tcx>, SymValue<'tcx, T>>);
+use super::{value::SymValue, SymExArena};
 
-impl<'tcx, T: std::fmt::Debug> SymbolicHeap<'tcx, T> {
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct SymbolicHeap<'sym, 'tcx, T>(BTreeMap<Place<'tcx>, SymValue<'sym, 'tcx, T>>);
+
+impl<'sym, 'tcx, T: std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
     // pub fn check_eq_debug(&self, other: &Self) {
     //     for (p, v) in self.0.iter() {
     //         if !other.0.contains_key(&p) {
@@ -30,35 +32,38 @@ impl<'tcx, T: std::fmt::Debug> SymbolicHeap<'tcx, T> {
         SymbolicHeap(BTreeMap::new())
     }
 
-    pub fn insert(&mut self, place: Place<'tcx>, value: SymValue<'tcx, T>) {
+    pub fn insert(&mut self, place: Place<'tcx>, value: SymValue<'sym, 'tcx, T>) {
         self.0.insert(place, value);
     }
 
-    pub fn get(&self, place: &Place<'tcx>) -> Option<&SymValue<'tcx, T>> {
-        self.0.get(&place)
+    pub fn get(&self, place: &Place<'tcx>) -> Option<SymValue<'sym, 'tcx, T>> {
+        self.0.get(&place).copied()
     }
 
-    pub fn take(&mut self, place: &Place<'tcx>) -> SymValue<'tcx, T> {
+    pub fn take(&mut self, place: &Place<'tcx>) -> SymValue<'sym, 'tcx, T> {
         self.0
             .remove(&place)
             .unwrap_or_else(|| panic!("{place:?} not found in heap {:#?}", self.0))
     }
 
-    pub fn get_return_place_expr(&self) -> Option<&SymValue<'tcx, T>> {
+    pub fn get_return_place_expr(&self) -> Option<SymValue<'sym, 'tcx, T>> {
         self.get(&mir::RETURN_PLACE.into())
     }
-
 }
 
-impl<'tcx, T: Clone + std::fmt::Debug> SymbolicHeap<'tcx, T> {
-    pub fn encode_operand(&self, operand: &mir::Operand<'tcx>) -> SymValue<'tcx, T> {
+impl<'sym, 'tcx, T: Clone + std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
+    pub fn encode_operand(
+        &self,
+        arena: &'sym SymExArena,
+        operand: &mir::Operand<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
         match *operand {
             mir::Operand::Copy(place) | mir::Operand::Move(place) => self
                 .get(&place.into())
-                .unwrap_or_else(|| panic!("{place:?} not found in heap {:#?}", self.0))
-                .clone(),
-            mir::Operand::Constant(box c) => SymValue::Constant(Constant(c.clone())),
+                .unwrap_or_else(|| panic!("{place:?} not found in heap {:#?}", self.0)),
+            mir::Operand::Constant(box c) => {
+                arena.alloc(SymValueData::Constant(Constant(c.clone())))
+            }
         }
     }
 }
-

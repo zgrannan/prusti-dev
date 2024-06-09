@@ -26,18 +26,19 @@ use prusti_rustc_interface::{
         ty::TyCtxt,
     },
 };
-use symbolic_execution::{VerifierSemantics, SymbolicExecution, SymbolicExecutionResult};
+use symbolic_execution::{SymExArena, SymbolicExecution, SymbolicExecutionResult, VerifierSemantics};
 
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
 
-#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, verifier_semantics))]
-pub fn run_symbolic_execution<'mir, 'tcx, S: VerifierSemantics<'tcx>>(
+#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, verifier_semantics, arena))]
+pub fn run_symbolic_execution<'mir: 'sym, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
-    verifier_semantics: S
-) -> SymbolicExecutionResult<'tcx, S::SymValSynthetic> {
-    SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics).execute()
+    verifier_semantics: S,
+    arena: &'sym SymExArena,
+) -> SymbolicExecutionResult<'sym, 'tcx, S::SymValSynthetic> {
+    SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics, arena).execute()
 }
 
 #[tracing::instrument(name = "run_free_pcs", level = "debug", skip(mir, tcx))]
