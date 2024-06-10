@@ -1,7 +1,7 @@
 use std::collections::{btree_set::Iter, BTreeSet};
 
 use super::{
-    value::{Substs, SymValue, SymValueData, SyntheticSymValueData},
+    value::{Substs, SymValue, SymValueData, SyntheticSymValue},
     SymExArena,
 };
 use prusti_rustc_interface::{
@@ -22,7 +22,7 @@ pub enum PathConditionPredicate<'sym, 'tcx, T> {
     Postcondition(DefId, GenericArgsRef<'tcx>, &'sym [SymValue<'sym, 'tcx, T>]),
 }
 
-impl<'sym, 'tcx, T: Clone + SyntheticSymValueData<'sym, 'tcx>> PathConditionPredicate<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Copy + Clone + SyntheticSymValue<'sym, 'tcx>> PathConditionPredicate<'sym, 'tcx, T> {
     pub fn subst(
         self,
         arena: &'sym SymExArena,
@@ -62,7 +62,7 @@ impl<'sym, 'tcx, T> PathConditionAtom<'sym, 'tcx, T> {
     }
 }
 
-impl<'sym, 'tcx, T: Clone + SyntheticSymValueData<'sym, 'tcx>> PathConditionAtom<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Copy + Clone + SyntheticSymValue<'sym, 'tcx>> PathConditionAtom<'sym, 'tcx, T> {
     pub fn subst(
         self,
         arena: &'sym SymExArena,
@@ -101,7 +101,7 @@ impl<'sym, 'tcx, T: Ord> PathConditions<'sym, 'tcx, T> {
     }
 }
 
-impl<'sym, 'tcx, T: Clone + Ord + SyntheticSymValueData<'sym, 'tcx>> PathConditions<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Copy + Clone + Ord + SyntheticSymValue<'sym, 'tcx>> PathConditions<'sym, 'tcx, T> {
     pub fn subst(
         self,
         arena: &'sym SymExArena,

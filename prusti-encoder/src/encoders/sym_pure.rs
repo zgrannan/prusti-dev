@@ -1,6 +1,6 @@
 use mir_state_analysis::symbolic_execution::{
     path_conditions::PathConditions,
-    value::{Substs, SymValue, SymValueData, SyntheticSymValueData, Ty},
+    value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
     ResultPath, SymExArena, VerifierSemantics,
 };
 use prusti_rustc_interface::{
@@ -67,7 +67,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         self,
         arena: &'sym SymExArena,
         tcx: ty::TyCtxt<'tcx>,
-        substs: &PrustiSubsts<'sym, 'tcx>,
+        substs: &'sym PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
         let mut result = BTreeSet::new();
         for (path_conditions, value) in self.0 {
@@ -79,10 +79,12 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
     }
 }
 
-pub struct PrustiSemantics<'tcx>(pub PhantomData<&'tcx ()>);
+pub struct PrustiSemantics<'sym, 'tcx>(pub PhantomData<&'sym &'tcx ()>);
+
+pub type PrustiSymValSynthetic<'sym, 'tcx> = &'sym PrustiSymValSyntheticData<'sym, 'tcx>;
 
 #[derive(Ord, Eq, Debug, PartialEq, PartialOrd, Clone)]
-pub enum PrustiSymValSynthetic<'sym, 'tcx> {
+pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
     And(PrustiSymValue<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>),
     If(
         PrustiSymValue<'sym, 'tcx>,
@@ -92,39 +94,44 @@ pub enum PrustiSymValSynthetic<'sym, 'tcx> {
     PureFnCall(DefId, &'sym [PrustiSymValue<'sym, 'tcx>]),
 }
 
-impl<'sym, 'tcx> SyntheticSymValueData<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
+impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,
         arena: &'sym SymExArena,
         tcx: ty::TyCtxt<'tcx>,
-        substs: &'sym Substs<'sym, 'tcx, Self>,
+        substs: &Substs<'sym, 'tcx, Self>,
     ) -> Self {
         match self {
-            PrustiSymValSynthetic::And(l, r) => {
-                PrustiSymValSynthetic::And(l.subst(arena, tcx, substs), r.subst(arena, tcx, substs))
+            PrustiSymValSyntheticData::And(l, r) => arena.alloc(PrustiSymValSyntheticData::And(
+                l.subst(arena, tcx, substs),
+                r.subst(arena, tcx, substs),
+            )),
+            PrustiSymValSyntheticData::PureFnCall(def_id, args) => {
+                arena.alloc(PrustiSymValSyntheticData::PureFnCall(
+                    *def_id,
+                    arena.alloc_slice(
+                        &(args
+                            .iter()
+                            .map(|arg| arg.subst(arena, tcx, substs))
+                            .collect::<Vec<_>>()),
+                    ),
+                ))
             }
-            PrustiSymValSynthetic::PureFnCall(def_id, args) => PrustiSymValSynthetic::PureFnCall(
-                def_id,
-                arena.alloc_slice(
-                    &args
-                        .into_iter()
-                        .map(|arg| arg.subst(arena, tcx, substs))
-                        .collect(),
-                ),
-            ),
-            PrustiSymValSynthetic::If(cond, then_expr, else_expr) => PrustiSymValSynthetic::If(
-                cond.subst(arena, tcx, substs),
-                then_expr.subst(arena, tcx, substs),
-                else_expr.subst(arena, tcx, substs),
-            ),
+            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
+                arena.alloc(PrustiSymValSyntheticData::If(
+                    cond.subst(arena, tcx, substs),
+                    then_expr.subst(arena, tcx, substs),
+                    else_expr.subst(arena, tcx, substs),
+                ))
+            }
         }
     }
 
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match &self {
-            PrustiSymValSynthetic::And(_, _) => Ty::new(tcx.types.bool, None),
-            PrustiSymValSynthetic::If(_, t, _) => t.ty(tcx),
-            PrustiSymValSynthetic::PureFnCall(def_id, _) => Ty::new(
+            PrustiSymValSyntheticData::And(_, _) => Ty::new(tcx.types.bool, None),
+            PrustiSymValSyntheticData::If(_, t, _) => t.ty(tcx),
+            PrustiSymValSyntheticData::PureFnCall(def_id, _) => Ty::new(
                 tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
                 None,
             ),
@@ -137,13 +144,13 @@ pub type PrustiPathConditions<'sym, 'tcx> =
 pub type PrustiSymValue<'sym, 'tcx> = SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
-impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'tcx> {
+impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx>;
 
     fn encode_fn_call(
         arena: &'sym SymExArena,
         def_id: DefId,
-        args: &[&PrustiSymValue<'sym, 'tcx>],
+        args: &'sym [PrustiSymValue<'sym, 'tcx>],
     ) -> Option<PrustiSymValue<'sym, 'tcx>> {
         let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
             proc_spec.kind.is_pure().unwrap_or_default()
@@ -151,7 +158,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'tcx> {
         .unwrap_or_default();
         if is_pure {
             Some(arena.alloc(SymValueData::Synthetic(
-                arena.alloc(PrustiSymValSynthetic::PureFnCall(def_id, args)),
+                arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, args)),
             )))
         } else {
             None
@@ -185,7 +192,7 @@ impl SymPureEnc {
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(body, vcx.tcx()),
                 PrustiSemantics(PhantomData),
-                arena
+                arena,
             );
             SymPureEncResult(
                 symbolic_execution

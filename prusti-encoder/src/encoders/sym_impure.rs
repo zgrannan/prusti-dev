@@ -34,21 +34,28 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{lifted::{cast::CastToEnc, casters::CastTypePure}, ConstEnc, MirBuiltinEnc};
+use crate::encoders::{
+    lifted::{cast::CastToEnc, casters::CastTypePure},
+    ConstEnc, MirBuiltinEnc,
+};
 
 use super::{
     lifted::{cast::CastArgs, rust_ty_cast::RustTyCastersEnc},
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
     rust_ty_snapshots::RustTySnapshotsEnc,
-    sym_pure::{PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult},
+    sym_pure::{
+        PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic,
+        PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult,
+    },
     sym_spec::SymSpecEnc,
-    FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc,
-    SpecEncTask, SymPureEnc, SymPureEncTask,
+    FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc, SpecEncTask,
+    SymPureEnc, SymPureEncTask,
 };
 
-type PrustiPathConditionAtom<'tcx> = PathConditionAtom<'tcx, PrustiSymValSynthetic<'tcx>>;
-type PrustiAssertion<'tcx> = Assertion<'tcx, PrustiSymValSynthetic<'tcx>>;
+type PrustiPathConditionAtom<'sym, 'tcx> =
+    PathConditionAtom<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
+type PrustiAssertion<'sym, 'tcx> = Assertion<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
 impl TaskEncoder for SymImpureEnc {
     task_encoder::encoder_cache!(SymImpureEnc);
@@ -76,7 +83,8 @@ impl TaskEncoder for SymImpureEnc {
         (
             Self::OutputFullLocal<'vir>,
             Self::OutputFullDependency<'vir>,
-        ), EncodeFullError<'vir, Self>
+        ),
+        EncodeFullError<'vir, Self>,
     > {
         let (local_def_id, substs, caller_def_id) = *task_key;
         let def_id = local_def_id.to_def_id();
@@ -115,7 +123,7 @@ impl TaskEncoder for SymImpureEnc {
                 vcx.tcx(),
                 mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
                 PrustiSemantics(PhantomData),
-                &arena
+                &arena,
             );
 
             let symvar_locals = symbolic_execution
@@ -153,7 +161,7 @@ impl TaskEncoder for SymImpureEnc {
                     .iter()
                     .map(|local| vcx.mk_local_ex(local.name, local.ty))
                     .collect::<Vec<_>>(),
-                arena: &arena
+                arena: &arena,
             };
 
             let mut stmts = Vec::new();
@@ -201,7 +209,7 @@ impl TaskEncoder for SymImpureEnc {
                         // corresponds to the spec's symbolic input argument.
                         visitor.encode_pure_spec(
                             p,
-                            Some(&std::iter::once((body.arg_count, expr.clone())).collect()),
+                            Some(arena.alloc(Substs::singleton(body.arg_count, expr))),
                         )
                         .unwrap_or_else(|err| {
                             panic!("Error when encoding the postcondition {:?} of {:?} for path {:?}: {}", p, def_id, path, err)
@@ -270,7 +278,10 @@ type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
 type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
 
 impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
-    fn encode_sym_value(&mut self, sym_value: &PrustiSymValue<'sym, 'tcx>) -> EncodeSymValueResult<'vir> {
+    fn encode_sym_value(
+        &mut self,
+        sym_value: &PrustiSymValue<'sym, 'tcx>,
+    ) -> EncodeSymValueResult<'vir> {
         match sym_value {
             SymValueData::Var(idx, _) => self
                 .symvars
@@ -420,7 +431,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                 }
             }
             SymValueData::Ref(_) => todo!(),
-            SymValueData::Synthetic(PrustiSymValSynthetic::PureFnCall(fn_def_id, args)) => {
+            SymValueData::Synthetic(PrustiSymValSyntheticData::PureFnCall(fn_def_id, args)) => {
                 let args = args
                     .iter()
                     .map(|arg| self.encode_sym_value(arg).unwrap())
@@ -436,8 +447,8 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .function_ref;
                 Ok(function_ref.apply(self.vcx, &args))
             }
-            SymValueData::Synthetic(PrustiSymValSynthetic::And(_, _)) => todo!(),
-            SymValueData::Synthetic(PrustiSymValSynthetic::If(_, _, _)) => todo!(),
+            SymValueData::Synthetic(PrustiSymValSyntheticData::And(_, _)) => todo!(),
+            SymValueData::Synthetic(PrustiSymValSyntheticData::If(_, _, _)) => todo!(),
         }
     }
 
@@ -451,30 +462,29 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
             .unwrap()
     }
 
-    fn encode_pc_atom(&mut self, pc: &PrustiPathConditionAtom<'tcx>) -> EncodePCAtomResult<'vir> {
+    fn encode_pc_atom(
+        &mut self,
+        pc: &PrustiPathConditionAtom<'sym, 'tcx>,
+    ) -> EncodePCAtomResult<'vir> {
         let expr = self
             .encode_sym_value(&pc.expr)
             .map_err(|err| format!("Failed to encode pc atom target for pc {:?}: {}", pc, err))?;
         match &pc.predicate {
             PathConditionPredicate::Postcondition(def_id, substs, args) => {
-                let mut args = args.clone();
-                args.push(pc.expr.clone());
-                let mut encoded_posts = SymSpecEnc::encode(
-                    self.arena,
-                    self.deps,
-                    (
-                        *def_id,
-                        substs,
-                        None,
-                    ),
-                )
-                .posts
-                .into_iter()
-                .map(|p| {
-                    self.encode_pure_spec(&p, Some(&args.iter().cloned().enumerate().collect()))
-                        .unwrap()
-                })
-                .collect::<Vec<_>>();
+                let args = args.iter().copied().chain(std::iter::once(pc.expr));
+                let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
+                let mut encoded_posts =
+                    SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
+                        .posts
+                        .into_iter()
+                        .map(|p| {
+                            self.encode_pure_spec(
+                                &p,
+                                Some(arg_substs),
+                            )
+                            .unwrap()
+                        })
+                        .collect::<Vec<_>>();
                 let is_pure = self
                     .deps
                     .require_local::<SpecEnc>(SpecEncTask { def_id: *def_id })
@@ -485,13 +495,16 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                 })
                 .unwrap_or_default();
                 if is_pure && !trusted {
-                    let body = SymPureEnc::encode(self.arena, SymPureEncTask {
-                        kind: PureKind::Pure,
-                        parent_def_id: *def_id,
-                        param_env: self.vcx.tcx().param_env(*def_id),
-                        substs: ty::List::identity_for_item(self.vcx.tcx(), *def_id),
-                        caller_def_id: None, // TODO
-                    });
+                    let body = SymPureEnc::encode(
+                        self.arena,
+                        SymPureEncTask {
+                            kind: PureKind::Pure,
+                            parent_def_id: *def_id,
+                            param_env: self.vcx.tcx().param_env(*def_id),
+                            substs: ty::List::identity_for_item(self.vcx.tcx(), *def_id),
+                            caller_def_id: None, // TODO
+                        },
+                    );
                     for (path, value) in body.iter() {
                         encoded_posts.push(
                             self.vcx.mk_implies_expr(
@@ -501,7 +514,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                                     self.encode_sym_value(&value.clone().subst(
                                         self.arena,
                                         self.vcx.tcx(),
-                                        &args.iter().cloned().enumerate().collect(),
+                                        arg_substs,
                                     ))
                                     .unwrap(),
                                 ),
@@ -546,7 +559,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
     fn encode_pure_spec(
         &mut self,
         spec: &SymPureEncResult<'sym, 'tcx>,
-        substs: Option<&PrustiSubsts<'sym, 'tcx>>,
+        substs: Option<&'sym PrustiSubsts<'sym, 'tcx>>,
     ) -> EncodePureSpecResult<'vir> {
         let spec = if let Some(substs) = substs {
             spec.clone().subst(self.arena, self.vcx.tcx(), substs)
@@ -565,24 +578,22 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         Ok(self.vcx.mk_conj(&clauses))
     }
 
-    fn encode_assertion(&mut self, assertion: &PrustiAssertion<'tcx>) -> vir::Stmt<'vir> {
+    fn encode_assertion(&mut self, assertion: &PrustiAssertion<'sym, 'tcx>) -> vir::Stmt<'vir> {
         let expr = match assertion {
             Assertion::Precondition(def_id, substs, args) => {
-                let encoded_pres = SymSpecEnc::encode(
-                    self.deps,
-                    (
-                        *def_id,
-                        substs,
-                        None,
-                    ),
-                )
-                .pres
-                .into_iter()
-                .map(|p| {
-                    self.encode_pure_spec(&p, Some(&args.iter().cloned().enumerate().collect()))
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .unwrap();
+                let arg_substs = self.arena.alloc(Substs::from_iter(args.iter().copied().enumerate()));
+                let encoded_pres =
+                    SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
+                        .pres
+                        .into_iter()
+                        .map(|p| {
+                            self.encode_pure_spec(
+                                &p,
+                                Some(arg_substs),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap();
                 self.vcx.mk_conj(&encoded_pres)
             }
             Assertion::Eq(expr, val) => {
@@ -597,10 +608,13 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         self.vcx.mk_exhale_stmt(expr)
     }
 
-    fn encode_path_condition(&mut self, pc: &PrustiPathConditions<'_, 'tcx>) -> EncodePCResult<'vir> {
+    fn encode_path_condition(
+        &mut self,
+        pc: &PrustiPathConditions<'sym, 'tcx>,
+    ) -> EncodePCResult<'vir> {
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            exprs.push(self.encode_pc_atom(&atom).map_err(|err| {
+            exprs.push(self.encode_pc_atom(atom).map_err(|err| {
                 format!(
                     "Failed to encode pc atom {:?} for pc {:?}: {}",
                     atom, pc, err

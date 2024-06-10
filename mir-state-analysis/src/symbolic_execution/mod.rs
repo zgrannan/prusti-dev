@@ -24,7 +24,7 @@ use self::{
     path::{AcyclicPath, Path},
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     place::Place,
-    value::{AggregateKind, SymValue, SyntheticSymValueData},
+    value::{AggregateKind, SymValue, SyntheticSymValue},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -36,7 +36,7 @@ pub enum Assertion<'sym, 'tcx, T> {
 pub type ResultPath<'sym, 'tcx, T> = (
     AcyclicPath,
     PathConditions<'sym, 'tcx, T>,
-    SymValueData<'sym, 'tcx, T>,
+    SymValue<'sym, 'tcx, T>,
 );
 pub type ResultAssertion<'sym, 'tcx, T> = (
     AcyclicPath,
@@ -80,14 +80,17 @@ pub struct SymbolicExecution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>
 }
 
 pub trait VerifierSemantics<'sym, 'tcx> {
-    type SymValSynthetic: Clone + Ord + std::fmt::Debug + SyntheticSymValueData<'sym, 'tcx>;
+    type SymValSynthetic: Clone + Ord + std::fmt::Debug + SyntheticSymValue<'sym, 'tcx>;
     fn encode_fn_call(
+        arena: &'sym SymExArena,
         def_id: DefId,
-        args: &[SymValue<'sym, 'tcx, Self::SymValSynthetic>],
+        args: &'sym [SymValue<'sym, 'tcx, Self::SymValSynthetic>],
     ) -> Option<SymValue<'sym, 'tcx, Self::SymValSynthetic>>;
 }
 
-impl<'mir: 'sym, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir, 'sym, 'tcx, S> {
+impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>
+    SymbolicExecution<'mir, 'sym, 'tcx, S>
+{
     pub fn new(
         tcx: TyCtxt<'tcx>,
         body: &'mir BodyWithBorrowckFacts<'tcx>,
@@ -189,11 +192,12 @@ impl<'mir: 'sym, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution
                         Assertion::Precondition(*def_id, substs, args),
                     ));
 
-                    let result = S::encode_fn_call(*def_id, args).unwrap_or_else(|| {
-                        self.mk_fresh_symvar(
-                            destination.ty(&self.body.body.local_decls, self.tcx).ty,
-                        )
-                    });
+                    let result =
+                        S::encode_fn_call(self.arena, *def_id, args).unwrap_or_else(|| {
+                            self.mk_fresh_symvar(
+                                destination.ty(&self.body.body.local_decls, self.tcx).ty,
+                            )
+                        });
                     path.heap.insert((*destination).into(), result);
                     path.pcs.insert(PathConditionAtom::new(
                         result,
@@ -277,7 +281,7 @@ impl<'mir: 'sym, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution
         result_paths: &mut BTreeSet<ResultPath<'sym, 'tcx, S::SymValSynthetic>>,
     ) {
         if let Some(expr) = path.heap.get_return_place_expr() {
-            result_paths.insert((path.path.clone(), path.pcs.clone(), expr.clone()));
+            result_paths.insert((path.path.clone(), path.pcs.clone(), expr));
         }
     }
 

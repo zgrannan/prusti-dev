@@ -31,7 +31,7 @@ use symbolic_execution::{SymExArena, SymbolicExecution, SymbolicExecutionResult,
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
 
 #[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, verifier_semantics, arena))]
-pub fn run_symbolic_execution<'mir: 'sym, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
+pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,

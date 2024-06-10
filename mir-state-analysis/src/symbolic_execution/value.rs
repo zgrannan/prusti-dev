@@ -32,8 +32,8 @@ impl<'tcx> Ty<'tcx> {
     }
 }
 
-pub trait SyntheticSymValueData<'sym, 'tcx>: Sized {
-    fn subst(&self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'sym, 'tcx, Self>) -> &'sym Self;
+pub trait SyntheticSymValue<'sym, 'tcx>: Sized {
+    fn subst(self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'sym, 'tcx, Self>) -> Self;
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx>;
 }
 
@@ -63,12 +63,24 @@ pub enum SymValueData<'sym, 'tcx, T> {
     ),
     Aggregate(AggregateKind<'tcx>, &'sym [SymValue<'sym, 'tcx, T>]),
     Discriminant(SymValue<'sym, 'tcx, T>),
-    Synthetic(&'sym T),
+    Synthetic(T),
 }
 
-pub type Substs<'sym, 'tcx, T> = BTreeMap<usize, SymValueData<'sym, 'tcx, T>>;
+pub struct Substs<'sym, 'tcx, T>(BTreeMap<usize, SymValue<'sym, 'tcx, T>>);
 
-impl<'sym, 'tcx, T: SyntheticSymValueData<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+impl <'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
+    pub fn from_iter(iter: impl Iterator<Item = (usize, SymValue<'sym, 'tcx, T>)>) -> Self {
+        Substs(iter.collect())
+    }
+    pub fn get(&self, idx: &usize) -> Option<SymValue<'sym, 'tcx, T>> {
+        self.0.get(idx).copied()
+    }
+    pub fn singleton(idx: usize, val: SymValue<'sym, 'tcx, T>) -> Self {
+        Substs(std::iter::once((idx, val)).collect())
+    }
+}
+
+impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match self {
             SymValueData::Var(_, ty) => Ty::new(*ty, None),
@@ -99,12 +111,12 @@ impl<'sym, 'tcx, T: SyntheticSymValueData<'sym, 'tcx>> SymValueData<'sym, 'tcx, 
     }
 }
 
-impl<'sym, 'tcx, T: Clone + SyntheticSymValueData<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
-    pub fn subst(
+impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+    pub fn subst<'substs>(
         &'sym self,
         arena: &'sym SymExArena,
         tcx: ty::TyCtxt<'tcx>,
-        substs: &'sym Substs<'sym, 'tcx, T>,
+        substs: &'substs Substs<'sym, 'tcx, T>,
     ) -> SymValue<'sym, 'tcx, T> {
         match self {
             SymValueData::Var(idx, ty) => {

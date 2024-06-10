@@ -20,7 +20,7 @@ use vir::Reify;
 
 use crate::encoders::{
     mir_pure::PureKind,
-    sym_pure::{PrustiSymValSynthetic, PrustiSymValue, SymPureEncResult},
+    sym_pure::{PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult},
     CapabilityEnc, MirPureEnc, SymPureEnc,
 };
 pub struct SymSpecEnc;
@@ -64,8 +64,8 @@ pub fn mk_conj<'sym, 'tcx>(
     let mut iter = sym_values.into_iter();
     if let Some(value) = iter.next() {
         iter.fold(value, |acc, val| {
-            arena.alloc(PrustiSymValue::Synthetic(
-                arena.alloc(PrustiSymValSynthetic::And(acc, val)),
+            arena.alloc(SymValueData::Synthetic(
+                arena.alloc(PrustiSymValSyntheticData::And(acc, val)),
             ))
         })
     } else {
@@ -160,19 +160,19 @@ impl SymSpecEnc {
                 if let Some(pure_eq_expr) = Self::partial_eq_expr(
                     arena,
                     tcx,
-                    arena.alloc(PrustiSymValue::Var(0, ty)),
-                    arena.alloc(PrustiSymValue::Var(1, ty)),
+                    arena.alloc(SymValueData::Var(0, ty)),
+                    arena.alloc(SymValueData::Var(1, ty)),
                 ) {
                     return SymSpecEncOutput {
                         pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
-                            arena.alloc(SymValueData::BinaryOp(
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(arena.alloc(
+                            SymValueData::BinaryOp(
                                 tcx.types.bool,
                                 mir::BinOp::Eq,
                                 result,
                                 pure_eq_expr,
-                            )),
-                        )),
+                            ),
+                        ))),
                     };
                 } else {
                     todo!()
@@ -197,7 +197,7 @@ impl SymSpecEnc {
 
             if panic_lang_items.contains(&def_id) {
                 return SymSpecEncOutput {
-                    pres: Self::spec_bool(vcx.tcx(), false),
+                    pres: Self::spec_bool(arena, vcx.tcx(), false),
                     posts: SymSpec::new(),
                 };
             }
@@ -210,6 +210,7 @@ impl SymSpecEnc {
                 );
                 let input_ty = sig.input(0).skip_binder();
                 return Self::partial_eq_spec(
+                    arena,
                     vcx.tcx(),
                     input_ty,
                     arena.alloc(SymValueData::Var(2, vcx.tcx().types.bool)),
@@ -224,14 +225,17 @@ impl SymSpecEnc {
                 .pres
                 .iter()
                 .map(|spec_def_id| {
-                    SymPureEnc::encode(arena, crate::encoders::SymPureEncTask {
-                        kind: PureKind::Spec,
-                        parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx().param_env(spec_def_id),
-                        substs,
-                        // TODO: should this be `def_id` or `caller_def_id`
-                        caller_def_id: Some(def_id),
-                    })
+                    SymPureEnc::encode(
+                        arena,
+                        crate::encoders::SymPureEncTask {
+                            kind: PureKind::Spec,
+                            parent_def_id: *spec_def_id,
+                            param_env: vcx.tcx().param_env(spec_def_id),
+                            substs,
+                            // TODO: should this be `def_id` or `caller_def_id`
+                            caller_def_id: Some(def_id),
+                        },
+                    )
                 })
                 .collect::<BTreeSet<_>>();
 
@@ -239,14 +243,17 @@ impl SymSpecEnc {
                 .posts
                 .iter()
                 .map(|spec_def_id| {
-                    let post = SymPureEnc::encode(arena, crate::encoders::SymPureEncTask {
-                        kind: PureKind::Spec,
-                        parent_def_id: *spec_def_id,
-                        param_env: vcx.tcx().param_env(spec_def_id),
-                        substs,
-                        // TODO: should this be `def_id` or `caller_def_id`
-                        caller_def_id: Some(def_id),
-                    });
+                    let post = SymPureEnc::encode(
+                        arena,
+                        crate::encoders::SymPureEncTask {
+                            kind: PureKind::Spec,
+                            parent_def_id: *spec_def_id,
+                            param_env: vcx.tcx().param_env(spec_def_id),
+                            substs,
+                            // TODO: should this be `def_id` or `caller_def_id`
+                            caller_def_id: Some(def_id),
+                        },
+                    );
                     post
                 })
                 .collect::<BTreeSet<_>>();
