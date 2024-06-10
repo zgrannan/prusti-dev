@@ -5,6 +5,7 @@ authors = ["Prusti Devs <prusti_developers@sympa.ethz.ch>"]
 edition = "2021"
 
 [dependencies]
+debug-info = { path = "../debug-info" }
 derive_more = "0.99"
 bumpalo = { version = "3.12.0", features = ["collections"] }
 tracing = { path = "../tracing" }

@@ -650,6 +650,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0afaad2b26fa326569eb264b1363e8ae3357618c43982b3f285f0774ce76b69"
 
 [[package]]
+name = "debug-info"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1434,6 +1441,7 @@ name = "mir-state-analysis"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
+ "debug-info",
  "derive_more",
  "dot",
  "prusti-rustc-interface",

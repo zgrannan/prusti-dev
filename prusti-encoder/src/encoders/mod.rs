@@ -13,6 +13,7 @@ mod r#type;
 mod r#const;
 mod sym_pure;
 mod mono;
+mod sym;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "mono_function_encoding")] {
@@ -61,3 +62,4 @@ pub use viper_tuple::{
     ViperTupleEncOutput,
 };
 pub use r#const::ConstEnc;
+pub use sym::function::SymFunctionEnc;

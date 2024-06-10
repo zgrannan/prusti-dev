@@ -1,3 +1,4 @@
+use debug_info::DebugInfo;
 use prusti_rustc_interface::{
     abi::VariantIdx,
     data_structures::fx::FxHasher,
@@ -33,16 +34,40 @@ impl<'tcx> Ty<'tcx> {
 }
 
 pub trait SyntheticSymValue<'sym, 'tcx>: Sized {
-    fn subst(self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>, substs: &Substs<'sym, 'tcx, Self>) -> Self;
+    fn subst(
+        self,
+        arena: &'sym SymExArena,
+        tcx: ty::TyCtxt<'tcx>,
+        substs: &Substs<'sym, 'tcx, Self>,
+    ) -> Self;
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx>;
 }
 
 pub type SymValue<'sym, 'tcx, T> = &'sym SymValueData<'sym, 'tcx, T>;
 
 #[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SymValueData<'sym, 'tcx, T> {
+pub struct SymValueData<'sym, 'tcx, T> {
+    pub kind: SymValueKind<'sym, 'tcx, T>,
+    pub debug_info: DebugInfo<'sym>,
+}
+
+impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+    pub fn new(kind: SymValueKind<'sym, 'tcx, T>, arena: &'sym SymExArena) -> Self {
+        SymValueData {
+            kind,
+            debug_info: DebugInfo::new(|t| arena.alloc(t)),
+        }
+    }
+
+    pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
+        self.kind.ty(tcx)
+    }
+}
+
+#[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub enum SymValueKind<'sym, 'tcx, T> {
     Var(usize, ty::Ty<'tcx>),
-    Ref(SymValue<'sym, 'tcx, T>),
+    Ref(ty::Ty<'tcx>, SymValue<'sym, 'tcx, T>),
     Constant(Constant<'tcx>),
     CheckedBinaryOp(
         ty::Ty<'tcx>,
@@ -68,7 +93,7 @@ pub enum SymValueData<'sym, 'tcx, T> {
 
 pub struct Substs<'sym, 'tcx, T>(BTreeMap<usize, SymValue<'sym, 'tcx, T>>);
 
-impl <'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
     pub fn from_iter(iter: impl Iterator<Item = (usize, SymValue<'sym, 'tcx, T>)>) -> Self {
         Substs(iter.collect())
     }
@@ -80,16 +105,22 @@ impl <'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
     }
 }
 
-impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match self {
-            SymValueData::Var(_, ty) => Ty::new(*ty, None),
-            SymValueData::Ref(val) => todo!(),
-            SymValueData::Constant(c) => Ty::new(c.ty(), None),
-            SymValueData::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValueData::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
-            SymValueData::Projection(elem, val) => match elem {
-                ProjectionElem::Deref => todo!(),
+            SymValueKind::Var(_, ty, ..) => Ty::new(*ty, None),
+            SymValueKind::Ref(ty, _) => Ty::new(*ty, None),
+            SymValueKind::Constant(c) => Ty::new(c.ty(), None),
+            SymValueKind::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValueKind::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
+            SymValueKind::Projection(elem, val) => match elem {
+                ProjectionElem::Deref => {
+                    if let ty::TyKind::Ref(_, ty, _) = val.kind.ty(tcx).rust_ty().kind() {
+                        Ty::new(*ty, None)
+                    } else {
+                        unreachable!()
+                    }
+                }
                 ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
                 ProjectionElem::Index(_) => todo!(),
                 ProjectionElem::ConstantIndex {
@@ -98,15 +129,17 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
                     from_end,
                 } => todo!(),
                 ProjectionElem::Subslice { from, to, from_end } => todo!(),
-                ProjectionElem::Downcast(_, vidx) => Ty::new(val.ty(tcx).rust_ty(), Some(*vidx)),
+                ProjectionElem::Downcast(_, vidx) => {
+                    Ty::new(val.kind.ty(tcx).rust_ty(), Some(*vidx))
+                }
                 ProjectionElem::OpaqueCast(_) => todo!(),
             },
-            SymValueData::Aggregate(kind, _) => kind.ty(),
-            SymValueData::Discriminant(sym_val) => {
-                Ty::new(sym_val.ty(tcx).rust_ty().discriminant_ty(tcx), None)
+            SymValueKind::Aggregate(kind, _) => kind.ty(),
+            SymValueKind::Discriminant(sym_val) => {
+                Ty::new(sym_val.kind.ty(tcx).rust_ty().discriminant_ty(tcx), None)
             }
-            SymValueData::UnaryOp(ty, op, val) => Ty::new(*ty, None),
-            SymValueData::Synthetic(sym_val) => sym_val.ty(tcx),
+            SymValueKind::UnaryOp(ty, op, val) => Ty::new(*ty, None),
+            SymValueKind::Synthetic(sym_val) => sym_val.ty(tcx),
         }
     }
 }
@@ -118,51 +151,45 @@ impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'
         tcx: ty::TyCtxt<'tcx>,
         substs: &'substs Substs<'sym, 'tcx, T>,
     ) -> SymValue<'sym, 'tcx, T> {
-        match self {
-            SymValueData::Var(idx, ty) => {
+        match &self.kind {
+            SymValueKind::Var(idx, ty, ..) => {
                 if let Some(subst) = substs.get(&idx) {
-                    assert_eq!(*ty, subst.ty(tcx).rust_ty());
                     subst
                 } else {
                     self
                 }
             }
-            c @ SymValueData::Constant(_) => c,
-            SymValueData::CheckedBinaryOp(ty, op, lhs, rhs) => {
-                arena.alloc(SymValueData::CheckedBinaryOp(
-                    *ty,
-                    *op,
-                    lhs.subst(arena, tcx, substs),
-                    rhs.subst(arena, tcx, substs),
-                ))
-            }
-            SymValueData::BinaryOp(ty, op, lhs, rhs) => arena.alloc(SymValueData::BinaryOp(
+            c @ SymValueKind::Constant(_) => self,
+            SymValueKind::CheckedBinaryOp(ty, op, lhs, rhs) => arena.mk_checked_bin_op(
                 *ty,
                 *op,
                 lhs.subst(arena, tcx, substs),
                 rhs.subst(arena, tcx, substs),
-            )),
-            SymValueData::Projection(kind, val) => arena.alloc(SymValueData::Projection(
-                *kind,
-                val.subst(arena, tcx, substs),
-            )),
-            SymValueData::Aggregate(ty, vals) => {
+            ),
+            SymValueKind::BinaryOp(ty, op, lhs, rhs) => arena.mk_bin_op(
+                *ty,
+                *op,
+                lhs.subst(arena, tcx, substs),
+                rhs.subst(arena, tcx, substs),
+            ),
+            SymValueKind::Projection(kind, val) => {
+                arena.mk_projection(*kind, val.subst(arena, tcx, substs))
+            }
+            SymValueKind::Aggregate(ty, vals) => {
                 let vals = vals
                     .iter()
                     .map(|v| v.subst(arena, tcx, substs))
                     .collect::<Vec<_>>();
-                arena.alloc(SymValueData::Aggregate(*ty, arena.alloc_slice(&vals)))
+                arena.mk_aggregate(*ty, arena.alloc_slice(&vals))
             }
-            SymValueData::Discriminant(val) => {
-                arena.alloc(SymValueData::Discriminant(val.subst(arena, tcx, substs)))
+            SymValueKind::Discriminant(val) => arena.mk_discriminant(val.subst(arena, tcx, substs)),
+            SymValueKind::Ref(ty, val) => arena.mk_ref(*ty, val.subst(arena, tcx, substs)),
+            SymValueKind::UnaryOp(ty, op, expr) => {
+                arena.mk_unary_op(*ty, *op, expr.subst(arena, tcx, substs))
             }
-            SymValueData::Ref(val) => arena.alloc(SymValueData::Ref(val.subst(arena, tcx, substs))),
-            SymValueData::UnaryOp(ty, op, expr) => arena.alloc(SymValueData::UnaryOp(
-                *ty,
-                *op,
-                expr.subst(arena, tcx, substs),
-            )),
-            SymValueData::Synthetic(sym_val) => arena.alloc(SymValueData::Synthetic(sym_val.subst(arena, tcx, substs))),
+            SymValueKind::Synthetic(sym_val) => {
+                arena.mk_synthetic(sym_val.subst(arena, tcx, substs))
+            }
         }
     }
 }

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use mir_state_analysis::symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
-    value::{Substs, SymValueData},
+    value::{Substs, SymValueData, SymValueKind},
     Assertion, SymExArena,
 };
 use prusti_rustc_interface::{
@@ -40,7 +40,10 @@ use crate::encoders::{
 };
 
 use super::{
-    lifted::{cast::CastArgs, rust_ty_cast::RustTyCastersEnc},
+    lifted::{
+        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
+        rust_ty_cast::RustTyCastersEnc,
+    },
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
     rust_ty_snapshots::RustTySnapshotsEnc,
@@ -50,7 +53,7 @@ use super::{
     },
     sym_spec::SymSpecEnc,
     FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc, SpecEncTask,
-    SymPureEnc, SymPureEncTask,
+    SymFunctionEnc, SymPureEnc, SymPureEncTask,
 };
 
 type PrustiPathConditionAtom<'sym, 'tcx> =
@@ -282,17 +285,20 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         &mut self,
         sym_value: &PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
-        match sym_value {
-            SymValueData::Var(idx, _) => self
-                .symvars
-                .get(*idx)
-                .cloned()
-                .ok_or(format!("No symvar at idx {}", *idx)),
-            SymValueData::Constant(c) => Ok(self
+        match &sym_value.kind {
+            SymValueKind::Var(idx, ..) => self.symvars.get(*idx).cloned().ok_or_else(|| {
+                panic!("{}", sym_value.debug_info);
+                format!(
+                    "No symvar at idx {}. The symvar was created via {}",
+                    *idx, sym_value.debug_info
+                )
+            }),
+
+            SymValueKind::Constant(c) => Ok(self
                 .deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),
-            SymValueData::CheckedBinaryOp(res_ty, op, lhs, rhs) => {
+            SymValueKind::CheckedBinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
                 let lhs = self.encode_sym_value(lhs)?;
@@ -306,7 +312,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .function;
                 Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
             }
-            SymValueData::BinaryOp(res_ty, op, lhs, rhs) => {
+            SymValueKind::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
                 let lhs = self.encode_sym_value(lhs)?;
@@ -320,7 +326,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .function;
                 Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
             }
-            SymValueData::UnaryOp(ty, op, expr) => {
+            SymValueKind::UnaryOp(ty, op, expr) => {
                 let expr = self.encode_sym_value(expr)?;
                 let viper_fn = self
                     .deps
@@ -329,7 +335,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .function;
                 Ok(viper_fn.apply(self.vcx, &[expr]))
             }
-            SymValueData::Aggregate(kind, exprs) => {
+            SymValueKind::Aggregate(kind, exprs) => {
                 let exprs = exprs
                     .iter()
                     .map(|e| self.encode_sym_value(e).unwrap())
@@ -356,12 +362,28 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     _ => todo!("TODO: composition for {:?}", ty.generic_snapshot.specifics),
                 }
             }
-            SymValueData::Projection(elem, base) => {
+            SymValueKind::Projection(elem, base) => {
                 let expr = self.encode_sym_value(base);
                 let ty = base.ty(self.vcx.tcx());
                 match elem {
                     ProjectionElem::Deref => {
-                        todo!()
+                        let e_ty = self
+                            .deps
+                            .require_local::<RustTySnapshotsEnc>(ty.rust_ty())
+                            .unwrap()
+                            .generic_snapshot
+                            .specifics
+                            .expect_structlike();
+                        let expr = e_ty.field_access[0].read.apply(self.vcx, [expr.unwrap()]);
+                        // Since the `expr` is the target of a reference, it is encoded as a `Param`.
+                        // If it is not a type parameter, we cast it to its concrete Snapshot.
+                        let cast = self
+                            .deps
+                            .require_local::<RustTyCastersEnc<CastTypePure>>(
+                                sym_value.ty(self.vcx.tcx()).rust_ty(),
+                            )
+                            .unwrap();
+                        Ok(cast.cast_to_concrete_if_possible(self.vcx, expr))
                     }
                     ProjectionElem::Downcast(..) => expr,
                     ProjectionElem::Field(field_idx, field_ty) => {
@@ -417,7 +439,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     _ => todo!(),
                 }
             }
-            SymValueData::Discriminant(expr) => {
+            SymValueKind::Discriminant(expr) => {
                 let base = self.encode_sym_value(expr)?;
                 let ty = self
                     .deps
@@ -427,28 +449,91 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     super::domain::DomainEncSpecifics::EnumLike(Some(de)) => {
                         Ok(de.snap_to_discr_snap.apply(self.vcx, [base]))
                     }
-                    _ => unreachable!(),
+                    other => panic!("discriminant of {:?}", other),
                 }
             }
-            SymValueData::Ref(_) => todo!(),
-            SymValueData::Synthetic(PrustiSymValSyntheticData::PureFnCall(fn_def_id, args)) => {
-                let args = args
+            SymValueKind::Ref(ty, e) => {
+                let base = self.encode_sym_value(e).unwrap();
+                let cast = self
+                    .deps
+                    .require_local::<RustTyCastersEnc<CastTypePure>>(e.ty(self.vcx.tcx()).rust_ty())
+                    .unwrap();
+                let base = cast.cast_to_generic_if_necessary(self.vcx, base);
+                let ty = self.deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
+                if let super::domain::DomainEncSpecifics::StructLike(s) =
+                    ty.generic_snapshot.specifics
+                {
+                    Ok(s.field_snaps_to_snap
+                        .apply(self.vcx, self.vcx.alloc(&vec![base])))
+                } else {
+                    unreachable!()
+                }
+            }
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
+                fn_def_id,
+                substs,
+                args,
+            )) => {
+                let mono = cfg!(feature = "mono_function_encoding");
+                let sig = self.vcx.tcx().fn_sig(fn_def_id);
+                let sig = if mono {
+                    let param_env = self.vcx.tcx().param_env(self.def_id);
+                    self.vcx
+                        .tcx()
+                        .subst_and_normalize_erasing_regions(substs, param_env, sig)
+                } else {
+                    sig.instantiate_identity()
+                };
+
+                let fn_arg_tys = sig
+                    .inputs()
                     .iter()
-                    .map(|arg| self.encode_sym_value(arg).unwrap())
+                    .map(|i| i.skip_binder())
+                    .copied()
                     .collect::<Vec<_>>();
+                let encoded_ty_args = self
+                    .deps
+                    .require_local::<LiftedFuncAppTyParamsEnc>((mono, substs))
+                    .unwrap();
+                let encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx));
+                let encoded_fn_args =
+                    fn_arg_tys
+                        .into_iter()
+                        .zip(args.iter())
+                        .map(|(expected_ty, arg)| {
+                            let base = self.encode_sym_value(arg).unwrap();
+                            let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
+                            let caster = self
+                                .deps()
+                                .require_ref::<CastToEnc<CastTypePure>>(CastArgs {
+                                    expected: expected_ty,
+                                    actual: arg_ty,
+                                })
+                                .unwrap();
+                            caster.apply_cast_if_necessary(self.vcx, base)
+                        });
+                let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
                 let function_ref = self
                     .deps
-                    .require_ref::<PureFunctionEnc>(FunctionCallTaskDescription {
+                    .require_ref::<SymFunctionEnc>(FunctionCallTaskDescription {
                         def_id: *fn_def_id,
-                        substs: GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id),
+                        substs: if mono {
+                            substs
+                        } else {
+                            GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id)
+                        },
                         caller_def_id: self.def_id,
                     })
                     .unwrap()
-                    .function_ref;
+                    .function_ident;
                 Ok(function_ref.apply(self.vcx, &args))
             }
-            SymValueData::Synthetic(PrustiSymValSyntheticData::And(_, _)) => todo!(),
-            SymValueData::Synthetic(PrustiSymValSyntheticData::If(_, _, _)) => todo!(),
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::And(lhs, rhs)) => {
+                let lhs = self.encode_sym_value(lhs)?;
+                let rhs = self.encode_sym_value(rhs)?;
+                Ok(self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs))
+            }
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::If(_, _, _)) => todo!(),
         }
     }
 
@@ -477,13 +562,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
                         .posts
                         .into_iter()
-                        .map(|p| {
-                            self.encode_pure_spec(
-                                &p,
-                                Some(arg_substs),
-                            )
-                            .unwrap()
-                        })
+                        .map(|p| self.encode_pure_spec(&p, Some(arg_substs)).unwrap())
                         .collect::<Vec<_>>();
                 let is_pure = self
                     .deps
@@ -581,17 +660,14 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
     fn encode_assertion(&mut self, assertion: &PrustiAssertion<'sym, 'tcx>) -> vir::Stmt<'vir> {
         let expr = match assertion {
             Assertion::Precondition(def_id, substs, args) => {
-                let arg_substs = self.arena.alloc(Substs::from_iter(args.iter().copied().enumerate()));
+                let arg_substs = self
+                    .arena
+                    .alloc(Substs::from_iter(args.iter().copied().enumerate()));
                 let encoded_pres =
                     SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
                         .pres
                         .into_iter()
-                        .map(|p| {
-                            self.encode_pure_spec(
-                                &p,
-                                Some(arg_substs),
-                            )
-                        })
+                        .map(|p| self.encode_pure_spec(&p, Some(arg_substs)))
                         .collect::<Result<Vec<_>, _>>()
                         .unwrap();
                 self.vcx.mk_conj(&encoded_pres)

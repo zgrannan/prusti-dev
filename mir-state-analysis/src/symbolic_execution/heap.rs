@@ -5,7 +5,7 @@ use crate::symbolic_execution::{
 use prusti_rustc_interface::middle::mir;
 use std::collections::BTreeMap;
 
-use super::{value::SymValue, SymExArena};
+use super::{value::{SymValue, SyntheticSymValue}, SymExArena};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SymbolicHeap<'sym, 'tcx, T>(BTreeMap<Place<'tcx>, SymValue<'sym, 'tcx, T>>);
@@ -51,7 +51,9 @@ impl<'sym, 'tcx, T: std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
     }
 }
 
-impl<'sym, 'tcx, T: Clone + std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Clone + std::fmt::Debug + SyntheticSymValue<'sym, 'tcx>>
+    SymbolicHeap<'sym, 'tcx, T>
+{
     pub fn encode_operand(
         &self,
         arena: &'sym SymExArena,
@@ -61,9 +63,7 @@ impl<'sym, 'tcx, T: Clone + std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
             mir::Operand::Copy(place) | mir::Operand::Move(place) => self
                 .get(&place.into())
                 .unwrap_or_else(|| panic!("{place:?} not found in heap {:#?}", self.0)),
-            mir::Operand::Constant(box c) => {
-                arena.alloc(SymValueData::Constant(Constant(c.clone())))
-            }
+            mir::Operand::Constant(box c) => arena.mk_constant(Constant(c.clone())),
         }
     }
 }

@@ -7,7 +7,10 @@ use prusti_rustc_interface::{
     ast,
     ast::Local,
     index::IndexVec,
-    middle::{mir, ty},
+    middle::{
+        mir,
+        ty::{self, GenericArgsRef},
+    },
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
@@ -91,7 +94,11 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
         PrustiSymValue<'sym, 'tcx>,
         PrustiSymValue<'sym, 'tcx>,
     ),
-    PureFnCall(DefId, &'sym [PrustiSymValue<'sym, 'tcx>]),
+    PureFnCall(
+        DefId,
+        GenericArgsRef<'tcx>,
+        &'sym [PrustiSymValue<'sym, 'tcx>],
+    ),
 }
 
 impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
@@ -106,9 +113,10 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                 l.subst(arena, tcx, substs),
                 r.subst(arena, tcx, substs),
             )),
-            PrustiSymValSyntheticData::PureFnCall(def_id, args) => {
+            PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
                 arena.alloc(PrustiSymValSyntheticData::PureFnCall(
                     *def_id,
+                    ty_substs,
                     arena.alloc_slice(
                         &(args
                             .iter()
@@ -131,8 +139,11 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
         match &self {
             PrustiSymValSyntheticData::And(_, _) => Ty::new(tcx.types.bool, None),
             PrustiSymValSyntheticData::If(_, t, _) => t.ty(tcx),
-            PrustiSymValSyntheticData::PureFnCall(def_id, _) => Ty::new(
-                tcx.fn_sig(def_id).skip_binder().output().skip_binder(),
+            PrustiSymValSyntheticData::PureFnCall(def_id, substs, _) => Ty::new(
+                tcx.fn_sig(def_id)
+                    .instantiate(tcx, substs)
+                    .output()
+                    .skip_binder(),
                 None,
             ),
         }
@@ -148,18 +159,23 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx>;
 
     fn encode_fn_call(
+        &self,
         arena: &'sym SymExArena,
         def_id: DefId,
+        substs: GenericArgsRef<'tcx>,
         args: &'sym [PrustiSymValue<'sym, 'tcx>],
     ) -> Option<PrustiSymValue<'sym, 'tcx>> {
         let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
             proc_spec.kind.is_pure().unwrap_or_default()
         })
-        .unwrap_or_default();
+        .unwrap_or(vir::with_vcx(|vcx| {
+            vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
+                || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
+        }));
         if is_pure {
-            Some(arena.alloc(SymValueData::Synthetic(
-                arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, args)),
-            )))
+            Some(arena.mk_synthetic(
+                arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
+            ))
         } else {
             None
         }

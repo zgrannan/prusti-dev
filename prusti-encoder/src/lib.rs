@@ -22,7 +22,7 @@ use task_encoder::TaskEncoder;
 use crate::encoders::{lifted::{
     casters::{CastTypeImpure, CastTypePure, CastersEnc},
     ty_constructor::TyConstructorEnc
-}, predicate::PredicateEnc, MirPolyImpureEnc};
+}, predicate::PredicateEnc, MirPolyImpureEnc, SymFunctionEnc};
 
 pub fn test_entrypoint<'tcx>(
     tcx: ty::TyCtxt<'tcx>,
@@ -87,6 +87,12 @@ pub fn test_entrypoint<'tcx>(
     for output in crate::encoders::PureFunctionEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.function));
         program_functions.push(output.function);
+    }
+
+    header(&mut viper_code, "sym functions");
+    for function in SymFunctionEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", function));
+        program_functions.push(function);
     }
 
     header(&mut viper_code, "MIR builtins");

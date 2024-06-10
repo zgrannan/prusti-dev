@@ -1,4 +1,7 @@
-use middle::mir::interpret::{ConstValue, Scalar};
+use middle::{
+    mir::interpret::{ConstValue, Scalar},
+    ty::VariantDiscr,
+};
 use mir_state_analysis::symbolic_execution::{
     path_conditions::PathConditions,
     value::{Constant, SymValueData, Ty},
@@ -9,7 +12,7 @@ use prusti_rustc_interface::{
     middle::{
         self,
         mir::{self, PlaceElem},
-        ty,
+        ty::{self, VariantDef},
     },
     span::{def_id::DefId, DUMMY_SP},
 };
@@ -64,12 +67,12 @@ pub fn mk_conj<'sym, 'tcx>(
     let mut iter = sym_values.into_iter();
     if let Some(value) = iter.next() {
         iter.fold(value, |acc, val| {
-            arena.alloc(SymValueData::Synthetic(
-                arena.alloc(PrustiSymValSyntheticData::And(acc, val)),
+            arena.mk_synthetic(arena.alloc(
+                PrustiSymValSyntheticData::And(acc, val),
             ))
         })
     } else {
-        return arena.alloc(SymValueData::Constant(Constant::from_bool(tcx, true)));
+        return arena.mk_constant(Constant::from_bool(tcx, true));
     }
 }
 
@@ -79,8 +82,37 @@ impl SymSpecEnc {
         tcx: ty::TyCtxt<'tcx>,
         b: bool,
     ) -> SymSpec<'sym, 'tcx> {
-        let constant = arena.alloc(SymValueData::Constant(Constant::from_bool(tcx, b)));
+        let constant = arena.mk_constant(Constant::from_bool(tcx, b));
         SymSpec::singleton(SymPureEncResult::from_sym_value(constant))
+    }
+
+    fn encode_discr<'sym, 'tcx>(discr: VariantDiscr) -> PrustiSymValue<'sym, 'tcx> {
+        todo!()
+    }
+
+    fn encode_variant_eq<'sym, 'tcx>(
+        arena: &'sym SymExArena,
+        tcx: ty::TyCtxt<'tcx>,
+        variant: &VariantDef,
+        substs: ty::GenericArgsRef<'tcx>,
+        lhs: PrustiSymValue<'sym, 'tcx>,
+        rhs: PrustiSymValue<'sym, 'tcx>,
+    ) -> Option<PrustiSymValue<'sym, 'tcx>> {
+        Some(mk_conj(
+            arena,
+            tcx,
+            variant
+                .fields
+                .iter_enumerated()
+                .map(|(i, field)| {
+                    let field_ty = field.ty(tcx, substs);
+                    let field = PlaceElem::Field(i.into(), field_ty);
+                    let lhs_field = arena.mk_projection(field, lhs);
+                    let rhs_field = arena.mk_projection(field, rhs);
+                    Self::partial_eq_expr(arena, tcx, lhs_field, rhs_field)
+                })
+                .collect::<Option<Vec<_>>>()?,
+        ))
     }
 
     fn partial_eq_expr<'sym, 'tcx>(
@@ -97,8 +129,8 @@ impl SymSpecEnc {
                     .enumerate()
                     .map(|(i, ty)| {
                         let field = PlaceElem::Field(i.into(), ty);
-                        let lhs_field = arena.alloc(SymValueData::Projection(field, lhs));
-                        let rhs_field = arena.alloc(SymValueData::Projection(field, rhs));
+                        let lhs_field = arena.mk_projection(field, lhs);
+                        let rhs_field = arena.mk_projection(field, rhs);
                         Self::partial_eq_expr(arena, tcx, lhs_field, rhs_field)
                     })
                     .collect::<Option<Vec<_>>>()?;
@@ -106,36 +138,43 @@ impl SymSpecEnc {
             }
             ty::TyKind::Adt(adt_def, substs) => {
                 if tcx.has_structural_eq_impls(ty) {
-                    let lhs_discriminant = arena.alloc(SymValueData::Discriminant(lhs));
-                    let rhs_discriminant = arena.alloc(SymValueData::Discriminant(rhs));
-                    let discriminants_match = arena.alloc(SymValueData::BinaryOp(
+                    let lhs_discriminant = arena.mk_discriminant(lhs);
+                    let rhs_discriminant = arena.mk_discriminant(rhs);
+                    let mut iter = adt_def.variants().iter();
+                    let first_variant = iter.next().unwrap();
+                    let first_case =
+                        Self::encode_variant_eq(arena, tcx, first_variant, substs, lhs, rhs)?;
+                    if adt_def.variants().len() == 1 {
+                        return Some(first_case);
+                    }
+                    let discriminants_match = arena.mk_bin_op(
                         tcx.types.bool,
                         mir::BinOp::Eq,
                         lhs_discriminant,
                         rhs_discriminant,
-                    ));
-                    let mut iter = adt_def.variants().iter();
-                    let first_variant = iter.next().unwrap();
-                    let first_case = mk_conj(
-                        arena,
-                        tcx,
-                        first_variant
-                            .fields
-                            .iter_enumerated()
-                            .map(|(i, field)| {
-                                let field_ty = field.ty(tcx, substs);
-                                let field = PlaceElem::Field(i.into(), field_ty);
-                                let lhs_field = arena.alloc(SymValueData::Projection(field, lhs));
-                                let rhs_field = arena.alloc(SymValueData::Projection(field, rhs));
-                                Self::partial_eq_expr(arena, tcx, lhs_field, rhs_field)
-                            })
-                            .collect::<Option<Vec<_>>>()?,
                     );
-                    None
+                    let deep_eq = iter.try_fold(first_case, |acc, variant| {
+                        Some(
+                            arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::If(
+                                arena.mk_bin_op(
+                                    tcx.types.bool,
+                                    mir::BinOp::Eq,
+                                    lhs_discriminant,
+                                    Self::encode_discr(variant.discr),
+                                ),
+                                acc,
+                                Self::encode_variant_eq(arena, tcx, variant, substs, lhs, rhs)?,
+                            ))),
+                        )
+                    })?;
+                    Some(arena.mk_synthetic(
+                        arena.alloc(PrustiSymValSyntheticData::And(discriminants_match, deep_eq)),
+                    ))
                 } else {
                     None
                 }
             }
+            ty::TyKind::Uint(..) => Some(arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, lhs, rhs)),
             other => todo!("{:#?}", other),
         }
     }
@@ -153,26 +192,32 @@ impl SymSpecEnc {
                     posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
                 };
             }
-            ty::TyKind::Ref(_, ty, _) => {
-                return Self::partial_eq_spec(arena, tcx, *ty, result);
-            }
-            ty::TyKind::Adt(def_id, substs) => {
-                if let Some(pure_eq_expr) = Self::partial_eq_expr(
-                    arena,
-                    tcx,
-                    arena.alloc(SymValueData::Var(0, ty)),
-                    arena.alloc(SymValueData::Var(1, ty)),
-                ) {
+            ty::TyKind::Ref(..) => {
+                let deref_lhs =
+                    arena.mk_projection(mir::ProjectionElem::Deref, arena.mk_var(0, ty));
+                let deref_rhs =
+                    arena.mk_projection(mir::ProjectionElem::Deref, arena.mk_var(1, ty));
+                if let Some(pure_eq_expr) = Self::partial_eq_expr(arena, tcx, deref_lhs, deref_rhs)
+                {
                     return SymSpecEncOutput {
                         pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(arena.alloc(
-                            SymValueData::BinaryOp(
-                                tcx.types.bool,
-                                mir::BinOp::Eq,
-                                result,
-                                pure_eq_expr,
-                            ),
-                        ))),
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
+                            arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, result, pure_eq_expr),
+                        )),
+                    };
+                } else {
+                    todo!()
+                }
+            }
+            ty::TyKind::Adt(def_id, substs) => {
+                if let Some(pure_eq_expr) =
+                    Self::partial_eq_expr(arena, tcx, arena.mk_var(0, ty), arena.mk_var(1, ty))
+                {
+                    return SymSpecEncOutput {
+                        pres: SymSpec::new(),
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
+                            arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, result, pure_eq_expr),
+                        )),
                     };
                 } else {
                     todo!()
@@ -213,7 +258,7 @@ impl SymSpecEnc {
                     arena,
                     vcx.tcx(),
                     input_ty,
-                    arena.alloc(SymValueData::Var(2, vcx.tcx().types.bool)),
+                    arena.mk_var(2, vcx.tcx().types.bool),
                 );
             }
 
