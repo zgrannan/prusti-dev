@@ -101,6 +101,24 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
     ),
 }
 
+impl <'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            PrustiSymValSyntheticData::And(_, _) => todo!(),
+            PrustiSymValSyntheticData::If(_, _, _) => todo!(),
+            PrustiSymValSyntheticData::PureFnCall(def_id, _, args) => {
+                let fn_name = format!("{:?}", def_id);
+                let args_str = args
+                    .iter()
+                    .map(|arg| format!("{}", arg))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{}({})", fn_name, args_str)
+            }
+        }
+    }
+}
+
 impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,

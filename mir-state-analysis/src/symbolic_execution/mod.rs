@@ -291,7 +291,11 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                             let sym_var = self.mk_fresh_symvar(
                                 destination.ty(&self.body.body.local_decls, self.tcx).ty,
                             );
-                            add_debug_note!(sym_var.debug_info, "Fresh symvar for call to {:?}", def_id);
+                            add_debug_note!(
+                                sym_var.debug_info,
+                                "Fresh symvar for call to {:?}",
+                                def_id
+                            );
                             sym_var
                         });
                     path.heap.insert((*destination).into(), result);
@@ -328,7 +332,14 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
             let arg_ty = local.ty;
             self.symvars.push(arg_ty);
             let place = Place::new(arg, Vec::new());
-            init_heap.insert(place, self.arena.mk_var(idx, arg_ty));
+            let sym_var = self.arena.mk_var(idx, arg_ty);
+            add_debug_note!(
+                sym_var.debug_info,
+                "Symvar for arg {:?} in {:?}",
+                arg,
+                self.body.body.span
+            );
+            init_heap.insert(place, sym_var);
         }
         let mut paths = vec![Path::new(
             AcyclicPath::from_start_block(),

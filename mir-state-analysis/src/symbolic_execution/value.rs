@@ -64,6 +64,48 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
     }
 }
 
+impl<'sym, 'tcx, T: std::fmt::Display> std::fmt::Display for SymValueData<'sym, 'tcx, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            SymValueKind::Var(idx, ty) => write!(f, "(s{}: {})", idx, ty),
+            SymValueKind::Ref(_, t) => {
+                write!(f, "(&{})", t)
+            }
+            SymValueKind::Constant(c) => write!(f, "{:?}", c),
+            SymValueKind::CheckedBinaryOp(_, _, _, _) => todo!(),
+            SymValueKind::BinaryOp(_, op, lhs, rhs) => {
+                write!(f, "({} {:?} {})", lhs, op, rhs)
+            }
+            SymValueKind::UnaryOp(_, op, expr) => {
+                write!(f, "({:?} {})", op, expr)
+            }
+            SymValueKind::Projection(kind, value) => match &kind {
+                ProjectionElem::Deref => write!(f, "*({})", value),
+                ProjectionElem::Field(_, _) => todo!(),
+                ProjectionElem::Index(_) => todo!(),
+                ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end,
+                } => todo!(),
+                ProjectionElem::Subslice { from, to, from_end } => todo!(),
+                ProjectionElem::Downcast(_, _) => todo!(),
+                ProjectionElem::OpaqueCast(_) => todo!(),
+            },
+            SymValueKind::Aggregate(kind, values) => {
+                let values_str = values
+                    .iter()
+                    .map(|v| format!("{}", v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "(compose [{}] to {:?})", values_str, kind)
+            }
+            SymValueKind::Discriminant(_) => todo!(),
+            SymValueKind::Synthetic(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SymValueKind<'sym, 'tcx, T> {
     Var(usize, ty::Ty<'tcx>),
@@ -91,6 +133,7 @@ pub enum SymValueKind<'sym, 'tcx, T> {
     Synthetic(T),
 }
 
+#[derive(Debug)]
 pub struct Substs<'sym, 'tcx, T>(BTreeMap<usize, SymValue<'sym, 'tcx, T>>);
 
 impl<'sym, 'tcx, T> Substs<'sym, 'tcx, T> {

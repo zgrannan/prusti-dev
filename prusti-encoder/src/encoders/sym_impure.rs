@@ -551,9 +551,6 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         &mut self,
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir> {
-        let expr = self
-            .encode_sym_value(&pc.expr)
-            .map_err(|err| format!("Failed to encode pc atom target for pc {:?}: {}", pc, err))?;
         match &pc.predicate {
             PathConditionPredicate::Postcondition(def_id, substs, args) => {
                 let args = args.iter().copied().chain(std::iter::once(pc.expr));
@@ -584,13 +581,19 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                             caller_def_id: None, // TODO
                         },
                     );
+                    let expr = pc.expr.subst(self.arena, self.vcx.tcx(), &arg_substs);
                     for (path, value) in body.iter() {
                         encoded_posts.push(
                             self.vcx.mk_implies_expr(
-                                self.encode_path_condition(path).unwrap(),
+                                self.encode_path_condition(&path.clone().subst(
+                                    self.arena,
+                                    self.vcx.tcx(),
+                                    &arg_substs,
+                                ))
+                                .unwrap(),
                                 self.vcx.mk_eq_expr(
-                                    self.encode_sym_value(&pc.expr).unwrap(),
-                                    self.encode_sym_value(&value.clone().subst(
+                                    self.encode_sym_value(&expr).unwrap(),
+                                    self.encode_sym_value(&value.subst(
                                         self.arena,
                                         self.vcx.tcx(),
                                         arg_substs,
@@ -603,21 +606,27 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                 }
                 Ok(self.vcx.mk_conj(&encoded_posts))
             }
-            PathConditionPredicate::Eq(target, ty) => Ok(self
-                .vcx
-                .mk_eq_expr(expr, self.encode_target_literal(*target, *ty))),
-            PathConditionPredicate::Ne(targets, ty) => Ok(self.vcx.mk_conj(
-                &targets
-                    .iter()
-                    .map(|t| {
-                        self.vcx.mk_unary_op_expr(
-                            vir::UnOpKind::Not,
-                            self.vcx
-                                .mk_eq_expr(expr, self.encode_target_literal(*t, *ty)),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )),
+            PathConditionPredicate::Eq(target, ty) => {
+                let expr = self.encode_sym_value(&pc.expr)?;
+                Ok(self
+                    .vcx
+                    .mk_eq_expr(expr, self.encode_target_literal(*target, *ty)))
+            }
+            PathConditionPredicate::Ne(targets, ty) => {
+                let expr = self.encode_sym_value(&pc.expr)?;
+                Ok(self.vcx.mk_conj(
+                    &targets
+                        .iter()
+                        .map(|t| {
+                            self.vcx.mk_unary_op_expr(
+                                vir::UnOpKind::Not,
+                                self.vcx
+                                    .mk_eq_expr(expr, self.encode_target_literal(*t, *ty)),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ))
+            }
         }
     }
 

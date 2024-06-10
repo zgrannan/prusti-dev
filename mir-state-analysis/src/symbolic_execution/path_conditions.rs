@@ -22,7 +22,9 @@ pub enum PathConditionPredicate<'sym, 'tcx, T> {
     Postcondition(DefId, GenericArgsRef<'tcx>, &'sym [SymValue<'sym, 'tcx, T>]),
 }
 
-impl<'sym, 'tcx, T: Copy + Clone + SyntheticSymValue<'sym, 'tcx>> PathConditionPredicate<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Copy + Clone + SyntheticSymValue<'sym, 'tcx>>
+    PathConditionPredicate<'sym, 'tcx, T>
+{
     pub fn subst(
         self,
         arena: &'sym SymExArena,
@@ -51,6 +53,35 @@ impl<'sym, 'tcx, T: Copy + Clone + SyntheticSymValue<'sym, 'tcx>> PathConditionP
 pub struct PathConditionAtom<'sym, 'tcx, T> {
     pub expr: SymValue<'sym, 'tcx, T>,
     pub predicate: PathConditionPredicate<'sym, 'tcx, T>,
+}
+
+impl<'sym, 'tcx, T: std::fmt::Display + std::fmt::Debug> std::fmt::Display for PathConditionAtom<'sym, 'tcx, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.predicate {
+            PathConditionPredicate::Eq(v, ty) => {
+                write!(f, "({} = {} as {})", self.expr, v, ty)
+            }
+            PathConditionPredicate::Ne(vs, ty) => {
+                write!(
+                    f,
+                    "({} does not equal any of [{}] as {})",
+                    self.expr,
+                    vs.iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    ty
+                )
+            }
+            PathConditionPredicate::Postcondition(def_id, _, values) => {
+                write!(
+                    f,
+                    "({} satisfies the postcondition of {:?} applied to args [{}])",
+                    self.expr, def_id, values.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(", ")
+                )
+            }
+        }
+    }
 }
 
 impl<'sym, 'tcx, T> PathConditionAtom<'sym, 'tcx, T> {
@@ -101,7 +132,9 @@ impl<'sym, 'tcx, T: Ord> PathConditions<'sym, 'tcx, T> {
     }
 }
 
-impl<'sym, 'tcx, T: Copy + Clone + Ord + SyntheticSymValue<'sym, 'tcx>> PathConditions<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: Copy + Clone + Ord + SyntheticSymValue<'sym, 'tcx>>
+    PathConditions<'sym, 'tcx, T>
+{
     pub fn subst(
         self,
         arena: &'sym SymExArena,
