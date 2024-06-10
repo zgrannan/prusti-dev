@@ -45,8 +45,14 @@ impl TaskEncoder for SymFunctionEnc {
         deps: &mut task_encoder::TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
-            let function_ident =
-                vir_format_identifier!(vcx, "{}", vcx.tcx().def_path_str(task_key.def_id));
+            let extra: String = task_key.substs.iter().map(|s| format!("_{s}")).collect();
+            let function_ident = vir_format_identifier!(
+                vcx,
+                "pure_{}_{}_{:?}",
+                vcx.tcx().def_path_str(task_key.def_id),
+                extra,
+                task_key.caller_def_id
+            );
             let ty_arg_decls = deps
                 .require_local::<LiftedTyParamsEnc>(task_key.substs)
                 .unwrap();

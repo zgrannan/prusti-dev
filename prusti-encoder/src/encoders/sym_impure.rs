@@ -102,7 +102,7 @@ impl TaskEncoder for SymImpureEnc {
             let method_name = vir::vir_format_identifier!(
                 vcx,
                 "m_{}{extra}_CALLER_{caller}",
-                vcx.tcx().item_name(def_id)
+                vcx.tcx().def_path_str(def_id)
             );
 
             let method_ident = vir::MethodIdent::new(method_name, UnknownArity::new(&[]));
