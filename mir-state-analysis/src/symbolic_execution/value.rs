@@ -148,83 +148,140 @@ impl<'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
     }
 }
 
-pub trait SymValueFolder<'sym, 'tcx, T, R> {
-    fn fold_var(&mut self, idx: usize, ty: ty::Ty<'tcx>) -> R;
-    fn fold_ref(&mut self, ty: ty::Ty<'tcx>, val: R) -> R;
-    fn fold_constant(&mut self, c: &'sym Constant<'tcx>) -> R;
-    fn fold_checked_binary_op(
+pub trait SymValueTransformer<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> {
+    fn transform_var(
         &mut self,
+        arena: &'sym SymExArena,
+        idx: usize,
+        ty: ty::Ty<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_var(idx, ty)
+    }
+    fn transform_ref(
+        &mut self,
+        arena: &'sym SymExArena,
+        ty: ty::Ty<'tcx>,
+        val: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_ref(ty, val)
+    }
+    fn transform_constant(
+        &mut self,
+        arena: &'sym SymExArena,
+        c: &'sym Constant<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_constant(c.clone())
+    }
+    fn transform_checked_binary_op(
+        &mut self,
+        arena: &'sym SymExArena,
         ty: ty::Ty<'tcx>,
         op: mir::BinOp,
-        lhs: R,
-        rhs: R,
-    ) -> R;
-    fn fold_binary_op(
+        lhs: SymValue<'sym, 'tcx, T>,
+        rhs: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_checked_bin_op(ty, op, lhs, rhs)
+    }
+    fn transform_binary_op(
         &mut self,
+        arena: &'sym SymExArena,
         ty: ty::Ty<'tcx>,
         op: mir::BinOp,
-        lhs: R,
-        rhs: R,
-    ) -> R;
-    fn fold_unary_op(&mut self, ty: ty::Ty<'tcx>, op: mir::UnOp, val: R) -> R;
-    fn fold_projection(
+        lhs: SymValue<'sym, 'tcx, T>,
+        rhs: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_bin_op(ty, op, lhs, rhs)
+    }
+    fn transform_unary_op(
         &mut self,
+        arena: &'sym SymExArena,
+        ty: ty::Ty<'tcx>,
+        op: mir::UnOp,
+        val: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_unary_op(ty, op, val)
+    }
+    fn transform_projection(
+        &mut self,
+        arena: &'sym SymExArena,
         elem: ProjectionElem<mir::Local, ty::Ty<'tcx>>,
-        val: R,
-    ) -> R;
-    fn fold_aggregate(
+        val: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_projection(elem, val)
+    }
+    fn transform_aggregate(
         &mut self,
+        arena: &'sym SymExArena,
         kind: AggregateKind<'tcx>,
-        vals: &'sym [R],
-    ) -> R;
-    fn fold_discriminant(&mut self, val: R) -> R;
-    fn fold_synthetic(&mut self, s: T) -> R;
+        vals: &'sym [SymValue<'sym, 'tcx, T>],
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_aggregate(kind, vals)
+    }
+    fn transform_discriminant(
+        &mut self,
+        arena: &'sym SymExArena,
+        val: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_discriminant(val)
+    }
+    fn transform_synthetic(&mut self, arena: &'sym SymExArena, s: T) -> SymValue<'sym, 'tcx, T>;
 }
 
-impl<'sym, 'tcx, T> SymValueData<'sym, 'tcx, T> {
-    pub fn apply_folder<F, R>(&'sym self, folder: &mut F) -> R
+impl<'sym, 'tcx, T: Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+    pub fn apply_transformer<F>(
+        &'sym self,
+        arena: &'sym SymExArena,
+        transformer: &mut F,
+    ) -> SymValue<'sym, 'tcx, T>
     where
-        F: SymValueFolder<'sym, 'tcx, T, R>,
+        F: SymValueTransformer<'sym, 'tcx, T>,
     {
         match &self.kind {
-            SymValueKind::Var(idx, ty, ..) => folder.fold_var(*idx, *ty),
+            SymValueKind::Var(idx, ty, ..) => transformer.transform_var(arena, *idx, *ty),
             SymValueKind::Ref(ty, val) => {
-                let folded_val = val.apply_folder(folder);
-                folder.fold_ref(*ty, folded_val)
+                let transformed_val = val.apply_transformer(arena, transformer);
+                transformer.transform_ref(arena, *ty, transformed_val)
             }
-            SymValueKind::Constant(c) => folder.fold_constant(c),
+            SymValueKind::Constant(c) => transformer.transform_constant(arena, c),
             SymValueKind::CheckedBinaryOp(ty, op, lhs, rhs) => {
-                let folded_lhs = lhs.apply_folder(folder);
-                let folded_rhs = rhs.apply_folder(folder);
-                folder.fold_checked_binary_op(*ty, *op, folded_lhs, folded_rhs)
+                let transformed_lhs = lhs.apply_transformer(arena, transformer);
+                let transformed_rhs = rhs.apply_transformer(arena, transformer);
+                transformer.transform_checked_binary_op(
+                    arena,
+                    *ty,
+                    *op,
+                    transformed_lhs,
+                    transformed_rhs,
+                )
             }
             SymValueKind::BinaryOp(ty, op, lhs, rhs) => {
-                let folded_lhs = lhs.apply_folder(folder);
-                let folded_rhs = rhs.apply_folder(folder);
-                folder.fold_binary_op(*ty, *op, folded_lhs, folded_rhs)
+                let transformed_lhs = lhs.apply_transformer(arena, transformer);
+                let transformed_rhs = rhs.apply_transformer(arena, transformer);
+                transformer.transform_binary_op(arena, *ty, *op, transformed_lhs, transformed_rhs)
             }
             SymValueKind::UnaryOp(ty, op, val) => {
-                let folded_val = val.apply_folder(folder);
-                folder.fold_unary_op(*ty, *op, folded_val)
+                let transformed_val = val.apply_transformer(arena, transformer);
+                transformer.transform_unary_op(arena, *ty, *op, transformed_val)
             }
             SymValueKind::Projection(elem, val) => {
-                let folded_val = val.apply_folder(folder);
-                folder.fold_projection(*elem, folded_val)
+                let transformed_val = val.apply_transformer(arena, transformer);
+                transformer.transform_projection(arena, *elem, transformed_val)
             }
             SymValueKind::Aggregate(kind, vals) => {
-                let folded_vals: Vec<R> = vals.iter().map(|v| v.apply_folder(folder)).collect();
-                folder.fold_aggregate(*kind, &folded_vals)
+                let transformed_vals: Vec<SymValue<'sym, 'tcx, T>> = vals
+                    .iter()
+                    .map(|v| v.apply_transformer(arena, transformer))
+                    .collect();
+                transformer.transform_aggregate(arena, *kind, arena.alloc_slice(&transformed_vals))
             }
             SymValueKind::Discriminant(val) => {
-                let folded_val = val.apply_folder(folder);
-                folder.fold_discriminant(folded_val)
+                let transformed_val = val.apply_transformer(arena, transformer);
+                transformer.transform_discriminant(arena, transformed_val)
             }
-            SymValueKind::Synthetic(s) => folder.fold_synthetic(*s),
+            SymValueKind::Synthetic(s) => transformer.transform_synthetic(arena, *s),
         }
     }
 }
-
-
 
 impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
@@ -265,6 +322,25 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
     }
 }
 
+struct SubstsTransformer<'substs, 'sym, 'tcx, T>(ty::TyCtxt<'tcx>, &'substs Substs<'sym, 'tcx, T>);
+
+impl<'substs, 'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueTransformer<'sym, 'tcx, T>
+    for SubstsTransformer<'substs, 'sym, 'tcx, T>
+{
+    fn transform_var(
+        &mut self,
+        arena: &'sym SymExArena,
+        idx: usize,
+        ty: ty::Ty<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        self.1.get(&idx).unwrap_or(&arena.mk_var(idx, ty))
+    }
+
+    fn transform_synthetic(&mut self, arena: &'sym SymExArena, s: T) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_synthetic(s.subst(arena, self.0, self.1))
+    }
+}
+
 impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
     pub fn subst<'substs>(
         &'sym self,
@@ -272,46 +348,7 @@ impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'
         tcx: ty::TyCtxt<'tcx>,
         substs: &'substs Substs<'sym, 'tcx, T>,
     ) -> SymValue<'sym, 'tcx, T> {
-        match &self.kind {
-            SymValueKind::Var(idx, ty, ..) => {
-                if let Some(subst) = substs.get(&idx) {
-                    subst
-                } else {
-                    self
-                }
-            }
-            c @ SymValueKind::Constant(_) => self,
-            SymValueKind::CheckedBinaryOp(ty, op, lhs, rhs) => arena.mk_checked_bin_op(
-                *ty,
-                *op,
-                lhs.subst(arena, tcx, substs),
-                rhs.subst(arena, tcx, substs),
-            ),
-            SymValueKind::BinaryOp(ty, op, lhs, rhs) => arena.mk_bin_op(
-                *ty,
-                *op,
-                lhs.subst(arena, tcx, substs),
-                rhs.subst(arena, tcx, substs),
-            ),
-            SymValueKind::Projection(kind, val) => {
-                arena.mk_projection(*kind, val.subst(arena, tcx, substs))
-            }
-            SymValueKind::Aggregate(ty, vals) => {
-                let vals = vals
-                    .iter()
-                    .map(|v| v.subst(arena, tcx, substs))
-                    .collect::<Vec<_>>();
-                arena.mk_aggregate(*ty, arena.alloc_slice(&vals))
-            }
-            SymValueKind::Discriminant(val) => arena.mk_discriminant(val.subst(arena, tcx, substs)),
-            SymValueKind::Ref(ty, val) => arena.mk_ref(*ty, val.subst(arena, tcx, substs)),
-            SymValueKind::UnaryOp(ty, op, expr) => {
-                arena.mk_unary_op(*ty, *op, expr.subst(arena, tcx, substs))
-            }
-            SymValueKind::Synthetic(sym_val) => {
-                arena.mk_synthetic(sym_val.subst(arena, tcx, substs))
-            }
-        }
+        self.apply_transformer(arena, &mut SubstsTransformer(tcx, substs))
     }
 }
 
