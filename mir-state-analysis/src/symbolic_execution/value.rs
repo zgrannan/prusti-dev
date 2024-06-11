@@ -34,6 +34,11 @@ impl<'tcx> Ty<'tcx> {
 }
 
 pub trait SyntheticSymValue<'sym, 'tcx>: Sized {
+    fn optimize(
+        self,
+        arena: &'sym SymExArena,
+        tcx: ty::TyCtxt<'tcx>,
+    ) -> Self;
     fn subst(
         self,
         arena: &'sym SymExArena,
@@ -351,6 +356,45 @@ impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'
         self.apply_transformer(arena, &mut SubstsTransformer(tcx, substs))
     }
 }
+
+struct OptimizingTransformer<'tcx>(ty::TyCtxt<'tcx>);
+
+impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueTransformer<'sym, 'tcx, T>
+    for OptimizingTransformer<'tcx>
+{
+    fn transform_synthetic(&mut self, arena: &'sym SymExArena, s: T) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_synthetic(s.optimize(arena, self.0))
+    }
+
+    fn transform_projection(
+        &mut self,
+        arena: &'sym SymExArena,
+        elem: ProjectionElem<mir::Local, ty::Ty<'tcx>>,
+        base: SymValue<'sym, 'tcx, T>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        match elem {
+            ProjectionElem::Deref => {
+                if let SymValueKind::Ref(_, inner) = base.kind {
+                    inner
+                } else {
+                    arena.mk_projection(elem, base.optimize(arena, self.0))
+                }
+            }
+            _ => arena.mk_projection(elem, base.optimize(arena, self.0)),
+        }
+    }
+}
+
+impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
+    pub fn optimize(
+        &'sym self,
+        arena: &'sym SymExArena,
+        tcx: ty::TyCtxt<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        self.apply_transformer(arena, &mut OptimizingTransformer(tcx))
+    }
+}
+
 
 impl<'tcx> From<&Box<mir::Constant<'tcx>>> for Constant<'tcx> {
     fn from(c: &Box<mir::Constant<'tcx>>) -> Self {

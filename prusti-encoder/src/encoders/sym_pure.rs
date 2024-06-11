@@ -101,7 +101,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
     ),
 }
 
-impl <'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
+impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             PrustiSymValSyntheticData::And(_, _) => todo!(),
@@ -163,6 +163,33 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     .output()
                     .skip_binder(),
                 None,
+            ),
+        }
+    }
+
+    fn optimize(self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>) -> Self {
+        match &self {
+            PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
+                PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
+            ),
+            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => arena.alloc(
+                PrustiSymValSyntheticData::If(
+                    cond.optimize(arena, tcx),
+                    then_expr.optimize(arena, tcx),
+                    else_expr.optimize(arena, tcx),
+                )
+            ),
+            PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => arena.alloc(
+                PrustiSymValSyntheticData::PureFnCall(
+                    *def_id,
+                    ty_substs,
+                    arena.alloc_slice(
+                        &(args
+                            .iter()
+                            .map(|arg| arg.optimize(arena, tcx))
+                            .collect::<Vec<_>>()),
+                    ),
+                )
             ),
         }
     }

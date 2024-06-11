@@ -1,4 +1,5 @@
-use prusti_rustc_interface::span::def_id::DefId;
+use cfg_if::cfg_if;
+use prusti_rustc_interface::{middle::ty::GenericArgs, span::def_id::DefId};
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
@@ -22,7 +23,11 @@ impl TaskEncoder for SymFunctionEnc {
     encoder_cache!(SymFunctionEnc);
     type TaskDescription<'vir> = FunctionCallTaskDescription<'vir>;
 
+    #[cfg(feature = "mono_function_encoding")]
     type TaskKey<'vir> = Self::TaskDescription<'vir>;
+
+    #[cfg(not(feature = "mono_function_encoding"))]
+    type TaskKey<'vir> = DefId;
 
     type OutputRef<'vir> = SymFunctionEncOutputRef<'vir>
         where Self: 'vir;
@@ -37,7 +42,11 @@ impl TaskEncoder for SymFunctionEnc {
     type EncodingError = ();
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        #[cfg(feature = "mono_function_encoding")]
+        return *task;
+
+        #[cfg(not(feature = "mono_function_encoding"))]
+        return task.def_id;
     }
 
     fn do_encode_full<'vir>(
@@ -45,19 +54,31 @@ impl TaskEncoder for SymFunctionEnc {
         deps: &mut task_encoder::TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
-            let extra: String = task_key.substs.iter().map(|s| format!("_{s}")).collect();
-            let function_ident = vir_format_identifier!(
-                vcx,
-                "pure_{}_{}_{:?}",
-                vcx.tcx().def_path_str(task_key.def_id),
-                extra,
-                task_key.caller_def_id
-            );
-            let ty_arg_decls = deps
-                .require_local::<LiftedTyParamsEnc>(task_key.substs)
-                .unwrap();
+            cfg_if! {
+                if #[cfg(feature="mono_function_encoding")] {
+                    let extra: String = task_key.substs.iter().map(|s| format!("_{s}")).collect();
+                    let function_ident = vir_format_identifier!(
+                        vcx,
+                        "pure_{}_{}_{:?}",
+                        vcx.tcx().def_path_str(task_key.def_id),
+                        extra,
+                        task_key.caller_def_id
+                    )
+                    let substs = task_key.substs;
+                    let def_id = task_key.def_id;
+                } else {
+                    let def_id = *task_key;
+                    let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
+                    let function_ident = vir_format_identifier!(
+                        vcx,
+                        "pure_{}",
+                        vcx.tcx().def_path_str(task_key)
+                    );
+                }
+            }
+            let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
-            let sig = vcx.tcx().fn_sig(task_key.def_id).skip_binder();
+            let sig = vcx.tcx().fn_sig(def_id).skip_binder();
             let inputs = sig.inputs().skip_binder();
             ident_args.extend(inputs.iter().map(|input| {
                 deps.require_ref::<RustTySnapshotsEnc>(*input)

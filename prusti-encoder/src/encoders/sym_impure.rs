@@ -183,17 +183,7 @@ impl TaskEncoder for SymImpureEnc {
 
             for (path, pcs, assertion) in symbolic_execution.assertions.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
-                let assertion = visitor.encode_assertion(assertion);
-                if pcs.is_empty() {
-                    stmts.push(assertion);
-                } else {
-                    let if_stmt = vcx.mk_if_stmt(
-                        visitor.encode_path_condition(pcs).unwrap(),
-                        vcx.alloc_slice(&[assertion]),
-                        &[],
-                    );
-                    stmts.push(if_stmt);
-                }
+                stmts.push(visitor.encode_pc_assertion(pcs, assertion));
             }
             for (path, pcs, expr) in symbolic_execution.paths.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
@@ -224,7 +214,7 @@ impl TaskEncoder for SymImpureEnc {
                     stmts.push(assertions);
                 } else {
                     let if_stmt = vcx.mk_if_stmt(
-                        visitor.encode_path_condition(pcs).unwrap(),
+                        visitor.encode_path_condition(pcs).unwrap().unwrap(),
                         vcx.alloc_slice(&[assertions]),
                         &[],
                     );
@@ -285,6 +275,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         &mut self,
         sym_value: &PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
+        let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
             SymValueKind::Var(idx, ..) => self.symvars.get(*idx).cloned().ok_or_else(|| {
                 panic!("{}", sym_value.debug_info);
@@ -583,25 +574,26 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     );
                     let expr = pc.expr.subst(self.arena, self.vcx.tcx(), &arg_substs);
                     for (path, value) in body.iter() {
-                        encoded_posts.push(
-                            self.vcx.mk_implies_expr(
-                                self.encode_path_condition(&path.clone().subst(
-                                    self.arena,
-                                    self.vcx.tcx(),
-                                    &arg_substs,
-                                ))
-                                .unwrap(),
-                                self.vcx.mk_eq_expr(
-                                    self.encode_sym_value(&expr).unwrap(),
-                                    self.encode_sym_value(&value.subst(
-                                        self.arena,
-                                        self.vcx.tcx(),
-                                        arg_substs,
-                                    ))
-                                    .unwrap(),
-                                ),
-                            ),
+                        let pc = self.encode_path_condition(&path.clone().subst(
+                            self.arena,
+                            self.vcx.tcx(),
+                            &arg_substs,
+                        ));
+                        let post_eq = self.vcx.mk_eq_expr(
+                            self.encode_sym_value(&expr).unwrap(),
+                            self.encode_sym_value(&value.subst(
+                                self.arena,
+                                self.vcx.tcx(),
+                                arg_substs,
+                            ))
+                            .unwrap(),
                         );
+                        let expr = if let Some(pc) = pc {
+                            self.vcx.mk_implies_expr(pc.unwrap(), post_eq)
+                        } else {
+                            post_eq
+                        };
+                        encoded_posts.push(expr);
                     }
                 }
                 Ok(self.vcx.mk_conj(&encoded_posts))
@@ -657,10 +649,13 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         let clauses = spec
             .iter()
             .map(|(pc, value)| {
-                let encoded_pc = self.encode_path_condition(pc)?;
                 let encoded_value = self.encode_sym_value_as_prim(&value);
-                let impl_expr = self.vcx.mk_implies_expr(encoded_pc, encoded_value);
-                Ok::<vir::Expr<'vir>, String>(impl_expr)
+                if let Some(pc) = self.encode_path_condition(pc) {
+                    let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
+                    Ok::<vir::Expr<'vir>, String>(impl_expr)
+                } else {
+                    Ok::<vir::Expr<'vir>, String>(encoded_value)
+                }
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(self.vcx.mk_conj(&clauses))
@@ -693,19 +688,42 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         self.vcx.mk_exhale_stmt(expr)
     }
 
+    fn encode_pc_assertion(
+        &mut self,
+        pc: &PrustiPathConditions<'sym, 'tcx>,
+        assertion: &PrustiAssertion<'sym, 'tcx>,
+    ) -> vir::Stmt<'vir> {
+        if let Some(pc_expr) = self.encode_path_condition(pc) {
+            self.vcx.mk_if_stmt(
+                pc_expr.unwrap(),
+                self.vcx.alloc_slice(&[self.encode_assertion(assertion)]),
+                &[],
+            )
+        } else {
+            self.encode_assertion(assertion)
+        }
+    }
+
     fn encode_path_condition(
         &mut self,
         pc: &PrustiPathConditions<'sym, 'tcx>,
-    ) -> EncodePCResult<'vir> {
+    ) -> Option<EncodePCResult<'vir>> {
+        if pc.atoms.is_empty() {
+            return None;
+        }
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            exprs.push(self.encode_pc_atom(atom).map_err(|err| {
-                format!(
-                    "Failed to encode pc atom {:?} for pc {:?}: {}",
-                    atom, pc, err
-                )
-            })?);
+            exprs.push(
+                self.encode_pc_atom(atom)
+                    .map_err(|err| {
+                        format!(
+                            "Failed to encode pc atom {:?} for pc {:?}: {}",
+                            atom, pc, err
+                        )
+                    })
+                    .unwrap(),
+            );
         }
-        Ok(self.vcx.mk_conj(&exprs))
+        Some(Ok(self.vcx.mk_conj(&exprs)))
     }
 }
