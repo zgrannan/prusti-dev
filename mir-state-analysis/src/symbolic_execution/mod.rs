@@ -475,6 +475,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
             mir::StatementKind::StorageDead(_)
             | mir::StatementKind::StorageLive(_)
             | mir::StatementKind::FakeRead(_)
+            | mir::StatementKind::PlaceMention(_)
             | mir::StatementKind::AscribeUserType(..) => {}
             other => todo!("{:?}", other),
         }
