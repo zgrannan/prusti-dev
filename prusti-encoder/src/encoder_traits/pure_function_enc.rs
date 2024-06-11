@@ -21,6 +21,43 @@ impl<'vir> task_encoder::OutputRefAny for MirFunctionEncOutputRef<'vir> {}
 pub struct MirFunctionEncOutput<'vir> {
     pub function: vir::Function<'vir>,
 }
+/// Adds an assertion connecting the type of an argument (or return) of the
+/// function with the appropriate type based on the param, e.g. in f<T,
+/// U>(u: U) -> T, this would be called to require that the type of `u` be
+/// `U`
+pub fn mk_type_assertion<'vir, Curr, Next, T: TaskEncoder>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    deps: &mut TaskEncoderDependencies<'vir, T>,
+    arg: ExprGen<'vir, Curr, Next>, // Snapshot encoded argument
+    ty: Ty<'vir>,
+) -> Option<ExprGen<'vir, Curr, Next>> {
+    let lifted_ty = deps
+        .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(ty)
+        .unwrap();
+    match lifted_ty {
+        LiftedTy::Generic(generic) => {
+            let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
+            Some(vcx.mk_eq_expr(
+                generic_enc.param_type_function.apply(vcx, [arg]),
+                generic.expr(vcx),
+            ))
+        }
+        // When the instantiated type constructor doesn't take any
+        // arguments, the type of the argument is known by the
+        // definition of its `typeof_funtion`, therefore it's not
+        // necessary to include an explicit assertion
+        LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
+            let domain_ref = deps
+                .require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), ty).0)
+                .unwrap();
+            Some(vcx.mk_eq_expr(
+                domain_ref.typeof_function.apply(vcx, [arg]),
+                lifted_ty.expr(vcx),
+            ))
+        }
+        _ => None,
+    }
+}
 
 /// Task encoders can implement this trait to encode pure functions. We use this
 /// code to support sharing code between monomorphic and polymorphic encoding of
@@ -39,43 +76,6 @@ where
         task_key: &Self::TaskKey<'vir>,
     ) -> ViperIdent<'vir>;
 
-    /// Adds an assertion connecting the type of an argument (or return) of the
-    /// function with the appropriate type based on the param, e.g. in f<T,
-    /// U>(u: U) -> T, this would be called to require that the type of `u` be
-    /// `U`
-    fn mk_type_assertion<'vir, Curr, Next>(
-        vcx: &'vir vir::VirCtxt<'vir>,
-        deps: &mut TaskEncoderDependencies<'vir, Self>,
-        arg: ExprGen<'vir, Curr, Next>, // Snapshot encoded argument
-        ty: Ty<'vir>,
-    ) -> Option<ExprGen<'vir, Curr, Next>> {
-        let lifted_ty = deps
-            .require_local::<LiftedTyEnc<EncodeGenericsAsLifted>>(ty)
-            .unwrap();
-        match lifted_ty {
-            LiftedTy::Generic(generic) => {
-                let generic_enc = deps.require_ref::<GenericEnc>(()).unwrap();
-                Some(vcx.mk_eq_expr(
-                    generic_enc.param_type_function.apply(vcx, [arg]),
-                    generic.expr(vcx),
-                ))
-            }
-            // When the instantiated type constructor doesn't take any
-            // arguments, the type of the argument is known by the
-            // definition of its `typeof_funtion`, therefore it's not
-            // necessary to include an explicit assertion
-            LiftedTy::Instantiated { args, .. } if !args.is_empty() => {
-                let domain_ref = deps
-                    .require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), ty).0)
-                    .unwrap();
-                Some(vcx.mk_eq_expr(
-                    domain_ref.typeof_function.apply(vcx, [arg]),
-                    lifted_ty.expr(vcx),
-                ))
-            }
-            _ => None,
-        }
-    }
 
     fn encode<'vir>(
         task_key: Self::TaskKey<'vir>,
@@ -162,7 +162,7 @@ where
             let type_preconditions = input_tys.iter().enumerate().filter_map(|(idx, ty)| {
                 let vir_arg = local_defs.locals[mir::Local::from(idx + 1)];
                 let vir_arg = vcx.mk_local_ex(vir_arg.local.name, vir_arg.ty.snapshot);
-                Self::mk_type_assertion(vcx, deps, vir_arg, *ty)
+                mk_type_assertion(vcx, deps, vir_arg, *ty)
             });
 
             tracing::debug!("finished {def_id:?}");
@@ -170,7 +170,7 @@ where
             let mut pres = spec.pres;
             pres.extend(type_preconditions);
 
-            let type_postcondition = Self::mk_type_assertion(
+            let type_postcondition = mk_type_assertion(
                 vcx,
                 deps,
                 vcx.mk_result(return_type.snapshot),

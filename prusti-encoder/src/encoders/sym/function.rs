@@ -9,13 +9,16 @@ use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
 };
 
-use crate::encoders::{
-    lifted::func_def_ty_params::LiftedTyParamsEnc,
-    rust_ty_snapshots::RustTySnapshotsEnc,
-    sym::expr::SymExprEncoder,
-    sym_pure::{PrustiSubsts, PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult},
-    sym_spec::SymSpecEnc,
-    FunctionCallTaskDescription, PureKind, SymPureEnc, SymPureEncTask,
+use crate::{
+    encoder_traits::pure_function_enc::{mk_type_assertion, PureFunctionEnc},
+    encoders::{
+        lifted::func_def_ty_params::LiftedTyParamsEnc,
+        rust_ty_snapshots::RustTySnapshotsEnc,
+        sym::expr::SymExprEncoder,
+        sym_pure::{PrustiSubsts, PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult},
+        sym_spec::SymSpecEnc,
+        FunctionCallTaskDescription, PureKind, SymPureEnc, SymPureEncTask,
+    },
 };
 
 pub struct SymFunctionEnc;
@@ -88,7 +91,11 @@ impl TaskEncoder for SymFunctionEnc {
             }
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
-            let sig = vcx.tcx().fn_sig(def_id).skip_binder();
+            let sig = vcx.tcx().subst_and_normalize_erasing_regions(
+                substs,
+                vcx.tcx().param_env(def_id),
+                vcx.tcx().fn_sig(def_id),
+            );
             let inputs = sig.inputs().skip_binder();
             let input_tys = inputs
                 .iter()
@@ -117,13 +124,19 @@ impl TaskEncoder for SymFunctionEnc {
                 return_type,
             );
             deps.emit_output_ref(*task_key, SymFunctionEncOutputRef { function_ident })?;
+
             let arena = SymExArena::new();
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, None));
-            let symvars = decls
+            let symvars: Vec<_> = decls
                 .iter()
                 .skip(ty_arg_decls.len())
                 .map(|d| vcx.mk_local_ex(d.name, d.ty))
                 .collect();
+            let type_preconditions = inputs
+                .iter()
+                .zip(symvars.iter())
+                .filter_map(|(ty, vir_arg)| mk_type_assertion(vcx, deps, vir_arg, *ty))
+                .collect::<Vec<_>>();
             let trusted = crate::encoders::with_proc_spec(def_id, |def_spec| {
                 def_spec.trusted.extract_inherit().unwrap_or_default()
             })
@@ -152,10 +165,13 @@ impl TaskEncoder for SymFunctionEnc {
                 vcx.alloc_slice(&decls),
                 return_type,
                 vcx.alloc_slice(
-                    &spec
-                        .pres
-                        .iter()
-                        .map(|s| encoder.encode_pure_spec(s, None).unwrap())
+                    &type_preconditions
+                        .into_iter()
+                        .chain(
+                            spec.pres
+                                .iter()
+                                .map(|s| encoder.encode_pure_spec(s, None).unwrap()),
+                        )
                         .collect::<Vec<_>>(),
                 ),
                 vcx.alloc_slice(
