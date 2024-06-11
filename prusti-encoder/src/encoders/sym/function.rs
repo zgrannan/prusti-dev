@@ -124,7 +124,11 @@ impl TaskEncoder for SymFunctionEnc {
                 .skip(ty_arg_decls.len())
                 .map(|d| vcx.mk_local_ex(d.name, d.ty))
                 .collect();
-            let body = if def_id.is_local() {
+            let trusted = crate::encoders::with_proc_spec(def_id, |def_spec| {
+                def_spec.trusted.extract_inherit().unwrap_or_default()
+            })
+            .unwrap_or_default();
+            let body = if !trusted && def_id.is_local() {
                 Some(SymPureEnc::encode(
                     &arena,
                     SymPureEncTask {
