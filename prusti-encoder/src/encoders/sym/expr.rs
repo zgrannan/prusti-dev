@@ -1,6 +1,6 @@
 use mir_state_analysis::symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate},
-    value::{Substs, SymValueKind},
+    value::{AggregateKind, Substs, SymValueKind},
     SymExArena,
 };
 use prusti_rustc_interface::{
@@ -16,6 +16,7 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use crate::encoders::{
     domain,
     lifted::{
+        aggregate_cast::{AggregateSnapArgsCastEnc, AggregateSnapArgsCastEncTask, AggregateType},
         cast::{CastArgs, CastToEnc},
         casters::CastTypePure,
         func_app_ty_params::LiftedFuncAppTyParamsEnc,
@@ -117,7 +118,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(viper_fn.apply(self.vcx, &[expr]))
             }
             SymValueKind::Aggregate(kind, exprs) => {
-                let exprs = exprs
+                let vir_exprs = exprs
                     .iter()
                     .map(|e| self.encode_sym_value(e).unwrap())
                     .collect::<Vec<_>>();
@@ -125,23 +126,43 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .deps
                     .require_local::<RustTySnapshotsEnc>(kind.ty().rust_ty())
                     .unwrap();
-                match ty.generic_snapshot.specifics {
-                    domain::DomainEncSpecifics::StructLike(dds) => {
-                        Ok(dds.field_snaps_to_snap.apply(self.vcx, &exprs))
+                let sl = match kind.variant_idx() {
+                    Some(idx) if kind.is_enum(self.vcx.tcx()) => {
+                        ty.generic_snapshot
+                            .specifics
+                            .expect_enumlike()
+                            .unwrap()
+                            .variants[idx.as_usize()]
+                        .fields
                     }
-                    domain::DomainEncSpecifics::EnumLike(Some(de)) => {
-                        if let Some(variant_idx) = sym_value.ty(self.vcx.tcx()).variant_index() {
-                            let variant_idx: usize = variant_idx.into();
-                            Ok(de.variants[variant_idx]
-                                .fields
-                                .field_snaps_to_snap
-                                .apply(self.vcx, &exprs))
-                        } else {
-                            panic!("{:?} doesn't have a variant idx", sym_value);
-                        }
-                    }
-                    _ => todo!("TODO: composition for {:?}", ty.generic_snapshot.specifics),
-                }
+                    _ => ty.generic_snapshot.specifics.expect_structlike(),
+                };
+                let field_tys = exprs
+                    .iter()
+                    .map(|e| e.ty(self.vcx.tcx()).rust_ty())
+                    .collect::<Vec<_>>();
+                let ty_caster = self
+                    .deps
+                    .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
+                        tys: field_tys,
+                        aggregate_type: match kind {
+                            AggregateKind::Rust(mir::AggregateKind::Adt(def_id, variant_idx, ..), _) => {
+                                AggregateType::Adt {
+                                    def_id: *def_id,
+                                    variant_index: *variant_idx,
+                                }
+                            }
+                            AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
+                                AggregateType::Tuple
+                            }
+                            _ => todo!(),
+                        },
+                    })
+                    .unwrap();
+                let casted_args = ty_caster.apply_casts(self.vcx, vir_exprs.into_iter());
+                Ok(sl
+                    .field_snaps_to_snap
+                    .apply(self.vcx, self.vcx.alloc_slice(&casted_args)))
             }
             SymValueKind::Projection(elem, base) => {
                 let expr = self.encode_sym_value(base);

@@ -52,7 +52,7 @@ pub fn test_entrypoint<'tcx>(
                         (is_pure, is_trusted)
                 }).unwrap_or_default();
 
-                if !(is_trusted && is_pure) {
+                if !is_trusted {
                     let substs = ty::GenericArgs::identity_for_item(tcx, def_id);
                     let res = crate::encoders::SymImpureEnc::encode((def_id.as_local().unwrap(), substs, None), false);
                     assert!(res.is_ok());

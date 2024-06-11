@@ -4,7 +4,7 @@ use prusti_rustc_interface::{
     const_eval::interpret::ConstValue,
     data_structures::fx::FxHasher,
     middle::{
-        mir::{self, ProjectionElem},
+        mir::{self, tcx::PlaceTy, ProjectionElem},
         ty::{self},
     },
     span::{def_id::DefId, DUMMY_SP},
@@ -19,7 +19,7 @@ use std::{
 
 use super::SymExArena;
 
-#[derive(Debug)]
+#[derive(Copy, Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Ty<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
 
 impl<'tcx> Ty<'tcx> {
@@ -34,12 +34,14 @@ impl<'tcx> Ty<'tcx> {
     }
 }
 
+impl<'tcx> From<PlaceTy<'tcx>> for Ty<'tcx> {
+    fn from(ty: PlaceTy<'tcx>) -> Self {
+        Ty(ty.ty, ty.variant_index)
+    }
+}
+
 pub trait SyntheticSymValue<'sym, 'tcx>: Sized {
-    fn optimize(
-        self,
-        arena: &'sym SymExArena,
-        tcx: ty::TyCtxt<'tcx>,
-    ) -> Self;
+    fn optimize(self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>) -> Self;
     fn subst(
         self,
         arena: &'sym SymExArena,
@@ -278,7 +280,11 @@ impl<'sym, 'tcx, T: Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tc
                     .iter()
                     .map(|v| v.apply_transformer(arena, transformer))
                     .collect();
-                transformer.transform_aggregate(arena, *kind, arena.alloc_slice(&transformed_vals))
+                transformer.transform_aggregate(
+                    arena,
+                    kind.clone(),
+                    arena.alloc_slice(&transformed_vals),
+                )
             }
             SymValueKind::Discriminant(val) => {
                 let transformed_val = val.apply_transformer(arena, transformer);
@@ -396,7 +402,6 @@ impl<'sym, 'tcx, T: Clone + Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'
     }
 }
 
-
 impl<'tcx> From<&Box<mir::Constant<'tcx>>> for Constant<'tcx> {
     fn from(c: &Box<mir::Constant<'tcx>>) -> Self {
         Constant(**c)
@@ -463,26 +468,55 @@ impl<'tcx> PartialOrd for Constant<'tcx> {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct AggregateKind<'tcx>(ty::Ty<'tcx>, Option<VariantIdx>);
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum AggregateKind<'tcx> {
+    Rust(mir::AggregateKind<'tcx>, ty::Ty<'tcx>),
+    PCS(ty::Ty<'tcx>, Option<VariantIdx>),
+}
 
 impl<'tcx> AggregateKind<'tcx> {
-    pub fn from_mir(kind: mir::AggregateKind<'tcx>, result_ty: ty::Ty<'tcx>) -> Self {
-        let variant_idx = match kind {
-            mir::AggregateKind::Adt(_, vidx, _, _, _) => match result_ty.kind() {
-                ty::TyKind::Adt(def, _) if def.is_enum() => Some(vidx),
-                _ => None,
-            },
-            _ => None,
-        };
-        AggregateKind(result_ty, variant_idx)
+    pub fn pcs(ty: ty::Ty<'tcx>, variant_idx: Option<VariantIdx>) -> Self {
+        AggregateKind::PCS(ty, variant_idx)
+    }
+    pub fn rust(kind: mir::AggregateKind<'tcx>, ty: ty::Ty<'tcx>) -> Self {
+        AggregateKind::Rust(kind, ty)
     }
 
-    pub fn new(ty: ty::Ty<'tcx>, variant_idx: Option<VariantIdx>) -> Self {
-        AggregateKind(ty, variant_idx)
+    pub fn variant_idx(&self) -> Option<VariantIdx> {
+        self.ty().variant_index()
+    }
+
+    pub fn is_enum(&self, tcx: ty::TyCtxt<'tcx>) -> bool {
+        self.def_id()
+            .map_or(false, |def_id| tcx.adt_def(def_id).variants().len() > 1)
     }
 
     pub fn ty(&self) -> Ty<'tcx> {
-        Ty(self.0, self.1)
+        match self {
+            AggregateKind::Rust(mir::AggregateKind::Adt(_, idx, ..), ty) => {
+                Ty::new(*ty, Some(*idx))
+            }
+            AggregateKind::Rust(_, ty) => Ty::new(*ty, None),
+            AggregateKind::PCS(ty, variant_idx) => Ty::new(*ty, *variant_idx),
+        }
+    }
+
+    pub fn def_id(&self) -> Option<DefId> {
+        match self {
+            AggregateKind::Rust(mir::AggregateKind::Adt(def_id, ..), _) => Some(*def_id),
+            _ => None,
+        }
+    }
+}
+
+impl<'tcx> PartialOrd for AggregateKind<'tcx> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        hash(self).partial_cmp(&hash(other))
+    }
+}
+
+impl<'tcx> Ord for AggregateKind<'tcx> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        hash(self).partial_cmp(&hash(other)).unwrap()
     }
 }

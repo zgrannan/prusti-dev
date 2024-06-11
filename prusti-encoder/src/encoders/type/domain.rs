@@ -716,7 +716,7 @@ impl<'vir> DomainEncSpecifics<'vir> {
     pub fn expect_structlike(self) -> DomainDataStruct<'vir> {
         match self {
             Self::StructLike(data) => data,
-            _ => panic!("expected struct-like"),
+            other => panic!("expected struct-like, got {:?}", other),
         }
     }
     pub fn get_enumlike(self) -> Option<Option<DomainDataEnum<'vir>>> {

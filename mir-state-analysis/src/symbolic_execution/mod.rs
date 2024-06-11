@@ -427,7 +427,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                             .map(|op| heap.encode_operand(self.arena, op))
                             .collect::<Vec<_>>();
                         self.arena.mk_aggregate(
-                            AggregateKind::from_mir(
+                            AggregateKind::rust(
                                 *kind.clone(),
                                 place.ty(&self.body.body.local_decls, self.tcx).ty,
                             ),
@@ -439,8 +439,9 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         .mk_discriminant(heap.get(&(*target).into()).unwrap()),
                     mir::Rvalue::Ref(_, _, target_place) => self.arena.mk_ref(
                         place.ty(&self.body.body.local_decls, self.tcx).ty,
-                        heap.get(&(*target_place).into())
-                            .unwrap_or_else(|| panic!("{:?}", target_place)),
+                        heap.get(&(*target_place).into()).unwrap_or_else(|| {
+                            panic!("{:?} in {:?} at {:?}", target_place, self.body.body.span, stmt.source_info)
+                        }),
                     ),
                     mir::Rvalue::UnaryOp(op, operand) => {
                         let operand = heap.encode_operand(self.arena, operand);
@@ -518,7 +519,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                 heap.insert(
                     place.deref().into(),
                     self.arena.mk_aggregate(
-                        AggregateKind::new(
+                        AggregateKind::pcs(
                             place_ty.ty,
                             from.ty(self.fpcs_analysis.repacker()).variant_index,
                         ),
