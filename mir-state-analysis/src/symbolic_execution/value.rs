@@ -148,6 +148,84 @@ impl<'sym, 'tcx, T> Substs<'sym, 'tcx, T> {
     }
 }
 
+pub trait SymValueFolder<'sym, 'tcx, T, R> {
+    fn fold_var(&mut self, idx: usize, ty: ty::Ty<'tcx>) -> R;
+    fn fold_ref(&mut self, ty: ty::Ty<'tcx>, val: R) -> R;
+    fn fold_constant(&mut self, c: &'sym Constant<'tcx>) -> R;
+    fn fold_checked_binary_op(
+        &mut self,
+        ty: ty::Ty<'tcx>,
+        op: mir::BinOp,
+        lhs: R,
+        rhs: R,
+    ) -> R;
+    fn fold_binary_op(
+        &mut self,
+        ty: ty::Ty<'tcx>,
+        op: mir::BinOp,
+        lhs: R,
+        rhs: R,
+    ) -> R;
+    fn fold_unary_op(&mut self, ty: ty::Ty<'tcx>, op: mir::UnOp, val: R) -> R;
+    fn fold_projection(
+        &mut self,
+        elem: ProjectionElem<mir::Local, ty::Ty<'tcx>>,
+        val: R,
+    ) -> R;
+    fn fold_aggregate(
+        &mut self,
+        kind: AggregateKind<'tcx>,
+        vals: &'sym [R],
+    ) -> R;
+    fn fold_discriminant(&mut self, val: R) -> R;
+    fn fold_synthetic(&mut self, s: T) -> R;
+}
+
+impl<'sym, 'tcx, T> SymValueData<'sym, 'tcx, T> {
+    pub fn apply_folder<F, R>(&'sym self, folder: &mut F) -> R
+    where
+        F: SymValueFolder<'sym, 'tcx, T, R>,
+    {
+        match &self.kind {
+            SymValueKind::Var(idx, ty, ..) => folder.fold_var(*idx, *ty),
+            SymValueKind::Ref(ty, val) => {
+                let folded_val = val.apply_folder(folder);
+                folder.fold_ref(*ty, folded_val)
+            }
+            SymValueKind::Constant(c) => folder.fold_constant(c),
+            SymValueKind::CheckedBinaryOp(ty, op, lhs, rhs) => {
+                let folded_lhs = lhs.apply_folder(folder);
+                let folded_rhs = rhs.apply_folder(folder);
+                folder.fold_checked_binary_op(*ty, *op, folded_lhs, folded_rhs)
+            }
+            SymValueKind::BinaryOp(ty, op, lhs, rhs) => {
+                let folded_lhs = lhs.apply_folder(folder);
+                let folded_rhs = rhs.apply_folder(folder);
+                folder.fold_binary_op(*ty, *op, folded_lhs, folded_rhs)
+            }
+            SymValueKind::UnaryOp(ty, op, val) => {
+                let folded_val = val.apply_folder(folder);
+                folder.fold_unary_op(*ty, *op, folded_val)
+            }
+            SymValueKind::Projection(elem, val) => {
+                let folded_val = val.apply_folder(folder);
+                folder.fold_projection(*elem, folded_val)
+            }
+            SymValueKind::Aggregate(kind, vals) => {
+                let folded_vals: Vec<R> = vals.iter().map(|v| v.apply_folder(folder)).collect();
+                folder.fold_aggregate(*kind, &folded_vals)
+            }
+            SymValueKind::Discriminant(val) => {
+                let folded_val = val.apply_folder(folder);
+                folder.fold_discriminant(folded_val)
+            }
+            SymValueKind::Synthetic(s) => folder.fold_synthetic(*s),
+        }
+    }
+}
+
+
+
 impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
     pub fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match self {
