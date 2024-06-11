@@ -49,6 +49,8 @@ fn sanitize_char(c: char) -> Option<String> {
         '@' => Some("$at$".to_string()),
         '&' => Some("$amp$".to_string()),
         '*' => Some("$star$".to_string()),
+        '{' => Some("$lbrace$".to_string()),
+        '}' => Some("$rbrace$".to_string()),
         _ => None,
     }
 }
