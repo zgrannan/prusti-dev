@@ -34,10 +34,10 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::encoders::{
+use crate::{encoder_traits::pure_function_enc::mk_type_assertion, encoders::{
     lifted::{cast::CastToEnc, casters::CastTypePure},
     ConstEnc, MirBuiltinEnc,
-};
+}};
 
 use super::{
     lifted::{
@@ -178,6 +178,12 @@ impl TaskEncoder for SymImpureEnc {
             stmts.push(
                 vcx.mk_local_decl_stmt(vcx.mk_local_decl(result_local.name, result_local.ty), None),
             );
+
+            for (local, symvar) in symvar_locals.iter().zip(symbolic_execution.symvars.iter()) {
+                if let Some(expr) = mk_type_assertion(vcx, visitor.encoder.deps, vcx.mk_local_ex(local.name, local.ty), *symvar) {
+                    stmts.push(vcx.mk_inhale_stmt(expr));
+                }
+            }
 
             for pre in spec.pres.into_iter() {
                 let pre = visitor.encoder.encode_pure_spec(&pre, None).unwrap();

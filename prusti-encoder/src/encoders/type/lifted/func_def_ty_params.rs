@@ -63,6 +63,7 @@ fn extract_ty_params(ty: Ty<'_>) -> Vec<ParamTy> {
         | TyKind::Char
         | TyKind::Str => vec![],
         TyKind::Tuple(args) => args.iter().flat_map(|arg| extract_ty_params(arg)).collect(),
+        TyKind::Ref(_, ty, _) => extract_ty_params(*ty),
         // TODO: special case to support constant strings
         _ if matches!(ty.peel_refs().kind(), TyKind::Str) => vec![],
         other => todo!("{:?}", other),

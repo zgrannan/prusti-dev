@@ -72,6 +72,7 @@ fn extract_ty_params(ty: Ty<'_>) -> Vec<Ty<'_>> {
             .iter()
             .flat_map(|arg| extract_ty_params(arg))
             .collect(),
+        TyKind::Ref(_, ty, _) => extract_ty_params(*ty),
         other => todo!("{:?}", other),
     }
 }

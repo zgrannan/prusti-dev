@@ -156,10 +156,14 @@ impl TaskEncoder for SymFunctionEnc {
                 None
             };
             let mut encoder = SymExprEncoder::new(vcx, deps, &arena, symvars, def_id);
-            let pure_spec_substs = PrustiSubsts::singleton(
+
+            // The postcondition of the function may refer to the result, the symvar after the
+            // symvars for the function arguments is this result
+            let postcondition_substs = PrustiSubsts::singleton(
                 inputs.len(),
                 arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Result(output))),
             );
+
             let function = vcx.mk_function(
                 function_ident.name().to_str(),
                 vcx.alloc_slice(&decls),
@@ -180,7 +184,7 @@ impl TaskEncoder for SymFunctionEnc {
                         .iter()
                         .map(|s| {
                             encoder
-                                .encode_pure_spec(s, Some(&pure_spec_substs))
+                                .encode_pure_spec(s, Some(&postcondition_substs))
                                 .unwrap()
                         })
                         .collect::<Vec<_>>(),
