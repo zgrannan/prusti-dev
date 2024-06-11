@@ -110,6 +110,21 @@ impl<'sym, 'tcx, T: std::fmt::Display> std::fmt::Display for SymValueData<'sym, 
             }
             SymValueKind::Discriminant(_) => todo!(),
             SymValueKind::Synthetic(s) => write!(f, "{}", s),
+            SymValueKind::Cast(_, _, _) => todo!(),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub enum CastKind {
+    IntToInt
+}
+
+impl From<mir::CastKind> for CastKind {
+    fn from(value: mir::CastKind) -> Self {
+        match value {
+            mir::CastKind::IntToInt => CastKind::IntToInt,
+            _ => todo!()
         }
     }
 }
@@ -138,6 +153,7 @@ pub enum SymValueKind<'sym, 'tcx, T> {
     ),
     Aggregate(AggregateKind<'tcx>, &'sym [SymValue<'sym, 'tcx, T>]),
     Discriminant(SymValue<'sym, 'tcx, T>),
+    Cast(CastKind, SymValue<'sym, 'tcx, T>, ty::Ty<'tcx>),
     Synthetic(T),
 }
 
@@ -232,6 +248,16 @@ pub trait SymValueTransformer<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> {
     ) -> SymValue<'sym, 'tcx, T> {
         arena.mk_discriminant(val)
     }
+    fn transform_cast(
+        &mut self,
+        arena: &'sym SymExArena,
+        kind: CastKind,
+        val: SymValue<'sym, 'tcx, T>,
+        ty: ty::Ty<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        arena.mk_cast(kind, val, ty)
+    }
+
     fn transform_synthetic(&mut self, arena: &'sym SymExArena, s: T) -> SymValue<'sym, 'tcx, T>;
 }
 
@@ -291,6 +317,10 @@ impl<'sym, 'tcx, T: Copy + SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tc
                 transformer.transform_discriminant(arena, transformed_val)
             }
             SymValueKind::Synthetic(s) => transformer.transform_synthetic(arena, *s),
+            SymValueKind::Cast(kind, val, ty) => {
+                let transformed_val = val.apply_transformer(arena, transformer);
+                transformer.transform_cast(arena, *kind, transformed_val, *ty)
+            }
         }
     }
 }
@@ -330,6 +360,7 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
             }
             SymValueKind::UnaryOp(ty, op, val) => Ty::new(*ty, None),
             SymValueKind::Synthetic(sym_val) => sym_val.ty(tcx),
+            SymValueKind::Cast(_, _, ty) => Ty::new(*ty, None),
         }
     }
 }

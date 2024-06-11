@@ -25,7 +25,7 @@ use self::{
     path::{AcyclicPath, Path},
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     place::Place,
-    value::{AggregateKind, Constant, SymValue, SymValueKind, SyntheticSymValue},
+    value::{AggregateKind, CastKind, Constant, SymValue, SymValueKind, SyntheticSymValue},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -91,6 +91,15 @@ impl SymExArena {
         kind: SymValueKind<'sym, 'tcx, T>,
     ) -> SymValue<'sym, 'tcx, T> {
         self.alloc(SymValueData::new(kind, self))
+    }
+
+    pub fn mk_cast<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>>(
+        &'sym self,
+        kind: CastKind,
+        val: SymValue<'sym, 'tcx, T>,
+        ty: ty::Ty<'tcx>,
+    ) -> SymValue<'sym, 'tcx, T> {
+        self.mk_sym_value(SymValueKind::Cast(kind, val, ty))
     }
 
     pub fn mk_var<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>>(
@@ -449,6 +458,14 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                             place.ty(&self.body.body.local_decls, self.tcx).ty,
                             *op,
                             operand,
+                        )
+                    }
+                    mir::Rvalue::Cast(kind, operand, ty) => {
+                        let operand = heap.encode_operand(self.arena, operand);
+                        self.arena.mk_cast(
+                            (*kind).into(),
+                            operand,
+                            *ty,
                         )
                     }
                     _ => todo!("{rvalue:?}"),

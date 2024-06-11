@@ -146,12 +146,13 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
                         tys: field_tys,
                         aggregate_type: match kind {
-                            AggregateKind::Rust(mir::AggregateKind::Adt(def_id, variant_idx, ..), _) => {
-                                AggregateType::Adt {
-                                    def_id: *def_id,
-                                    variant_index: *variant_idx,
-                                }
-                            }
+                            AggregateKind::Rust(
+                                mir::AggregateKind::Adt(def_id, variant_idx, ..),
+                                _,
+                            ) => AggregateType::Adt {
+                                def_id: *def_id,
+                                variant_index: *variant_idx,
+                            },
                             AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
                                 AggregateType::Tuple
                             }
@@ -353,6 +354,21 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = self.deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
+            }
+            SymValueKind::Cast(_, operand, ty) => {
+                let prim_val = self.encode_sym_value_as_prim(operand);
+                if let domain::DomainEncSpecifics::Primitive(dd) = self
+                    .deps
+                    .require_local::<RustTySnapshotsEnc>(*ty)
+                    .unwrap()
+                    .generic_snapshot
+                    .specifics
+                {
+                    Ok(dd.prim_to_snap.apply(self.vcx, [prim_val]))
+                } else {
+                    unreachable!()
+                }
+                // TODO: Make this more robust
             }
         }
     }
