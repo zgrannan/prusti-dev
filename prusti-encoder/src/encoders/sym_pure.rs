@@ -56,6 +56,7 @@ pub struct SymPureEncResult<'sym, 'tcx>(
 );
 
 impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
+
     pub fn from_sym_value(value: PrustiSymValue<'sym, 'tcx>) -> Self {
         Self(vec![(PathConditions::new(), value)].into_iter().collect())
     }
@@ -99,6 +100,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
         GenericArgsRef<'tcx>,
         &'sym [PrustiSymValue<'sym, 'tcx>],
     ),
+    Result(ty::Ty<'tcx>)
 }
 
 impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -115,6 +117,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
                     .join(", ");
                 write!(f, "{}({})", fn_name, args_str)
             }
+            PrustiSymValSyntheticData::Result(_) => todo!(),
         }
     }
 }
@@ -150,6 +153,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     else_expr.subst(arena, tcx, substs),
                 ))
             }
+            PrustiSymValSyntheticData::Result(_) => todo!(),
         }
     }
 
@@ -164,6 +168,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     .skip_binder(),
                 None,
             ),
+            PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None)
         }
     }
 
@@ -191,6 +196,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     ),
                 )
             ),
+            PrustiSymValSyntheticData::Result(_) => todo!(),
         }
     }
 }

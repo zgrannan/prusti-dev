@@ -19,7 +19,7 @@ use prusti_rustc_interface::{
 
 use std::{collections::BTreeSet, rc::Rc};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::Reify;
+use vir::{add_debug_note, Reify};
 
 use crate::encoders::{
     mir_pure::PureKind,
@@ -67,9 +67,7 @@ pub fn mk_conj<'sym, 'tcx>(
     let mut iter = sym_values.into_iter();
     if let Some(value) = iter.next() {
         iter.fold(value, |acc, val| {
-            arena.mk_synthetic(arena.alloc(
-                PrustiSymValSyntheticData::And(acc, val),
-            ))
+            arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::And(acc, val)))
         })
     } else {
         return arena.mk_constant(Constant::from_bool(tcx, true));
@@ -175,7 +173,7 @@ impl SymSpecEnc {
                 }
             }
             ty::TyKind::Uint(..) => Some(arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, lhs, rhs)),
-            other => todo!("{:#?}", other),
+            other => None, // TODO
         }
     }
 
@@ -206,7 +204,10 @@ impl SymSpecEnc {
                         )),
                     };
                 } else {
-                    todo!()
+                    return SymSpecEncOutput {
+                        pres: SymSpec::new(),
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
+                    };
                 }
             }
             ty::TyKind::Adt(def_id, substs) => {
@@ -220,7 +221,10 @@ impl SymSpecEnc {
                         )),
                     };
                 } else {
-                    todo!()
+                    return SymSpecEncOutput {
+                        pres: SymSpec::new(),
+                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
+                    };
                 }
             }
             other => todo!("{:#?}", other),
@@ -254,11 +258,13 @@ impl SymSpecEnc {
                     vcx.tcx().fn_sig(def_id),
                 );
                 let input_ty = sig.input(0).skip_binder();
+                let result_var = arena.mk_var(2, vcx.tcx().types.bool);
+                add_debug_note!(result_var.debug_info, "result of eq for {:?}", input_ty);
                 return Self::partial_eq_spec(
                     arena,
                     vcx.tcx(),
                     input_ty,
-                    arena.mk_var(2, vcx.tcx().types.bool),
+                    result_var
                 );
             }
 

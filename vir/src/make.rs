@@ -313,6 +313,20 @@ impl<'tcx> VirCtxt<'tcx> {
             }))),
         ))
     }
+    pub fn mk_if_expr<'vir, Curr, Next>(
+        &'vir self,
+        cond: ExprGen<'vir, Curr, Next>,
+        then: ExprGen<'vir, Curr, Next>,
+        else_: ExprGen<'vir, Curr, Next>,
+    ) -> ExprGen<'vir, Curr, Next> {
+        self.alloc(ExprGenData::new(
+            self.alloc(ExprKindGenData::If(self.alloc(IfExprGenData {
+                cond,
+                then,
+                else_,
+            }))),
+        ))
+    }
     pub fn mk_eq_expr<'vir, Curr, Next>(
         &'vir self,
         lhs: ExprGen<'vir, Curr, Next>,

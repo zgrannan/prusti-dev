@@ -144,6 +144,7 @@ impl<'vir, Curr, Next> Debug for ExprGenData<'vir, Curr, Next> {
 impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Self::If(e) => e.fmt(f),
             Self::AccField(e) => e.fmt(f),
             Self::BinOp(e) => e.fmt(f),
             Self::Const(e) => e.fmt(f),
@@ -170,6 +171,13 @@ impl<'vir> Debug for FieldData<'vir> {
         writeln!(f, "field {}: {:?}", self.name, self.ty)
     }
 }
+
+impl<'vir, Curr, Next> Debug for IfExprGenData<'vir, Curr, Next> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "({:?} ? {:?} : {:?})", self.cond, self.then, self.else_)
+    }
+}
+
 
 impl<'vir, Curr, Next> Debug for ForallGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {

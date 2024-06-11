@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use prusti_rustc_interface::middle::ty::{GenericArgsRef, Ty, TyKind};
-use task_encoder::{TaskEncoder, EncodeFullResult};
+use task_encoder::{EncodeFullResult, TaskEncoder};
 
 use super::{
     generic::LiftedGeneric,
@@ -68,6 +68,10 @@ fn extract_ty_params(ty: Ty<'_>) -> Vec<Ty<'_>> {
             .flat_map(|arg| extract_ty_params(arg))
             .collect(),
         TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Bool | TyKind::Char => vec![],
+        TyKind::Tuple(args) => args
+            .iter()
+            .flat_map(|arg| extract_ty_params(arg))
+            .collect(),
         other => todo!("{:?}", other),
     }
 }
