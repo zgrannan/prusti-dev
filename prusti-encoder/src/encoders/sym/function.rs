@@ -106,17 +106,22 @@ impl TaskEncoder for SymFunctionEnc {
                         .snapshot
                 })
                 .collect::<Vec<_>>();
-            ident_args.extend(input_tys);
+            ident_args.extend(input_tys.iter());
             let output = sig.output().skip_binder();
             let return_type = deps
                 .require_ref::<RustTySnapshotsEnc>(output)
                 .unwrap()
                 .generic_snapshot
                 .snapshot;
-            let decls = ident_args
+            let decls = ty_arg_decls
                 .iter()
-                .enumerate()
-                .map(|(idx, arg)| vcx.mk_local_decl(vir_format!(vcx, "arg_{}", idx), arg))
+                .map(|t| t.decl())
+                .chain(
+                    input_tys
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, arg)| vcx.mk_local_decl(vir_format!(vcx, "arg_{}", idx), arg)),
+                )
                 .collect::<Vec<_>>();
             let function_ident = FunctionIdent::new(
                 function_ident,

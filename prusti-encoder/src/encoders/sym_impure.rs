@@ -41,8 +41,7 @@ use crate::{encoder_traits::pure_function_enc::mk_type_assertion, encoders::{
 
 use super::{
     lifted::{
-        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
-        rust_ty_cast::RustTyCastersEnc,
+        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc, func_def_ty_params::LiftedTyParamsEnc, rust_ty_cast::RustTyCastersEnc
     },
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
@@ -154,6 +153,8 @@ impl TaskEncoder for SymImpureEnc {
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
             let body = &body.body;
+            let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
+            let mut stmts = Vec::new();
             let mut visitor = EncVisitor {
                 vcx,
                 local_decls: &body.local_decls,
@@ -170,7 +171,9 @@ impl TaskEncoder for SymImpureEnc {
                 arena: &arena,
             };
 
-            let mut stmts = Vec::new();
+            for arg in ty_arg_decls {
+                stmts.push(vcx.mk_local_decl_stmt(arg.decl(), None));
+            }
 
             for local in symvar_locals.iter() {
                 stmts.push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
