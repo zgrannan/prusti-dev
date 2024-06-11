@@ -20,7 +20,6 @@ pub type MethodBodyGen<'vir, Curr, Next> = &'vir crate::gendata::MethodBodyGenDa
 pub type MethodCallGen<'vir, Curr, Next> = &'vir crate::gendata::MethodCallGenData<'vir, Curr, Next>;
 pub type PredicateGen<'vir, Curr, Next> = &'vir crate::gendata::PredicateGenData<'vir, Curr, Next>;
 pub type PredicateAppGen<'vir, Curr, Next> = &'vir crate::gendata::PredicateAppGenData<'vir, Curr, Next>;
-pub type IfExprGen<'vir, Curr, Next> = &'vir crate::gendata::IfExprGenData<'vir, Curr, Next>;
 pub type ProgramGen<'vir, Curr, Next> = &'vir crate::gendata::ProgramGenData<'vir, Curr, Next>;
 pub type PureAssignGen<'vir, Curr, Next> = &'vir crate::gendata::PureAssignGenData<'vir, Curr, Next>;
 pub type StmtGen<'vir, Curr, Next> = &'vir crate::gendata::StmtGenData<'vir, Curr, Next>;

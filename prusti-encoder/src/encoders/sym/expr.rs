@@ -65,7 +65,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         &mut self,
         sym_value: &PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
-        // let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
+        let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
             SymValueKind::Var(idx, ..) => self.symvars.get(*idx).cloned().ok_or_else(|| {
                 panic!("{}", sym_value.debug_info);
@@ -308,11 +308,27 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(function_ref.apply(self.vcx, &args))
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::And(lhs, rhs)) => {
+                let lhs = self.encode_sym_value_as_prim(lhs);
+                let rhs = self.encode_sym_value_as_prim(rhs);
+                let raw = self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs);
+                if let domain::DomainEncSpecifics::Primitive(dd) = self
+                    .deps
+                    .require_local::<RustTySnapshotsEnc>(self.vcx.tcx().types.bool)
+                    .unwrap()
+                    .generic_snapshot
+                    .specifics
+                {
+                    Ok(dd.prim_to_snap.apply(self.vcx, [raw]))
+                } else {
+                    unreachable!()
+                }
+            }
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::If(cond, lhs, rhs)) => {
+                let cond = self.encode_sym_value_as_prim(cond);
                 let lhs = self.encode_sym_value(lhs)?;
                 let rhs = self.encode_sym_value(rhs)?;
-                Ok(self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs))
+                Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
-            SymValueKind::Synthetic(PrustiSymValSyntheticData::If(_, _, _)) => todo!(),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = self.deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
@@ -341,7 +357,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         &mut self,
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir> {
-        match &pc.predicate {
+        let result = match &pc.predicate {
             PathConditionPredicate::Postcondition(def_id, substs, args) => {
                 let args = args.iter().copied().chain(std::iter::once(pc.expr));
                 let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
@@ -351,7 +367,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         .into_iter()
                         .map(|p| self.encode_pure_spec(&p, Some(arg_substs)).unwrap())
                         .collect::<Vec<_>>();
-                Ok(self.vcx.mk_conj(&encoded_posts))
+                Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
             }
             PathConditionPredicate::Eq(target, ty) => {
                 let expr = self.encode_sym_value(&pc.expr)?;
@@ -374,7 +390,9 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         .collect::<Vec<_>>(),
                 ))
             }
-        }
+        }?;
+        assert_eq!(result.ty(), &vir::TypeData::Bool);
+        Ok::<vir::Expr<'vir>, String>(result)
     }
 
     fn encode_target_literal(&mut self, target: u128, ty: ty::Ty<'tcx>) -> vir::Expr<'vir> {
@@ -395,7 +413,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         while let Some((pc, value)) = iter.next() {
             let encoded_value = self.encode_sym_value(&value).unwrap();
             let pc = self.encode_path_condition(pc).unwrap().unwrap();
-            expr = self.vcx.mk_if_expr(pc, encoded_value, expr);
+            expr = self.vcx.mk_ternary_expr(pc, encoded_value, expr);
         }
         Ok(expr)
     }

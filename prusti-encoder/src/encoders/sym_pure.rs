@@ -196,7 +196,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     ),
                 )
             ),
-            PrustiSymValSyntheticData::Result(_) => todo!(),
+            PrustiSymValSyntheticData::Result(_) => self
         }
     }
 }

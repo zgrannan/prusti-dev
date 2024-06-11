@@ -11,6 +11,7 @@ pub extern crate rustc_abi as abi;
 pub extern crate rustc_ast as ast;
 pub extern crate rustc_ast_pretty as ast_pretty;
 pub extern crate rustc_attr as attr;
+pub extern crate rustc_const_eval as const_eval;
 pub extern crate rustc_data_structures as data_structures;
 pub extern crate rustc_driver as driver;
 pub extern crate rustc_errors as errors;

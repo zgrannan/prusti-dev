@@ -84,8 +84,15 @@ impl SymSpecEnc {
         SymSpec::singleton(SymPureEncResult::from_sym_value(constant))
     }
 
-    fn encode_discr<'sym, 'tcx>(discr: VariantDiscr) -> PrustiSymValue<'sym, 'tcx> {
-        todo!()
+    fn encode_discr<'sym, 'tcx>(
+        arena: &'sym SymExArena,
+        discr: VariantDiscr,
+        ty: ty::Ty<'tcx>,
+    ) -> PrustiSymValue<'sym, 'tcx> {
+        match discr {
+            VariantDiscr::Explicit(_) => todo!(),
+            VariantDiscr::Relative(idx) => arena.mk_constant(Constant::from_u32(idx, ty)),
+        }
     }
 
     fn encode_variant_eq<'sym, 'tcx>(
@@ -121,6 +128,14 @@ impl SymSpecEnc {
     ) -> Option<PrustiSymValue<'sym, 'tcx>> {
         let ty = lhs.ty(tcx).rust_ty();
         match ty.kind() {
+            ty::TyKind::Uint(..) | ty::TyKind::Int(..) => {
+                Some(arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, lhs, rhs))
+            }
+            ty::TyKind::Ref(..) => {
+                let deref_lhs = arena.mk_projection(mir::ProjectionElem::Deref, lhs);
+                let deref_rhs = arena.mk_projection(mir::ProjectionElem::Deref, rhs);
+                Self::partial_eq_expr(arena, tcx, deref_lhs, deref_rhs)
+            }
             ty::TyKind::Tuple(tys) => {
                 let exprs = tys
                     .iter()
@@ -158,7 +173,11 @@ impl SymSpecEnc {
                                     tcx.types.bool,
                                     mir::BinOp::Eq,
                                     lhs_discriminant,
-                                    Self::encode_discr(variant.discr),
+                                    Self::encode_discr(
+                                        arena,
+                                        variant.discr,
+                                        lhs_discriminant.ty(tcx).rust_ty(),
+                                    ),
                                 ),
                                 acc,
                                 Self::encode_variant_eq(arena, tcx, variant, substs, lhs, rhs)?,
@@ -173,62 +192,37 @@ impl SymSpecEnc {
                 }
             }
             ty::TyKind::Uint(..) => Some(arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, lhs, rhs)),
-            other => None, // TODO
+            other => todo!("partial_eq_expr: {:?}", other),
         }
     }
 
-    fn partial_eq_spec<'sym, 'tcx>(
+    fn structural_eq_spec<'sym, 'tcx>(
         arena: &'sym SymExArena,
         tcx: ty::TyCtxt<'tcx>,
         ty: ty::Ty<'tcx>,
+        negate: bool,
         result: PrustiSymValue<'sym, 'tcx>,
     ) -> SymSpecEncOutput<'sym, 'tcx> {
-        match ty.kind() {
-            ty::TyKind::Tuple(tys) if tys.is_empty() => {
-                return SymSpecEncOutput {
-                    pres: SymSpec::new(),
-                    posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
-                };
-            }
-            ty::TyKind::Ref(..) => {
-                let deref_lhs =
-                    arena.mk_projection(mir::ProjectionElem::Deref, arena.mk_var(0, ty));
-                let deref_rhs =
-                    arena.mk_projection(mir::ProjectionElem::Deref, arena.mk_var(1, ty));
-                if let Some(pure_eq_expr) = Self::partial_eq_expr(arena, tcx, deref_lhs, deref_rhs)
-                {
-                    return SymSpecEncOutput {
-                        pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
-                            arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, result, pure_eq_expr),
-                        )),
-                    };
-                } else {
-                    return SymSpecEncOutput {
-                        pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
-                    };
-                }
-            }
-            ty::TyKind::Adt(def_id, substs) => {
-                if let Some(pure_eq_expr) =
-                    Self::partial_eq_expr(arena, tcx, arena.mk_var(0, ty), arena.mk_var(1, ty))
-                {
-                    return SymSpecEncOutput {
-                        pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(
-                            arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, result, pure_eq_expr),
-                        )),
-                    };
-                } else {
-                    return SymSpecEncOutput {
-                        pres: SymSpec::new(),
-                        posts: SymSpec::singleton(SymPureEncResult::from_sym_value(result)),
-                    };
-                }
-            }
-            other => todo!("{:#?}", other),
-        }
+        let expr = Self::partial_eq_expr(arena, tcx, arena.mk_var(0, ty), arena.mk_var(1, ty));
+        let postcondition = if let Some(expr) = expr {
+            let op = if negate {
+                mir::BinOp::Ne
+            } else {
+                mir::BinOp::Eq
+            };
+            SymSpec::singleton(SymPureEncResult::from_sym_value(arena.mk_bin_op(
+                tcx.types.bool,
+                op,
+                result,
+                expr,
+            )))
+        } else {
+            SymSpec::new()
+        };
+        return SymSpecEncOutput {
+            pres: SymSpec::new(),
+            posts: postcondition,
+        };
     }
 
     pub fn encode<'sym, 'tcx, 'vir, T: TaskEncoder>(
@@ -251,7 +245,9 @@ impl SymSpecEnc {
                 };
             }
 
-            if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq" {
+            if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
+                || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
+            {
                 let sig = vcx.tcx().subst_and_normalize_erasing_regions(
                     substs,
                     vcx.tcx().param_env(def_id),
@@ -259,13 +255,8 @@ impl SymSpecEnc {
                 );
                 let input_ty = sig.input(0).skip_binder();
                 let result_var = arena.mk_var(2, vcx.tcx().types.bool);
-                add_debug_note!(result_var.debug_info, "result of eq for {:?}", input_ty);
-                return Self::partial_eq_spec(
-                    arena,
-                    vcx.tcx(),
-                    input_ty,
-                    result_var
-                );
+                let negate = vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne";
+                return Self::structural_eq_spec(arena, vcx.tcx(), input_ty, negate, result_var);
             }
 
             let specs = deps

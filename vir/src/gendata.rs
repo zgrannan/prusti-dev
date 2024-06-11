@@ -81,13 +81,6 @@ pub struct PredicateAppGenData<'vir, Curr, Next> {
 }
 
 #[derive(VirHash, VirReify, VirSerde)]
-pub struct IfExprGenData<'vir, Curr, Next> {
-    pub cond: ExprGen<'vir, Curr, Next>,
-    pub then: ExprGen<'vir, Curr, Next>,
-    pub else_: ExprGen<'vir, Curr, Next>,
-}
-
-#[derive(VirHash, VirReify, VirSerde)]
 pub struct UnfoldingGenData<'vir, Curr, Next> {
     pub target: PredicateAppGen<'vir, Curr, Next>,
     pub expr: ExprGen<'vir, Curr, Next>,
@@ -163,7 +156,6 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     Let(LetGen<'vir, Curr, Next>),
     FuncApp(FuncAppGen<'vir, Curr, Next>),
     PredicateApp(PredicateAppGen<'vir, Curr, Next>), // TODO: this should not be used instead of acc?
-    If(IfExprGen<'vir, Curr, Next>),
     // domain func app
     // inhale/exhale
 
@@ -195,7 +187,6 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::PredicateApp(_) => &TypeData::Predicate,
             ExprKindGenData::Lazy(_) => panic!("cannot get type of lazy expression"),
             ExprKindGenData::Todo(msg) => panic!("{msg}"),
-            ExprKindGenData::If(e) => e.then.ty(),
         }
     }
 }

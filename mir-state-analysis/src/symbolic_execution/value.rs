@@ -1,6 +1,7 @@
 use debug_info::DebugInfo;
 use prusti_rustc_interface::{
     abi::VariantIdx,
+    const_eval::interpret::ConstValue,
     data_structures::fx::FxHasher,
     middle::{
         mir::{self, ProjectionElem},
@@ -425,6 +426,13 @@ impl<'tcx> Constant<'tcx> {
             span: DUMMY_SP,
             user_ty: None,
             literal: mir::ConstantKind::from_bool(tcx, b),
+        })
+    }
+    pub fn from_u32(u32: u32, ty: ty::Ty<'tcx>) -> Self {
+        Constant(mir::Constant {
+            span: DUMMY_SP,
+            user_ty: None,
+            literal: mir::ConstantKind::from_value(ConstValue::from_u64(u32 as u64), ty),
         })
     }
 }

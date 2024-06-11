@@ -439,7 +439,8 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         .mk_discriminant(heap.get(&(*target).into()).unwrap()),
                     mir::Rvalue::Ref(_, _, target_place) => self.arena.mk_ref(
                         place.ty(&self.body.body.local_decls, self.tcx).ty,
-                        heap.get(&(*target_place).into()).unwrap(),
+                        heap.get(&(*target_place).into())
+                            .unwrap_or_else(|| panic!("{:?}", target_place)),
                     ),
                     mir::Rvalue::UnaryOp(op, operand) => {
                         let operand = heap.encode_operand(self.arena, operand);
