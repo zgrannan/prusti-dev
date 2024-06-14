@@ -335,10 +335,44 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
             SymValueKind::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
             SymValueKind::Projection(elem, val) => match elem {
                 ProjectionElem::Deref => {
-                    if let ty::TyKind::Ref(_, ty, _) = val.kind.ty(tcx).rust_ty().kind() {
-                        Ty::new(*ty, None)
-                    } else {
-                        unreachable!()
+                    match val.kind.ty(tcx).rust_ty().kind() {
+                        ty::TyKind::Bool => todo!(),
+                        ty::TyKind::Char => todo!(),
+                        ty::TyKind::Int(_) => todo!(),
+                        ty::TyKind::Uint(_) => todo!(),
+                        ty::TyKind::Float(_) => todo!(),
+                        ty::TyKind::Adt(def, substs) => {
+                            if let Some(box_def_id) = tcx.lang_items().owned_box() {
+                                if def.did() == box_def_id {
+                                    Ty::new(substs.type_at(0), None)
+                                } else {
+                                    panic!()
+                                }
+                            } else {
+                                panic!()
+                            }
+                        }
+                        ty::TyKind::Foreign(_) => todo!(),
+                        ty::TyKind::Str => todo!(),
+                        ty::TyKind::Array(_, _) => todo!(),
+                        ty::TyKind::Slice(_) => todo!(),
+                        ty::TyKind::RawPtr(_) => todo!(),
+                        ty::TyKind::Ref(_, ty, _) => Ty::new(*ty, None),
+                        ty::TyKind::FnDef(_, _) => todo!(),
+                        ty::TyKind::FnPtr(_) => todo!(),
+                        ty::TyKind::Dynamic(_, _, _) => todo!(),
+                        ty::TyKind::Closure(_, _) => todo!(),
+                        ty::TyKind::Generator(_, _, _) => todo!(),
+                        ty::TyKind::GeneratorWitness(_) => todo!(),
+                        ty::TyKind::GeneratorWitnessMIR(_, _) => todo!(),
+                        ty::TyKind::Never => todo!(),
+                        ty::TyKind::Tuple(_) => todo!(),
+                        ty::TyKind::Alias(_, _) => todo!(),
+                        ty::TyKind::Param(_) => todo!(),
+                        ty::TyKind::Bound(_, _) => todo!(),
+                        ty::TyKind::Placeholder(_) => todo!(),
+                        ty::TyKind::Infer(_) => todo!(),
+                        ty::TyKind::Error(_) => todo!(),
                     }
                 }
                 ProjectionElem::Field(_, ty) => Ty::new(*ty, None),

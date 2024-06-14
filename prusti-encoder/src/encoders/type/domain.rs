@@ -146,6 +146,7 @@ impl TaskEncoder for DomainEnc {
                         TyKind::Bool => &vir::TypeData::Bool,
                         TyKind::Int(_) => &vir::TypeData::Int,
                         TyKind::Uint(_) => &vir::TypeData::Int,
+                        TyKind::Char => &vir::TypeData::Int,
                         _ => todo!(),
                     };
 
@@ -175,10 +176,7 @@ impl TaskEncoder for DomainEnc {
                                 // Box special case (this should be replaced by an
                                 // extern spec in the future)
                                 vec![
-                                    FieldTy {
-                                        ty: enc.deps.require_ref::<GenericEnc>(())?.param_snapshot,
-                                        rust_ty_data: None
-                                    }
+                                    FieldTy::from_ty(vcx, enc.deps, params.type_at(0))?
                                 ]
                             };
                             let specifics = enc.mk_struct_specifics(fields);
@@ -486,6 +484,7 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                 // e.g type of (t: (T1,T2)).0 should be T1
                 let self_ty = self.typeof_function.apply(self.vcx, [self.self_ex]);
 
+                eprintln!("Ty data for {}: {:?}", name, field_ty.rust_ty_data);
                 if let Some(lifted) = &field_ty.rust_ty_data {
 
                     // Lookup the encoding of the generic from a rust `ParamTy`
@@ -773,7 +772,7 @@ impl<'vir> DomainDataPrim<'vir> {
 }
 
 /// Data for encoding field access functions and axioms
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FieldTy<'vir> {
     /// The type of encoded field
     ty: vir::Type<'vir>,
@@ -785,7 +784,7 @@ struct FieldTy<'vir> {
     rust_ty_data: Option<LiftedRustTyData<'vir>>
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct LiftedRustTyData<'vir> {
     /// The representation of the Rust type of the field
     lifted_ty: LiftedTy<'vir, ParamTy>,
