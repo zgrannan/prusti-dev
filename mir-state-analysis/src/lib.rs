@@ -18,7 +18,9 @@ pub mod havoc;
 
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
 use coupling_graph::BodyWithBorrowckFacts;
+use free_pcs::generate_dot_graph;
 use prusti_rustc_interface::{
+    borrowck::consumers::{LocationTable, PoloniusInput, PoloniusOutput, RegionInferenceContext},
     dataflow::Analysis,
     index::IndexVec,
     middle::{
@@ -26,11 +28,22 @@ use prusti_rustc_interface::{
         ty::TyCtxt,
     },
 };
-use symbolic_execution::{SymExArena, SymbolicExecution, SymbolicExecutionResult, VerifierSemantics};
+use symbolic_execution::{
+    SymExArena, SymbolicExecution, SymbolicExecutionResult, VerifierSemantics,
+};
 
-pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<'mir, 'tcx, PlaceCapabilitySummary<'mir, 'tcx>, PcsEngine<'mir, 'tcx>>;
+pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<
+    'mir,
+    'tcx,
+    PlaceCapabilitySummary<'mir, 'tcx>,
+    PcsEngine<'mir, 'tcx>,
+>;
 
-#[tracing::instrument(name = "run_symbolic_execution", level = "debug", skip(mir, tcx, fpcs_analysis, verifier_semantics, arena))]
+#[tracing::instrument(
+    name = "run_symbolic_execution",
+    level = "debug",
+    skip(mir, tcx, fpcs_analysis, verifier_semantics, arena)
+)]
 pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
@@ -40,6 +53,8 @@ pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>
 ) -> SymbolicExecutionResult<'sym, 'tcx, S::SymValSynthetic> {
     SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics, arena).execute()
 }
+
+use std::fs::create_dir_all;
 
 #[tracing::instrument(name = "run_free_pcs", level = "debug", skip(mir, tcx))]
 pub fn run_free_pcs<'mir, 'tcx>(
@@ -52,7 +67,44 @@ pub fn run_free_pcs<'mir, 'tcx>(
         .into_engine(tcx, &mir.body)
         .pass_name("free_pcs")
         .iterate_to_fixpoint();
-    free_pcs::FreePcsAnalysis::new(analysis.into_results_cursor(&mir.body))
+    let mut fpcs_analysis = free_pcs::FreePcsAnalysis::new(analysis.into_results_cursor(&mir.body));
+
+    // Create directory for DOT files
+    create_dir_all("dot_graphs").expect("Failed to create directory for DOT files");
+    let polonius_facts = mir.output_facts.as_ref().unwrap().clone();
+    let location_table = mir.location_table.as_ref().unwrap().clone();
+    let fn_name = tcx.item_name(mir.body.source.def_id());
+
+    eprintln!("FACTS: {} {:?}", fn_name, polonius_facts);
+    eprintln!("LOAN LIVE: {} {:?}", fn_name, polonius_facts.loan_live_at);
+    // Iterate over each statement in the MIR
+    for (block, data) in mir.body.basic_blocks.iter_enumerated() {
+        let pcs_block = fpcs_analysis.get_all_for_bb(block);
+        for (statement_index, statement) in pcs_block.statements.iter().enumerate() {
+            for fact in polonius_facts
+                .loan_live_at
+                .get(&location_table.mid_index(statement.location))
+                .unwrap_or(&vec![])
+                .iter()
+            {
+                eprintln!("FACT: {:?}", fact);
+            }
+            let file_path = format!(
+                "dot_graphs/{}_block_{}_stmt_{}.dot",
+                tcx.item_name(mir.body.source.def_id()),
+                block.index(),
+                statement_index
+            );
+            generate_dot_graph(
+                &statement.state,
+                mir.output_facts.as_ref().unwrap().clone(),
+                &file_path,
+            )
+            .expect("Failed to generate DOT graph");
+        }
+    }
+
+    fpcs_analysis
 }
 
 pub fn get_cgx<'mir, 'tcx>(
