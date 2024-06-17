@@ -12,16 +12,13 @@ use prusti_rustc_interface::{
 
 use crate::{
     free_pcs::{
-        CapabilityKind, CapabilityLocal, CapabilitySummary, FreePcsAnalysis,
-        RepackOp, TripleWalker, Stage, HasFpcs,
+        consistency::CapabilityConsistency, CapabilityKind, CapabilityLocal, CapabilitySummary, FreePcsAnalysis, HasExtra, HasFpcs, RepackOp, Stage, TripleWalker
     },
     utils::PlaceRepacker,
 };
 
-use super::consistency::CapabilityConsistency;
-
 #[tracing::instrument(name = "check", level = "debug", skip(cursor))]
-pub(crate) fn check<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>>(mut cursor: FreePcsAnalysis<'mir, 'tcx, D, E>) {
+pub(crate) fn check<'mir, 'tcx, T, D: HasFpcs<'mir, 'tcx> + HasExtra<T>, E: Analysis<'tcx, Domain = D>>(mut cursor: FreePcsAnalysis<'mir, 'tcx, T, D, E>) {
     let rp = cursor.repacker();
     let body = rp.body();
     for (block, data) in body.basic_blocks.iter_enumerated() {

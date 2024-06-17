@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::utils::Place;
+use crate::{borrows::domain::BorrowsDomain, utils::Place};
 use std::{
     fs::File,
     io::{self, Write},
@@ -152,6 +152,7 @@ pub fn generate_json_from_mir(body: &Body<'_>) -> io::Result<()> {
 pub fn generate_dot_graph(
     location: Location,
     summary: &CapabilitySummary,
+    live_borrows: &BorrowsDomain,
     borrow_set: &BorrowSet,
     input_facts: &PoloniusInput,
     file_path: &str,
@@ -175,13 +176,16 @@ pub fn generate_dot_graph(
             }
         }
     }
-    for (borrow_location, borrow_data) in borrow_set.location_map.iter() {
+    for borrow_index in &live_borrows.live_borrows {
+        let borrow_data = &borrow_set[*borrow_index];
         let from = format!("{:?}", borrow_data.borrowed_place);
         let to = format!("{:?}", borrow_data.assigned_place);
-        eprintln!("{} BORROWED: {} {}", file_path, from, to);
-        writeln!(file, "    \"{}\" -> \"{}\" [label=\"Borrow\"];", from, to)?;
+        writeln!(file, "    \"{}\" -> \"{}\" [label=\"{:?}\"];", from, to, borrow_index)?;
     }
+
+    // Add live borrows information
 
     writeln!(file, "}}");
     Ok(())
 }
+

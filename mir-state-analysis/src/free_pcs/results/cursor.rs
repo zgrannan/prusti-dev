@@ -46,18 +46,24 @@ impl<'mir, 'tcx> HasCgContext<'mir, 'tcx> for PcsEngine<'mir, 'tcx> {
 
 type Cursor<'mir, 'tcx, E> = ResultsCursor<'mir, 'tcx, E>;
 
-pub struct FreePcsAnalysis<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> {
+pub trait HasExtra<T> {
+    fn get_extra(&self) -> T;
+}
+
+pub struct FreePcsAnalysis<'mir, 'tcx, T, D: HasFpcs<'mir, 'tcx> + HasExtra<T>, E: Analysis<'tcx, Domain = D>> {
     cursor: Cursor<'mir, 'tcx, E>,
     curr_stmt: Option<Location>,
     end_stmt: Option<Location>,
+    _marker: std::marker::PhantomData<T>,
 }
 
-impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsAnalysis<'mir, 'tcx, D, E> {
+impl<'mir, 'tcx, T, D: HasFpcs<'mir, 'tcx>+ HasExtra<T>, E: Analysis<'tcx, Domain = D>> FreePcsAnalysis<'mir, 'tcx, T, D, E> {
     pub(crate) fn new(cursor: Cursor<'mir, 'tcx, E>) -> Self {
         Self {
             cursor,
             curr_stmt: None,
             end_stmt: None,
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -88,7 +94,7 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
     pub fn initial_state(&self) -> &CapabilitySummary<'tcx> {
         &self.cursor.get().get_curr_fpcs().after
     }
-    pub fn next(&mut self, exp_loc: Location) -> FreePcsLocation<'tcx> {
+    pub fn next(&mut self, exp_loc: Location) -> FreePcsLocation<'tcx, T> {
         let location = self.curr_stmt.unwrap();
         assert_eq!(location, exp_loc);
         assert!(location < self.end_stmt.unwrap());
@@ -103,9 +109,10 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
             state: c.after.clone(),
             repacks_start,
             repacks_middle,
+            extra: self.cursor.get().get_extra(),
         }
     }
-    pub fn terminator(&mut self) -> FreePcsTerminator<'tcx> {
+    pub fn terminator(&mut self) -> FreePcsTerminator<'tcx, T> {
         let location = self.curr_stmt.unwrap();
         assert!(location == self.end_stmt.unwrap());
         self.curr_stmt = None;
@@ -120,7 +127,8 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
             .successors()
             .map(|succ| {
                 // Get repacks
-                let to = self.cursor.results().entry_set_for_block(succ).get_curr_fpcs();
+                let entry_set = self.cursor.results().entry_set_for_block(succ);
+                let to = entry_set.get_curr_fpcs();
                 FreePcsLocation {
                     location: Location {
                         block: succ,
@@ -129,6 +137,7 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
                     state: to.after.clone(),
                     repacks_start: state.after.bridge(&to.after, rp),
                     repacks_middle: Vec::new(),
+                    extra: entry_set.get_extra(),
                 }
             })
             .collect();
@@ -137,7 +146,7 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
 
     /// Recommended interface.
     /// Does *not* require that one calls `analysis_for_bb` first
-    pub fn get_all_for_bb(&mut self, block: BasicBlock) -> FreePcsBasicBlock<'tcx> {
+    pub fn get_all_for_bb(&mut self, block: BasicBlock) -> FreePcsBasicBlock<'tcx, T> {
         self.analysis_for_bb(block);
         let mut statements = Vec::new();
         while self.curr_stmt.unwrap() != self.end_stmt.unwrap() {
@@ -152,13 +161,13 @@ impl<'mir, 'tcx, D: HasFpcs<'mir, 'tcx>, E: Analysis<'tcx, Domain = D>> FreePcsA
     }
 }
 
-pub struct FreePcsBasicBlock<'tcx> {
-    pub statements: Vec<FreePcsLocation<'tcx>>,
-    pub terminator: FreePcsTerminator<'tcx>,
+pub struct FreePcsBasicBlock<'tcx, T> {
+    pub statements: Vec<FreePcsLocation<'tcx, T>>,
+    pub terminator: FreePcsTerminator<'tcx, T>,
 }
 
 #[derive(Debug)]
-pub struct FreePcsLocation<'tcx> {
+pub struct FreePcsLocation<'tcx, T> {
     pub location: Location,
     /// Repacks before the statement
     pub repacks_start: Vec<RepackOp<'tcx>>,
@@ -166,9 +175,10 @@ pub struct FreePcsLocation<'tcx> {
     pub repacks_middle: Vec<RepackOp<'tcx>>,
     /// State after the statement
     pub state: CapabilitySummary<'tcx>,
+    pub extra: T,
 }
 
 #[derive(Debug)]
-pub struct FreePcsTerminator<'tcx> {
-    pub succs: Vec<FreePcsLocation<'tcx>>,
+pub struct FreePcsTerminator<'tcx, T> {
+    pub succs: Vec<FreePcsLocation<'tcx, T>>,
 }

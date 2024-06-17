@@ -4,12 +4,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::cell::Cell;
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use prusti_rustc_interface::{
     dataflow::{Analysis, AnalysisDomain},
-    {index::Idx, index::IndexVec},
+    index::{Idx, IndexVec},
     middle::{
         mir::{
             visit::Visitor, BasicBlock, Body, CallReturnPlaces, Local, Location, Promoted,
@@ -20,7 +19,10 @@ use prusti_rustc_interface::{
 };
 
 use crate::{
-    borrows::{domain::BorrowsDomain, engine::BorrowsEngine}, coupling_graph::CgContext, free_pcs::{engine::FpcsEngine, CapabilityKind, CapabilityLocal, FreePlaceCapabilitySummary}, utils::PlaceRepacker
+    borrows::{domain::BorrowsDomain, engine::BorrowsEngine},
+    coupling_graph::CgContext,
+    free_pcs::{engine::FpcsEngine, CapabilityKind, CapabilityLocal, FreePlaceCapabilitySummary},
+    utils::PlaceRepacker,
 };
 
 use super::domain::PlaceCapabilitySummary;
@@ -30,13 +32,16 @@ pub struct PcsEngine<'a, 'tcx> {
     block: Cell<BasicBlock>,
 
     pub(crate) fpcs: FpcsEngine<'a, 'tcx>,
-    pub(crate) borrows: BorrowsEngine,
+    pub(crate) borrows: BorrowsEngine<'a>,
 }
 impl<'a, 'tcx> PcsEngine<'a, 'tcx> {
     pub fn new(cgx: CgContext<'a, 'tcx>) -> Self {
         let cgx = Rc::new(cgx);
         let fpcs = FpcsEngine(cgx.rp);
-        let borrows = BorrowsEngine;
+        let borrows = BorrowsEngine::new(
+            cgx.mir.location_table.as_ref().unwrap(),
+            cgx.mir.input_facts.as_ref().unwrap(),
+        );
         Self {
             cgx,
             block: Cell::new(START_BLOCK),
@@ -70,8 +75,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PcsEngine<'a, 'tcx> {
         statement: &Statement<'tcx>,
         location: Location,
     ) {
-        self.borrows.apply_before_statement_effect(&mut state.borrows, statement, location);
-        self.fpcs.apply_before_statement_effect(&mut state.fpcs, statement, location);
+        self.borrows
+            .apply_before_statement_effect(&mut state.borrows, statement, location);
+        self.fpcs
+            .apply_before_statement_effect(&mut state.fpcs, statement, location);
     }
     fn apply_statement_effect(
         &mut self,
@@ -79,8 +86,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PcsEngine<'a, 'tcx> {
         statement: &Statement<'tcx>,
         location: Location,
     ) {
-        self.borrows.apply_statement_effect(&mut state.borrows, statement, location);
-        self.fpcs.apply_statement_effect(&mut state.fpcs, statement, location);
+        self.borrows
+            .apply_statement_effect(&mut state.borrows, statement, location);
+        self.fpcs
+            .apply_statement_effect(&mut state.fpcs, statement, location);
     }
     fn apply_before_terminator_effect(
         &mut self,
@@ -88,8 +97,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PcsEngine<'a, 'tcx> {
         terminator: &Terminator<'tcx>,
         location: Location,
     ) {
-        self.borrows.apply_before_terminator_effect(&mut state.borrows, terminator, location);
-        self.fpcs.apply_before_terminator_effect(&mut state.fpcs, terminator, location);
+        self.borrows
+            .apply_before_terminator_effect(&mut state.borrows, terminator, location);
+        self.fpcs
+            .apply_before_terminator_effect(&mut state.fpcs, terminator, location);
     }
     fn apply_terminator_effect<'mir>(
         &mut self,
@@ -97,8 +108,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PcsEngine<'a, 'tcx> {
         terminator: &'mir Terminator<'tcx>,
         location: Location,
     ) -> TerminatorEdges<'mir, 'tcx> {
-        self.borrows.apply_terminator_effect(&mut state.borrows, terminator, location);
-        self.fpcs.apply_terminator_effect(&mut state.fpcs, terminator, location);
+        self.borrows
+            .apply_terminator_effect(&mut state.borrows, terminator, location);
+        self.fpcs
+            .apply_terminator_effect(&mut state.fpcs, terminator, location);
         terminator.edges()
     }
 

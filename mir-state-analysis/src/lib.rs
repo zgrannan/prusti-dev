@@ -4,6 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#![allow(unused_imports)]
 #![feature(rustc_private)]
 #![feature(box_patterns, hash_extract_if, extract_if)]
 
@@ -16,14 +17,15 @@ pub mod borrows;
 
 use std::fs::create_dir_all;
 
+use borrows::domain::BorrowsDomain;
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
-use free_pcs::generate_dot_graph;
+use free_pcs::{generate_dot_graph, HasExtra};
 use prusti_rustc_interface::{
-    borrowck::consumers::{LocationTable, PoloniusInput, PoloniusOutput, RegionInferenceContext, BodyWithBorrowckFacts},
+    borrowck::consumers::BodyWithBorrowckFacts,
     dataflow::Analysis,
     index::IndexVec,
     middle::{
-        mir::{Body, Promoted, START_BLOCK, BasicBlock},
+        mir::{Body, Promoted, START_BLOCK},
         ty::TyCtxt,
     },
 };
@@ -33,9 +35,16 @@ use crate::free_pcs::generate_json_from_mir;
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<
     'mir,
     'tcx,
+    BorrowsDomain,
     PlaceCapabilitySummary<'mir, 'tcx>,
     PcsEngine<'mir, 'tcx>,
 >;
+
+impl<'mir, 'tcx> HasExtra<BorrowsDomain> for PlaceCapabilitySummary<'mir, 'tcx> {
+    fn get_extra(&self) -> BorrowsDomain {
+        self.borrows.clone()
+    }
+}
 
 #[tracing::instrument(name = "run_free_pcs", level = "debug", skip(mir, tcx))]
 pub fn run_free_pcs<'mir, 'tcx>(
@@ -63,21 +72,10 @@ pub fn run_free_pcs<'mir, 'tcx>(
     let location_table = mir.location_table.as_ref().unwrap().clone();
     let fn_name = tcx.item_name(mir.body.source.def_id());
 
-    eprintln!("INPUT FACTS: {} {:?}", fn_name, input_facts);
-    eprintln!("OUTPUT FACTS: {} {:?}", fn_name, polonius_facts);
-    eprintln!("LOAN LIVE: {} {:?}", fn_name, polonius_facts.loan_live_at);
     // Iterate over each statement in the MIR
     for (block, data) in mir.body.basic_blocks.iter_enumerated() {
         let pcs_block = fpcs_analysis.get_all_for_bb(block);
         for (statement_index, statement) in pcs_block.statements.iter().enumerate() {
-            for fact in polonius_facts
-                .loan_live_at
-                .get(&location_table.mid_index(statement.location))
-                .unwrap_or(&vec![])
-                .iter()
-            {
-                eprintln!("FACT: {:?}", fact);
-            }
             let file_path = format!(
                 "{}/{}_block_{}_stmt_{}.dot",
                 dir_path,
@@ -88,6 +86,7 @@ pub fn run_free_pcs<'mir, 'tcx>(
             generate_dot_graph(
                 statement.location,
                 &statement.state,
+                &statement.extra,
                 &mir.borrow_set,
                 &input_facts,
                 &file_path,

@@ -4,8 +4,7 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
 };
 use mir_state_analysis::{
-    FpcsOutput,
-    free_pcs::{FreePcsBasicBlock, FreePcsLocation, RepackOp, CapabilityKind}, utils::Place,
+    borrows::domain::BorrowsDomain, free_pcs::{CapabilityKind, FreePcsBasicBlock, FreePcsLocation, RepackOp}, utils::Place, FpcsOutput
 };
 //use mir_ssa_analysis::{
 //    SsaAnalysis,
@@ -286,7 +285,7 @@ struct EncVisitor<'tcx, 'vir, 'enc>
     tmp_ctr: usize,
 
     // for the current basic block
-    current_fpcs: Option<FreePcsBasicBlock<'tcx>>,
+    current_fpcs: Option<FreePcsBasicBlock<'tcx, BorrowsDomain>>,
 
     current_stmts: Option<Vec<vir::Stmt<'vir>>>,
     current_terminator: Option<vir::TerminatorStmt<'vir>>,
@@ -354,7 +353,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn collect_terminator_repacks(
         &mut self,
         idx: usize,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain>) -> &'a [RepackOp<'b>],
     ) -> Vec<&'vir vir::StmtData<'vir>> {
         let current_stmts = self.current_stmts.take();
         self.current_stmts = Some(Vec::new());
@@ -410,7 +409,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn fpcs_repacks_location(
         &mut self,
         location: mir::Location,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain>) -> &'a [RepackOp<'b>],
     ) {
         let current_fpcs = self.current_fpcs.take().unwrap();
         let repacks = repacks(&current_fpcs.statements[location.statement_index]);
@@ -421,7 +420,7 @@ impl<'tcx, 'vir, 'enc> EncVisitor<'tcx, 'vir, 'enc> {
     fn fpcs_repacks_terminator(
         &mut self,
         succ_idx: usize,
-        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b>) -> &'a [RepackOp<'b>],
+        repacks: impl for<'a, 'b> Fn(&'a FreePcsLocation<'b, BorrowsDomain>) -> &'a [RepackOp<'b>],
     ) {
         let current_fpcs = self.current_fpcs.take().unwrap();
         let repacks = repacks(&current_fpcs.terminator.succs[succ_idx]);
