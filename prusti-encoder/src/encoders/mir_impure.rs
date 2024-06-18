@@ -285,7 +285,7 @@ struct EncVisitor<'tcx, 'vir, 'enc>
     tmp_ctr: usize,
 
     // for the current basic block
-    current_fpcs: Option<FreePcsBasicBlock<'tcx, BorrowsDomain>>,
+    current_fpcs: Option<FreePcsBasicBlock<'tcx, BorrowsDomain<'tcx>>>,
 
     current_stmts: Option<Vec<vir::Stmt<'vir>>>,
     current_terminator: Option<vir::TerminatorStmt<'vir>>,

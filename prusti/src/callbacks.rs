@@ -166,14 +166,6 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
             if !config::no_verify() {
                 /*
                 if config::test_free_pcs() {
-                    for proc_id in env.get_annotated_procedures_and_types().0.iter() {
-                        let name = env.name.get_unique_item_name(*proc_id);
-                        println!("Calculating FPCS for: {name}");
-
-                        let current_procedure = env.get_procedure(*proc_id);
-                        let mir = current_procedure.get_mir_rc();
-                        test_free_pcs(&mir, tcx);
-                    }
                 } else {*/
                     verify(env, def_spec);
                 //}

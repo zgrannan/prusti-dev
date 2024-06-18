@@ -32,15 +32,19 @@ pub struct PcsEngine<'a, 'tcx> {
     block: Cell<BasicBlock>,
 
     pub(crate) fpcs: FpcsEngine<'a, 'tcx>,
-    pub(crate) borrows: BorrowsEngine<'a>,
+    pub(crate) borrows: BorrowsEngine<'a, 'tcx>,
 }
 impl<'a, 'tcx> PcsEngine<'a, 'tcx> {
     pub fn new(cgx: CgContext<'a, 'tcx>) -> Self {
         let cgx = Rc::new(cgx);
         let fpcs = FpcsEngine(cgx.rp);
         let borrows = BorrowsEngine::new(
+            cgx.rp.tcx(),
+            cgx.rp.body(),
             cgx.mir.location_table.as_ref().unwrap(),
             cgx.mir.input_facts.as_ref().unwrap(),
+            cgx.mir.borrow_set.clone(),
+            cgx.mir.region_inference_context.clone(),
         );
         Self {
             cgx,

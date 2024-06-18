@@ -86,10 +86,7 @@
 
         dagre.layout(g);
 
-        const svg = d3
-          .select("#graph")
-          .append("svg")
-          .attr("height", 800);
+        const svg = d3.select("#graph").append("svg");
 
         const node = svg
           .append("g")
@@ -106,7 +103,7 @@
         node
           .append("foreignObject")
           .attr("width", 200)
-          .attr("height", 300)
+          .attr("height", 400)
           .attr("class", "foreign-object")
           .html((d) => g.node(d).label);
 
@@ -126,9 +123,17 @@
         // Recompute the layout with updated node dimensions
         dagre.layout(g);
 
-        // Update SVG width based on the bounding box of the graph
-        const graphWidth = Math.max(...g.nodes().map(d => g.node(d).x + g.node(d).width / 2)) + 20;
-        svg.attr("width", graphWidth);
+        // Calculate width and height of the complete graph
+        const graphWidth =
+          Math.max(...g.nodes().map((d) => g.node(d).x + g.node(d).width / 2)) +
+          20;
+        const graphHeight =
+          Math.max(
+            ...g.nodes().map((d) => g.node(d).y + g.node(d).height / 2)
+          ) + 20;
+
+        // Update SVG dimensions based on calculated values
+        svg.attr("width", graphWidth).attr("height", graphHeight);
 
         // Transform the nodes to their new positions
         node.attr("transform", (d) => {

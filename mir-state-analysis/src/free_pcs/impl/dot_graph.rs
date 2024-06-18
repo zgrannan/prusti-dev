@@ -4,14 +4,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{borrows::domain::BorrowsDomain, utils::Place};
+use crate::{
+    borrows::domain::{BorrowsDomain, RegionAbstraction},
+    utils::{Place, PlaceRepacker},
+};
 use std::{
+    collections::HashSet,
     fs::File,
     io::{self, Write},
     rc::Rc,
 };
 
-use super::{CapabilityLocal, CapabilitySummary};
+use super::{CapabilityKind, CapabilityLocal, CapabilitySummary};
 use prusti_rustc_interface::{
     borrowck::{
         borrow_set::BorrowSet,
@@ -24,7 +28,7 @@ use prusti_rustc_interface::{
     dataflow::{Analysis, ResultsCursor},
     index::IndexVec,
     middle::{
-        mir::{Body, Local, Location, Promoted, RETURN_PLACE, TerminatorKind, UnwindAction},
+        mir::{self, Body, Local, Location, Promoted, TerminatorKind, UnwindAction, RETURN_PLACE},
         ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
     },
 };
@@ -104,15 +108,59 @@ fn mk_mir_graph(body: &Body<'_>) -> MirGraph {
         });
 
         match &data.terminator().kind {
-            TerminatorKind::Goto { target } => todo!(),
-            TerminatorKind::SwitchInt { discr, targets } => todo!(),
+            TerminatorKind::Goto { target } => {
+                edges.push(MirEdge {
+                    source: format!("{:?}", bb),
+                    target: format!("{:?}", target),
+                    label: "goto".to_string(),
+                });
+            }
+            TerminatorKind::SwitchInt { discr, targets } => {
+                for (val, target) in targets.iter() {
+                    edges.push(MirEdge {
+                        source: format!("{:?}", bb),
+                        target: format!("{:?}", target),
+                        label: format!("{}", val),
+                    });
+                }
+                edges.push(MirEdge {
+                    source: format!("{:?}", bb),
+                    target: format!("{:?}", targets.otherwise()),
+                    label: "otherwise".to_string(),
+                });
+            }
             TerminatorKind::UnwindResume => {}
             TerminatorKind::UnwindTerminate(_) => todo!(),
             TerminatorKind::Return => {}
             TerminatorKind::Unreachable => todo!(),
-            TerminatorKind::Drop { place, target, unwind, replace } => todo!(),
-            TerminatorKind::Call { func, args, destination, target, unwind, call_source, fn_span } => todo!(),
-            TerminatorKind::Assert { cond, expected, msg, target, unwind } => {
+            TerminatorKind::Drop {
+                place,
+                target,
+                unwind,
+                replace,
+            } => todo!(),
+            TerminatorKind::Call {
+                func,
+                args,
+                destination,
+                target,
+                unwind,
+                call_source,
+                fn_span,
+            } => {
+                edges.push(MirEdge {
+                    source: format!("{:?}", bb),
+                    target: format!("{:?}", target.unwrap()),
+                    label: "call".to_string(),
+                });
+            }
+            TerminatorKind::Assert {
+                cond,
+                expected,
+                msg,
+                target,
+                unwind,
+            } => {
                 match unwind {
                     UnwindAction::Continue => todo!(),
                     UnwindAction::Unreachable => todo!(),
@@ -131,11 +179,29 @@ fn mk_mir_graph(body: &Body<'_>) -> MirGraph {
                     label: format!("success"),
                 });
             }
-            TerminatorKind::Yield { value, resume, resume_arg, drop } => todo!(),
+            TerminatorKind::Yield {
+                value,
+                resume,
+                resume_arg,
+                drop,
+            } => todo!(),
             TerminatorKind::GeneratorDrop => todo!(),
-            TerminatorKind::FalseEdge { real_target, imaginary_target } => todo!(),
-            TerminatorKind::FalseUnwind { real_target, unwind } => todo!(),
-            TerminatorKind::InlineAsm { template, operands, options, line_spans, destination, unwind } => todo!(),
+            TerminatorKind::FalseEdge {
+                real_target,
+                imaginary_target,
+            } => todo!(),
+            TerminatorKind::FalseUnwind {
+                real_target,
+                unwind,
+            } => todo!(),
+            TerminatorKind::InlineAsm {
+                template,
+                operands,
+                options,
+                line_spans,
+                destination,
+                unwind,
+            } => todo!(),
         }
     }
 
@@ -149,43 +215,164 @@ pub fn generate_json_from_mir(body: &Body<'_>) -> io::Result<()> {
     Ok(())
 }
 
-pub fn generate_dot_graph(
+pub fn place_id<'tcx>(place: &Place<'tcx>) -> String {
+    format!("{:?}", place)
+}
+
+pub fn dot_edge(
+    file: &mut File,
+    source: &str,
+    target: &str,
+    label: &str,
+    disabled: bool,
+) -> io::Result<()> {
+    if disabled {
+        writeln!(
+            file,
+            "    \"{}\" -> \"{}\" [label=\"{}\", color=\"gray\", style=\"dashed\", fontcolor=\"gray\"];",
+            source, target, label
+        )?;
+    } else {
+        writeln!(
+            file,
+            "    \"{}\" -> \"{}\" [label=\"{}\"];",
+            source, target, label
+        )?;
+    }
+    Ok(())
+}
+
+pub fn has_place<'tcx>(summary: &CapabilitySummary<'tcx>, place: &Place<'tcx>) -> bool {
+    if let CapabilityLocal::Allocated(projs) = &summary[place.local] {
+        projs.contains_key(place)
+    } else {
+        false
+    }
+}
+
+struct GraphDrawer<'a, 'tcx> {
+    file: File,
+    written_places: HashSet<Place<'tcx>>,
+    repacker: Rc<PlaceRepacker<'a, 'tcx>>,
+}
+
+impl<'a, 'tcx: 'a> GraphDrawer<'a, 'tcx> {
+    fn new(file_path: &str, repacker: Rc<PlaceRepacker<'a, 'tcx>>) -> Self {
+        let file = File::create(file_path).unwrap();
+        Self {
+            file,
+            written_places: HashSet::new(),
+            repacker,
+        }
+    }
+
+    fn add_place_if_necessary(&mut self, place: Place<'tcx>) -> io::Result<()> {
+        if !self.written_places.contains(&place) {
+            self.write_place(place, None)?;
+        }
+        Ok(())
+    }
+
+    pub fn edge_between_places(
+        &mut self,
+        summary: &CapabilitySummary<'tcx>,
+        source: &Place<'tcx>,
+        target: &Place<'tcx>,
+        label: &str,
+    ) -> io::Result<()> {
+        let disabled = !has_place(summary, source) || !has_place(summary, target);
+        self.add_place_if_necessary(source.clone())?;
+        self.add_place_if_necessary(target.clone())?;
+        dot_edge(
+            &mut self.file,
+            &place_id(source),
+            &place_id(target),
+            label,
+            disabled,
+        )
+    }
+
+    fn write_place(&mut self, place: Place<'tcx>, kind: Option<CapabilityKind>) -> io::Result<()> {
+        self.written_places.insert(place);
+        let (label_text, color) = match kind {
+            Some(k) => (format!("{:?}", k), "black"),
+            None => ("?".to_string(), "gray"),
+        };
+        writeln!(
+            self.file,
+            "    \"{:?}\" [label=\"{:?}: {} {}\", fontcolor=\"{}\", color=\"{}\"];",
+            place,
+            place,
+            place.ty(*self.repacker).ty,
+            label_text,
+            color,
+            color
+        )
+    }
+}
+
+pub fn generate_dot_graph<'a, 'tcx: 'a>(
     location: Location,
-    summary: &CapabilitySummary,
-    live_borrows: &BorrowsDomain,
-    borrow_set: &BorrowSet,
+    repacker: Rc<PlaceRepacker<'a, 'tcx>>,
+    summary: &CapabilitySummary<'tcx>,
+    borrows_domain: &BorrowsDomain<'tcx>,
+    borrow_set: &BorrowSet<'tcx>,
     input_facts: &PoloniusInput,
     file_path: &str,
 ) -> io::Result<()> {
-    let mut file = File::create(file_path)?;
-    writeln!(file, "digraph CapabilitySummary {{")?;
-    writeln!(file, "node [shape=rect]")?;
+    let mut drawer = GraphDrawer::new(file_path, repacker);
+    writeln!(drawer.file, "digraph CapabilitySummary {{")?;
+    writeln!(drawer.file, "node [shape=rect]")?;
 
     for (local, capability) in summary.iter().enumerate() {
         match capability {
-            CapabilityLocal::Unallocated => {
-            }
+            CapabilityLocal::Unallocated => {}
             CapabilityLocal::Allocated(projections) => {
                 for (place, kind) in projections.iter() {
-                    writeln!(
-                        file,
-                        "    \"{:?}\" [label=\"{:?} {:?}\"];",
-                        place, place, kind
-                    )?;
+                    drawer.write_place(*place, Some(*kind))?;
                 }
             }
         }
     }
-    for borrow_index in &live_borrows.live_borrows {
+    for borrow_index in &borrows_domain.live_borrows {
         let borrow_data = &borrow_set[*borrow_index];
-        let from = format!("{:?}", borrow_data.borrowed_place);
-        let to = format!("{:?}", borrow_data.assigned_place);
-        writeln!(file, "    \"{}\" -> \"{}\" [label=\"{:?}\"];", from, to, borrow_index)?;
+        drawer.edge_between_places(
+            summary,
+            &borrow_data.borrowed_place.into(),
+            &borrow_data.assigned_place.into(),
+            &format!("{:?}: {:?}", borrow_index, borrow_data.region),
+        )?
     }
 
-    // Add live borrows information
+    for (idx, region_abstraction) in borrows_domain.region_abstractions.iter().enumerate() {
+        let ra_node_label = format!("ra{}", idx);
+        writeln!(
+            drawer.file,
+            "    \"{}\" [label=\"{}\", shape=egg];",
+            ra_node_label, ra_node_label
+        )?;
+        for loan_in in &region_abstraction.loans_in {
+            drawer.add_place_if_necessary((*loan_in).into())?;
+            dot_edge(
+                &mut drawer.file,
+                &place_id(&(*loan_in).into()),
+                &ra_node_label,
+                "loan_in",
+                false,
+            )?;
+        }
+        for loan_out in &region_abstraction.loans_out {
+            drawer.add_place_if_necessary((*loan_out).into())?;
+            dot_edge(
+                &mut drawer.file,
+                &ra_node_label,
+                &place_id(&(*loan_out).into()),
+                "loan_out",
+                false,
+            )?;
+        }
+    }
 
-    writeln!(file, "}}");
+    writeln!(&mut drawer.file, "}}");
     Ok(())
 }
-

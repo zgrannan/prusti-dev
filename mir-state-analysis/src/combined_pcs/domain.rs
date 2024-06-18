@@ -31,7 +31,7 @@ pub struct PlaceCapabilitySummary<'a, 'tcx> {
     pub block: BasicBlock,
 
     pub fpcs: FreePlaceCapabilitySummary<'a, 'tcx>,
-    pub borrows: BorrowsDomain,
+    pub borrows: BorrowsDomain<'tcx>,
 }
 
 impl<'a, 'tcx> PlaceCapabilitySummary<'a, 'tcx> {

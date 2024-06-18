@@ -15,7 +15,7 @@ pub mod r#loop;
 pub mod combined_pcs;
 pub mod borrows;
 
-use std::fs::create_dir_all;
+use std::{fs::create_dir_all, rc::Rc};
 
 use borrows::domain::BorrowsDomain;
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
@@ -35,13 +35,13 @@ use crate::free_pcs::generate_json_from_mir;
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<
     'mir,
     'tcx,
-    BorrowsDomain,
+    BorrowsDomain<'tcx>,
     PlaceCapabilitySummary<'mir, 'tcx>,
     PcsEngine<'mir, 'tcx>,
 >;
 
-impl<'mir, 'tcx> HasExtra<BorrowsDomain> for PlaceCapabilitySummary<'mir, 'tcx> {
-    fn get_extra(&self) -> BorrowsDomain {
+impl<'mir, 'tcx> HasExtra<BorrowsDomain<'tcx>> for PlaceCapabilitySummary<'mir, 'tcx> {
+    fn get_extra(&self) -> BorrowsDomain<'tcx> {
         self.borrows.clone()
     }
 }
@@ -68,9 +68,11 @@ pub fn run_free_pcs<'mir, 'tcx>(
     }
     create_dir_all(dir_path).expect("Failed to create directory for DOT files");
     let input_facts = mir.input_facts.as_ref().unwrap().clone();
-    let polonius_facts = mir.output_facts.as_ref().unwrap().clone();
+    let output_facts = mir.output_facts.as_ref().unwrap().clone();
     let location_table = mir.location_table.as_ref().unwrap().clone();
     let fn_name = tcx.item_name(mir.body.source.def_id());
+
+    let rp = coupling_graph::CgContext::new(tcx, mir).rp;
 
     // Iterate over each statement in the MIR
     for (block, data) in mir.body.basic_blocks.iter_enumerated() {
@@ -85,6 +87,7 @@ pub fn run_free_pcs<'mir, 'tcx>(
             );
             generate_dot_graph(
                 statement.location,
+                Rc::new(rp),
                 &statement.state,
                 &statement.extra,
                 &mir.borrow_set,
