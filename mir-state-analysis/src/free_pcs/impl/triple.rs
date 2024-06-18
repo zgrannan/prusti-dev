@@ -5,17 +5,33 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use prusti_rustc_interface::middle::mir::{
-    visit::Visitor, Local, Location, Operand, Rvalue, Statement, StatementKind,
-    Terminator, TerminatorKind, RETURN_PLACE,
+    visit::Visitor, Local, Location, Operand, Rvalue, Statement, StatementKind, Terminator,
+    TerminatorKind, RETURN_PLACE,
 };
 
-use crate::{free_pcs::CapabilityKind, utils::{Place, PlaceRepacker}};
+use crate::{
+    free_pcs::CapabilityKind,
+    utils::{Place, PlaceRepacker},
+};
 
 use super::CapabilitySummary;
 
 pub(crate) struct Triple<'tcx> {
-    pub(super) pre: Condition<'tcx>,
-    pub(super) post: Condition<'tcx>,
+    pre: Condition<'tcx>,
+    post: Condition<'tcx>,
+}
+
+impl<'tcx> Triple<'tcx> {
+    pub fn new(pre: Condition<'tcx>, post: Condition<'tcx>) -> Self {
+        Self { pre, post }
+    }
+
+    pub fn pre(&self) -> &Condition<'tcx> {
+        &self.pre
+    }
+    pub fn post(&self) -> &Condition<'tcx> {
+        &self.post
+    }
 }
 
 pub(crate) enum Condition<'tcx> {
@@ -23,6 +39,15 @@ pub(crate) enum Condition<'tcx> {
     AllocateOrDeallocate(Local),
     Unalloc(Local),
     Unchanged,
+}
+
+impl<'tcx> Condition<'tcx> {
+    fn capability_for_place_stripping_deref(
+        place: Place<'tcx>,
+        kind: CapabilityKind,
+    ) -> Condition<'tcx> {
+        Condition::Capability(place.stripping_deref(), kind)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,14 +64,28 @@ pub(crate) struct TripleWalker<'a, 'b, 'tcx> {
 }
 
 impl<'a, 'b, 'tcx> TripleWalker<'a, 'b, 'tcx> {
-    pub(crate) fn prepare(summary: &'a mut CapabilitySummary<'tcx>, repacker: PlaceRepacker<'b, 'tcx>, stage: Stage) -> Self {
+    pub(crate) fn prepare(
+        summary: &'a mut CapabilitySummary<'tcx>,
+        repacker: PlaceRepacker<'b, 'tcx>,
+        stage: Stage,
+    ) -> Self {
         Self {
-            summary, repacker, stage, preparing: true
+            summary,
+            repacker,
+            stage,
+            preparing: true,
         }
     }
-    pub(crate) fn apply(summary: &'a mut CapabilitySummary<'tcx>, repacker: PlaceRepacker<'b, 'tcx>, stage: Stage) -> Self {
+    pub(crate) fn apply(
+        summary: &'a mut CapabilitySummary<'tcx>,
+        repacker: PlaceRepacker<'b, 'tcx>,
+        stage: Stage,
+    ) -> Self {
         Self {
-            summary, repacker, stage, preparing: false
+            summary,
+            repacker,
+            stage,
+            preparing: false,
         }
     }
     fn triple(&mut self, stage: Stage, t: Triple<'tcx>) {
@@ -66,10 +105,13 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
     fn visit_operand(&mut self, operand: &Operand<'tcx>, location: Location) {
         self.super_operand(operand, location);
         let t = match *operand {
-            Operand::Copy(place) => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
-                post: Condition::Unchanged,
-            },
+            Operand::Copy(place) => {
+                let place: Place<'tcx> = place.into();
+                Triple {
+                    pre: Condition::Capability(place.stripping_deref(), CapabilityKind::Exclusive),
+                    post: Condition::Unchanged,
+                }
+            }
             Operand::Move(place) => Triple {
                 pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
                 post: Condition::Capability(place.into(), CapabilityKind::Write),
@@ -95,14 +137,20 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
             | Aggregate(_, _)
             | ShallowInitBox(_, _) => {}
 
-            &Ref(_, _, place) |
-            &AddressOf(_, place) |
-            &Len(place) |
-            &Discriminant(place) |
-            &CopyForDeref(place) => self.triple(Stage::Before, Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
-                post: Condition::Unchanged,
-            }),
+            &Ref(_, _, place)
+            | &AddressOf(_, place)
+            | &Len(place)
+            | &Discriminant(place)
+            | &CopyForDeref(place) => self.triple(
+                Stage::Before,
+                Triple {
+                    pre: Condition::capability_for_place_stripping_deref(
+                        place.into(),
+                        CapabilityKind::Exclusive,
+                    ),
+                    post: Condition::Unchanged,
+                },
+            ),
         }
     }
 
@@ -112,24 +160,45 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
         use StatementKind::*;
         let t = match &statement.kind {
             &Assign(box (place, ref rvalue)) => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Write),
-                post: Condition::Capability(place.into(), rvalue.capability()),
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Write,
+                ),
+                post: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    rvalue.capability(),
+                ),
             },
             &FakeRead(box (_, place)) => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Exclusive,
+                ),
                 post: Condition::Unchanged,
             },
-            &PlaceMention(box place) =>  Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Write),
+            &PlaceMention(box place) => Triple {
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Write,
+                ),
                 post: Condition::Unchanged,
             },
             &SetDiscriminant { box place, .. } => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Exclusive,
+                ),
                 post: Condition::Unchanged,
             },
             &Deinit(box place) => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
-                post: Condition::Capability(place.into(), CapabilityKind::Write),
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Exclusive,
+                ),
+                post: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Write,
+                ),
             },
             &StorageLive(local) => Triple {
                 pre: Condition::Unalloc(local),
@@ -140,7 +209,10 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
                 post: Condition::Unalloc(local),
             },
             &Retag(_, box place) => Triple {
-                pre: Condition::Capability(place.into(), CapabilityKind::Exclusive),
+                pre: Condition::capability_for_place_stripping_deref(
+                    place.into(),
+                    CapabilityKind::Exclusive,
+                ),
                 post: Condition::Unchanged,
             },
             AscribeUserType(..) | Coverage(..) | Intrinsic(..) | ConstEvalCounter | Nop => return,
@@ -173,10 +245,13 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
                     } else {
                         Condition::Unalloc(local)
                     };
-                    self.triple(Stage::Main, Triple {
-                        pre,
-                        post: Condition::Unchanged,
-                    });
+                    self.triple(
+                        Stage::Main,
+                        Triple {
+                            pre,
+                            post: Condition::Unchanged,
+                        },
+                    );
                 }
                 return;
             }

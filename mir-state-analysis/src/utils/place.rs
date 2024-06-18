@@ -11,51 +11,19 @@ use std::{
     mem::discriminant,
 };
 
+use debug_info::DebugInfo;
 use derive_more::{Deref, DerefMut};
 
 use prusti_rustc_interface::middle::{
     mir::{Local, Place as MirPlace, PlaceElem, PlaceRef, ProjectionElem},
     ty::Ty,
 };
-
-// #[derive(Clone, Copy, Deref, DerefMut, Hash, PartialEq, Eq)]
-// pub struct RootPlace<'tcx>(Place<'tcx>);
-// impl<'tcx> RootPlace<'tcx> {
-//     pub(super) fn new(place: Place<'tcx>) -> Self {
-//         assert!(place.projection.last().copied().map(Self::is_indirect).unwrap_or(true));
-//         Self(place)
-//     }
-
-//     pub fn is_indirect<V, T>(p: ProjectionElem<V, T>) -> bool {
-//         match p {
-//             ProjectionElem::Deref => true,
-
-//             ProjectionElem::Field(_, _)
-//             | ProjectionElem::Index(_)
-//             | ProjectionElem::OpaqueCast(_)
-//             | ProjectionElem::ConstantIndex { .. }
-//             | ProjectionElem::Subslice { .. }
-//             | ProjectionElem::Downcast(_, _) => false,
-//         }
-//     }
-// }
-// impl Debug for RootPlace<'_> {
-//     fn fmt(&self, fmt: &mut Formatter) -> Result {
-//         self.0.fmt(fmt)
-//     }
-// }
-// impl From<Local> for RootPlace<'_> {
-//     fn from(local: Local) -> Self {
-//         Self(local.into())
-//     }
-// }
-
 #[derive(Clone, Copy, Deref, DerefMut)]
-pub struct Place<'tcx>(PlaceRef<'tcx>);
+pub struct Place<'tcx>(#[deref] #[deref_mut] PlaceRef<'tcx>, DebugInfo<'static>);
 
 impl<'tcx> Place<'tcx> {
     pub(crate) fn new(local: Local, projection: &'tcx [PlaceElem<'tcx>]) -> Self {
-        Self(PlaceRef { local, projection })
+        Self(PlaceRef { local, projection }, DebugInfo::new_static())
     }
 
     pub(crate) fn compare_projections(
@@ -89,6 +57,11 @@ impl<'tcx> Place<'tcx> {
     ///  - `x[3 of 6]` and `x[4 of 6]`
     #[tracing::instrument(level = "trace", ret)]
     pub(crate) fn partial_cmp(self, right: Self) -> Option<PlaceOrdering> {
+        if self.projection.contains(&ProjectionElem::Deref)
+            || right.projection.contains(&ProjectionElem::Deref)
+        {
+            return None;
+        }
         if self.local != right.local {
             return None;
         }
@@ -172,12 +145,6 @@ impl<'tcx> Place<'tcx> {
         self.partial_cmp(right).is_some()
     }
 
-    pub fn projection_contains_deref(self) -> bool {
-        self.projection
-            .iter()
-            .any(|proj| matches!(proj, ProjectionElem::Deref))
-    }
-
     #[tracing::instrument(level = "debug", ret, fields(lp = ?self.projection, rp = ?other.projection))]
     pub fn common_prefix(self, other: Self) -> Self {
         assert_eq!(self.local, other.local);
@@ -208,15 +175,27 @@ impl<'tcx> Place<'tcx> {
             .map(|(place, proj)| (place.into(), proj))
     }
 
-    pub fn projects_exactly_one_deref(self) -> bool {
-        self.projection.len() == 1 && matches!(self.projection[0], ProjectionElem::Deref)
-    }
-
     pub fn last_projection_ty(self) -> Option<Ty<'tcx>> {
         self.last_projection().and_then(|(_, proj)| match proj {
             ProjectionElem::Field(_, ty) | ProjectionElem::OpaqueCast(ty) => Some(ty),
             _ => None,
         })
+    }
+
+    pub fn is_deref(&self) -> bool {
+        self.projection.first() == Some(&ProjectionElem::Deref)
+    }
+
+    pub fn debug_info(&self) -> DebugInfo<'static> {
+        self.1
+    }
+
+    pub fn stripping_deref(self) -> Self {
+        if self.is_deref() {
+            Self::new(self.local, &self.projection[1..])
+        } else {
+            self
+        }
     }
 }
 
@@ -353,12 +332,12 @@ impl Hash for Place<'_> {
 // }
 impl<'tcx> From<PlaceRef<'tcx>> for Place<'tcx> {
     fn from(value: PlaceRef<'tcx>) -> Self {
-        Self(value)
+        Self(value, DebugInfo::new_static())
     }
 }
 impl<'tcx> From<MirPlace<'tcx>> for Place<'tcx> {
     fn from(value: MirPlace<'tcx>) -> Self {
-        Self(value.as_ref())
+        Self(value.as_ref(), DebugInfo::new_static())
     }
 }
 impl<'tcx> From<Local> for Place<'tcx> {

@@ -30,6 +30,9 @@ impl<'tcx> CapabilitySummary<'tcx> {
                 }
             }
             Condition::Capability(place, cap) => {
+                if place.is_deref() {
+                    panic!("Place {:?} is a deref, {}", place, place.debug_info())
+                }
                 let cp = self[place.local].get_allocated_mut();
                 cp.repack(place, repacker);
                 if cp[&place] > cap {
@@ -40,13 +43,13 @@ impl<'tcx> CapabilitySummary<'tcx> {
         }
     }
     pub(crate) fn ensures(&mut self, t: Triple<'tcx>, repacker: PlaceRepacker<'_, 'tcx>) {
-        match t.pre {
+        match t.pre() {
             Condition::Unchanged => {}
             Condition::Unalloc(local) => {
-                assert!(self[local].is_unallocated(), "local: {local:?}, fpcs: {self:?}\n");
+                assert!(self[*local].is_unallocated(), "local: {local:?}, fpcs: {self:?}\n");
             }
             Condition::AllocateOrDeallocate(local) => {
-                assert_eq!(self[local].get_allocated_mut()[&local.into()], CapabilityKind::Write);
+                assert_eq!(self[*local].get_allocated_mut()[&(*local).into()], CapabilityKind::Write);
             }
             Condition::Capability(place, cap) => {
                 match cap {
@@ -64,19 +67,19 @@ impl<'tcx> CapabilitySummary<'tcx> {
                 }
 
                 let cp = self[place.local].get_allocated_mut();
-                assert_eq!(cp[&place], cap); // TODO: is this too strong for shallow exclusive?
+                assert_eq!(cp[&place], *cap); // TODO: is this too strong for shallow exclusive?
             }
         }
-        match t.post {
+        match t.post() {
             Condition::Unchanged => {}
             Condition::Unalloc(local) => {
-                self[local] = CapabilityLocal::Unallocated;
+                self[*local] = CapabilityLocal::Unallocated;
             }
             Condition::AllocateOrDeallocate(local) => {
-                self[local] = CapabilityLocal::Allocated(CapabilityProjections::new_uninit(local));
+                self[*local] = CapabilityLocal::Allocated(CapabilityProjections::new_uninit(*local));
             }
             Condition::Capability(place, cap) => {
-                self[place.local].get_allocated_mut().update_cap(place, cap);
+                self[place.local].get_allocated_mut().update_cap(*place, *cap);
             }
         }
     }

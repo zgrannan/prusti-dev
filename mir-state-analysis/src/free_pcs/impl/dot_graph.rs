@@ -5,14 +5,11 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::{
-    borrows::domain::{BorrowsDomain, RegionAbstraction},
+    borrows::domain::{Borrow, BorrowsDomain, RegionAbstraction},
     utils::{Place, PlaceRepacker},
 };
 use std::{
-    collections::HashSet,
-    fs::File,
-    io::{self, Write},
-    rc::Rc,
+    collections::HashSet, fs::File, io::{self, Write}, rc::Rc
 };
 
 use super::{CapabilityKind, CapabilityLocal, CapabilitySummary};
@@ -334,14 +331,26 @@ pub fn generate_dot_graph<'a, 'tcx: 'a>(
             }
         }
     }
-    for borrow_index in &borrows_domain.live_borrows {
-        let borrow_data = &borrow_set[*borrow_index];
-        drawer.edge_between_places(
-            summary,
-            &borrow_data.borrowed_place.into(),
-            &borrow_data.assigned_place.into(),
-            &format!("{:?}: {:?}", borrow_index, borrow_data.region),
-        )?
+    for borrow in &borrows_domain.live_borrows {
+        match borrow {
+            Borrow::Rustc(borrow_index) => {
+                let borrow_data = &borrow_set[*borrow_index];
+                drawer.edge_between_places(
+                    summary,
+                    &borrow_data.borrowed_place.into(),
+                    &borrow_data.assigned_place.into(),
+                    &format!("{:?}: {:?}", borrow_index, borrow_data.region),
+                )?
+            }
+            Borrow::PCS { borrowed_place, assigned_place } => {
+                drawer.edge_between_places(
+                    summary,
+                    borrowed_place,
+                    assigned_place,
+                    "PCS",
+                )?
+            }
+        }
     }
 
     for (idx, region_abstraction) in borrows_domain.region_abstractions.iter().enumerate() {

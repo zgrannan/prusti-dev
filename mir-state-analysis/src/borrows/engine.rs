@@ -12,18 +12,18 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::{
         mir::{
-            visit::{TyContext, Visitor},
+            visit::{TyContext, Visitor}, Rvalue,
             BasicBlock, Body, CallReturnPlaces, HasLocalDecls, Local, Location, Operand, Place,
-            Promoted, Statement, StatementKind, Terminator, TerminatorEdges, TerminatorKind,
-            RETURN_PLACE, START_BLOCK,
+            ProjectionElem, Promoted, Statement, StatementKind, Terminator, TerminatorEdges,
+            TerminatorKind, RETURN_PLACE, START_BLOCK,
         },
         ty::{self, Region, RegionKind, RegionVid, TyCtxt, TypeVisitor},
     },
 };
 
-use crate::borrows::domain::RegionAbstraction;
+use crate::{borrows::domain::RegionAbstraction, utils};
 
-use super::domain::BorrowsDomain;
+use super::domain::{Borrow, BorrowsDomain};
 
 pub struct BorrowsEngine<'mir, 'tcx> {
     tcx: TyCtxt<'tcx>,
@@ -99,18 +99,42 @@ impl<'mir, 'tcx> BorrowsEngine<'mir, 'tcx> {
             .collect()
     }
 
-    fn remove_loans_to_place(&self, state: &mut BorrowsDomain, origin: Place<'tcx>) {
-        state.live_borrows.retain(|&borrow_index| {
-            let borrow_data = &self.borrow_set[borrow_index];
-            borrow_data.assigned_place != origin
-        });
+    fn find_exclusive_loan_assigned_to_place(
+        &self,
+        state: &mut BorrowsDomain<'tcx>,
+        origin: utils::Place<'tcx>,
+    ) -> Option<Borrow<'tcx>> {
+        let loans_to = state
+            .live_borrows
+            .iter()
+            .filter(|borrow| borrow.assigned_place(&self.borrow_set) == origin.into())
+            .collect::<Vec<_>>();
+        // assert!(loans_to.len() == 1);
+        loans_to.first().copied().cloned()
     }
 
-    fn remove_loans_originating_from(&self, state: &mut BorrowsDomain, origin: Place<'tcx>) {
-        state.live_borrows.retain(|&borrow_index| {
-            let borrow_data = &self.borrow_set[borrow_index];
-            borrow_data.borrowed_place != origin
-        });
+    fn remove_loans_assigned_to(&self, state: &mut BorrowsDomain<'tcx>, assigned_to: Place<'tcx>) -> FxHashSet<Borrow<'tcx>> {
+        let (to_remove, to_keep): (FxHashSet<_>, FxHashSet<_>) = state
+            .live_borrows
+            .clone()
+            .into_iter()
+            .partition(|borrow| borrow.assigned_place(&self.borrow_set) == assigned_to.into());
+
+        state.live_borrows = to_keep;
+
+        to_remove
+    }
+
+    fn remove_loans_borrowed_from(&self, state: &mut BorrowsDomain<'tcx>, origin: Place<'tcx>) -> FxHashSet<Borrow<'tcx>> {
+        let (to_remove, to_keep): (FxHashSet<_>, FxHashSet<_>) = state
+            .live_borrows
+            .clone()
+            .into_iter()
+            .partition(|borrow| borrow.borrowed_place(&self.borrow_set) == origin.into());
+
+        state.live_borrows = to_keep;
+
+        to_remove
     }
 
     fn outlives_or_eq(&self, sup: RegionVid, sub: RegionVid) -> bool {
@@ -160,21 +184,49 @@ impl<'tcx, 'a> Analysis<'tcx> for BorrowsEngine<'a, 'tcx> {
 
     fn apply_statement_effect(
         &mut self,
-        state: &mut BorrowsDomain,
+        state: &mut BorrowsDomain<'tcx>,
         statement: &Statement<'tcx>,
         location: Location,
     ) {
         if let Some(loan) = self.loan_issued_at_location(location) {
             let loan_borrow_data = &self.borrow_set[loan];
-            self.remove_loans_originating_from(state, loan_borrow_data.borrowed_place);
-            state.add_borrow(loan);
+            let borrowed_place: utils::Place<'tcx> = loan_borrow_data.borrowed_place.into();
+            if borrowed_place.is_deref() {
+                if let Some(borrow_to_place) = self
+                    .find_exclusive_loan_assigned_to_place(state, borrowed_place.stripping_deref())
+                {
+                    state.add_borrow(Borrow::PCS {
+                        borrowed_place: borrow_to_place.borrowed_place(&self.borrow_set),
+                        assigned_place: loan_borrow_data.assigned_place.into(),
+                    });
+                } else {
+                    state.add_rustc_borrow(loan);
+                }
+            } else {
+                // self.remove_loans_originating_from(state, loan_borrow_data.borrowed_place);
+                state.add_rustc_borrow(loan);
+            }
         }
         match &statement.kind {
+            StatementKind::Assign(box (target, rvalue)) => {
+                match rvalue {
+                    Rvalue::Use(Operand::Move(from)) => {
+                        self.remove_loans_assigned_to(state, *target);
+                        let loans_to_move = self.remove_loans_assigned_to(state, *from);
+                        for loan in loans_to_move {
+                            state.add_borrow(Borrow::PCS {
+                                borrowed_place: loan.borrowed_place(&self.borrow_set),
+                                assigned_place: (*target).into(),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
             StatementKind::StorageDead(local) => {
-                state.live_borrows.retain(|&borrow_index| {
-                    let borrow_data = &self.borrow_set[borrow_index];
-                    borrow_data.assigned_place.local != *local
-                });
+                state
+                    .live_borrows
+                    .retain(|borrow| borrow.assigned_place(&self.borrow_set).local != *local);
             }
             _ => {}
         }
@@ -198,7 +250,6 @@ impl<'tcx, 'a> Analysis<'tcx> for BorrowsEngine<'a, 'tcx> {
                 call_source,
                 fn_span,
             } => {
-
                 for dest_region in self.get_regions_in(
                     destination.ty(self.body.local_decls(), self.tcx).ty,
                     location,
@@ -233,14 +284,11 @@ impl<'tcx, 'a> Analysis<'tcx> for BorrowsEngine<'a, 'tcx> {
         location: Location,
     ) -> TerminatorEdges<'mir, 'tcx> {
         match &terminator.kind {
-            TerminatorKind::Call {
-                args, ..
-            } => {
+            TerminatorKind::Call { args, .. } => {
                 for arg in args {
                     if let Operand::Move(arg) = arg {
-                        self.remove_loans_to_place(state, *arg);
+                        self.remove_loans_assigned_to(state, *arg);
                     }
-
                 }
             }
             _ => {}

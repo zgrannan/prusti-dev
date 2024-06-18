@@ -1,15 +1,22 @@
+use std::rc::Rc;
+
 use prusti_rustc_interface::{
-    borrowck::consumers::BorrowIndex,
+    borrowck::{
+        borrow_set::BorrowSet,
+        consumers::BorrowIndex
+    },
     data_structures::fx::{FxHashMap, FxHashSet},
     dataflow::{AnalysisDomain, JoinSemiLattice},
     middle::mir,
 };
 
+use crate::utils::Place;
+
 impl<'tcx> JoinSemiLattice for BorrowsDomain<'tcx> {
     fn join(&mut self, other: &Self) -> bool {
         let mut changed = false;
         for borrow in &other.live_borrows {
-            if self.live_borrows.insert(*borrow) {
+            if self.live_borrows.insert(borrow.clone()) {
                 changed = true;
             }
         }
@@ -46,9 +53,34 @@ impl<'tcx> RegionAbstraction<'tcx> {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum Borrow<'tcx> {
+    Rustc(BorrowIndex),
+    PCS {
+        borrowed_place: Place<'tcx>,
+        assigned_place: Place<'tcx>
+    }
+}
+
+impl<'tcx> Borrow<'tcx> {
+    pub fn assigned_place(&self, borrow_set: &Rc<BorrowSet<'tcx>>) -> Place<'tcx> {
+        match self {
+            Borrow::Rustc(borrow_index) => borrow_set[*borrow_index].assigned_place.into(),
+            Borrow::PCS { borrowed_place, assigned_place } => *assigned_place,
+        }
+    }
+
+    pub fn borrowed_place(&self, borrow_set: &Rc<BorrowSet<'tcx>>) -> Place<'tcx> {
+        match self {
+            Borrow::Rustc(borrow_index) => borrow_set[*borrow_index].borrowed_place.into(),
+            Borrow::PCS { borrowed_place, assigned_place } => *borrowed_place,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct BorrowsDomain<'tcx> {
-    pub live_borrows: FxHashSet<BorrowIndex>,
+    pub live_borrows: FxHashSet<Borrow<'tcx>>,
     pub region_abstractions: Vec<RegionAbstraction<'tcx>>,
 }
 
@@ -66,11 +98,15 @@ impl<'tcx> BorrowsDomain<'tcx> {
         }
     }
 
-    pub fn add_borrow(&mut self, borrow: BorrowIndex) {
+    pub fn add_borrow(&mut self, borrow: Borrow<'tcx>) {
         self.live_borrows.insert(borrow);
     }
 
+    pub fn add_rustc_borrow(&mut self, borrow: BorrowIndex) {
+        self.live_borrows.insert(Borrow::Rustc(borrow));
+    }
+
     pub fn remove_borrow(&mut self, borrow: &BorrowIndex) {
-        self.live_borrows.remove(borrow);
+        self.live_borrows.remove(&Borrow::Rustc(*borrow));
     }
 }
