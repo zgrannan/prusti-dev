@@ -57,11 +57,6 @@ impl<'tcx> Place<'tcx> {
     ///  - `x[3 of 6]` and `x[4 of 6]`
     #[tracing::instrument(level = "trace", ret)]
     pub(crate) fn partial_cmp(self, right: Self) -> Option<PlaceOrdering> {
-        if self.projection.contains(&ProjectionElem::Deref)
-            || right.projection.contains(&ProjectionElem::Deref)
-        {
-            return None;
-        }
         if self.local != right.local {
             return None;
         }
@@ -188,14 +183,6 @@ impl<'tcx> Place<'tcx> {
 
     pub fn debug_info(&self) -> DebugInfo<'static> {
         self.1
-    }
-
-    pub fn stripping_deref(self) -> Self {
-        if self.is_deref() {
-            Self::new(self.local, &self.projection[1..])
-        } else {
-            self
-        }
     }
 }
 

@@ -30,9 +30,6 @@ impl<'tcx> CapabilitySummary<'tcx> {
                 }
             }
             Condition::Capability(place, cap) => {
-                if place.is_deref() {
-                    panic!("Place {:?} is a deref, {}", place, place.debug_info())
-                }
                 let cp = self[place.local].get_allocated_mut();
                 cp.repack(place, repacker);
                 if cp[&place] > cap {

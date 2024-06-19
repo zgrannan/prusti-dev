@@ -9,7 +9,10 @@ use crate::{
     utils::{Place, PlaceRepacker},
 };
 use std::{
-    collections::HashSet, fs::File, io::{self, Write}, rc::Rc
+    collections::{HashSet, VecDeque},
+    fs::File,
+    io::{self, Write},
+    rc::Rc,
 };
 
 use super::{CapabilityKind, CapabilityLocal, CapabilitySummary};
@@ -25,7 +28,10 @@ use prusti_rustc_interface::{
     dataflow::{Analysis, ResultsCursor},
     index::IndexVec,
     middle::{
-        mir::{self, Body, Local, Location, Promoted, TerminatorKind, UnwindAction, RETURN_PLACE},
+        mir::{
+            self, Body, Local, Location, PlaceElem, Promoted, TerminatorKind, UnwindAction,
+            RETURN_PLACE,
+        },
         ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
     },
 };
@@ -205,38 +211,15 @@ fn mk_mir_graph(body: &Body<'_>) -> MirGraph {
     MirGraph { nodes, edges }
 }
 
-pub fn generate_json_from_mir(body: &Body<'_>) -> io::Result<()> {
+pub fn generate_json_from_mir(path: &str, body: &Body<'_>) -> io::Result<()> {
     let mir_graph = mk_mir_graph(body);
-    let mut file = File::create("visualization/mir_output.json")?;
+    let mut file = File::create(path)?;
     serde_json::to_writer(&mut file, &mir_graph)?;
     Ok(())
 }
 
 pub fn place_id<'tcx>(place: &Place<'tcx>) -> String {
     format!("{:?}", place)
-}
-
-pub fn dot_edge(
-    file: &mut File,
-    source: &str,
-    target: &str,
-    label: &str,
-    disabled: bool,
-) -> io::Result<()> {
-    if disabled {
-        writeln!(
-            file,
-            "    \"{}\" -> \"{}\" [label=\"{}\", color=\"gray\", style=\"dashed\", fontcolor=\"gray\"];",
-            source, target, label
-        )?;
-    } else {
-        writeln!(
-            file,
-            "    \"{}\" -> \"{}\" [label=\"{}\"];",
-            source, target, label
-        )?;
-    }
-    Ok(())
 }
 
 pub fn has_place<'tcx>(summary: &CapabilitySummary<'tcx>, place: &Place<'tcx>) -> bool {
@@ -247,64 +230,272 @@ pub fn has_place<'tcx>(summary: &CapabilitySummary<'tcx>, place: &Place<'tcx>) -
     }
 }
 
-struct GraphDrawer<'a, 'tcx> {
+struct GraphDrawer {
     file: File,
-    written_places: HashSet<Place<'tcx>>,
-    repacker: Rc<PlaceRepacker<'a, 'tcx>>,
 }
 
-impl<'a, 'tcx: 'a> GraphDrawer<'a, 'tcx> {
-    fn new(file_path: &str, repacker: Rc<PlaceRepacker<'a, 'tcx>>) -> Self {
-        let file = File::create(file_path).unwrap();
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct NodeId(usize);
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "n{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct GraphNode {
+    id: NodeId,
+    node_type: NodeType,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum NodeType {
+    PlaceNode {
+        label: String,
+        capability: Option<CapabilityKind>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ReferenceEdgeType {
+    RustcBorrow(BorrowIndex, RegionVid),
+    PCS,
+}
+
+impl std::fmt::Display for ReferenceEdgeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RustcBorrow(borrow_index, region_vid) => write!(f, "{:?}: {:?}", borrow_index, region_vid),
+            Self::PCS => write!(f, "PCS"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum GraphEdge {
+    ReferenceEdge {
+        borrowed_place: NodeId,
+        assigned_place: NodeId,
+        edge_type: ReferenceEdgeType,
+    },
+    ProjectionEdge {
+        source: NodeId,
+        target: NodeId,
+    },
+}
+
+struct Graph {
+    nodes: HashSet<GraphNode>,
+    edges: HashSet<GraphEdge>,
+}
+
+impl Graph {
+    fn new() -> Self {
         Self {
-            file,
-            written_places: HashSet::new(),
-            repacker,
+            nodes: HashSet::new(),
+            edges: HashSet::new(),
         }
     }
 
-    fn add_place_if_necessary(&mut self, place: Place<'tcx>) -> io::Result<()> {
-        if !self.written_places.contains(&place) {
-            self.write_place(place, None)?;
+    fn insert_node(&mut self, node: GraphNode) {
+        self.nodes.insert(node);
+    }
+
+    fn insert_edge(&mut self, edge: GraphEdge) {
+        self.edges.insert(edge);
+    }
+}
+
+struct GraphConstructor<'a, 'tcx> {
+    summary: &'a CapabilitySummary<'tcx>,
+    repacker: Rc<PlaceRepacker<'a, 'tcx>>,
+    borrows_domain: &'a BorrowsDomain<'tcx>,
+    borrow_set: &'a BorrowSet<'tcx>,
+    graph: Graph,
+    places: Vec<Place<'tcx>>,
+}
+
+impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
+    fn new(
+        summary: &'a CapabilitySummary<'tcx>,
+        repacker: Rc<PlaceRepacker<'a, 'tcx>>,
+        borrows_domain: &'a BorrowsDomain<'tcx>,
+        borrow_set: &'a BorrowSet<'tcx>,
+    ) -> Self {
+        Self {
+            summary,
+            repacker,
+            graph: Graph::new(),
+            borrows_domain,
+            borrow_set,
+            places: vec![]
+        }
+    }
+
+    fn node_id(&mut self, place: &Place<'tcx>) -> NodeId {
+        if let Some(idx) = self.places.iter().position(|p| p == place) {
+            NodeId(idx)
+        } else {
+            self.places.push(place.clone());
+            NodeId(self.places.len() - 1)
+        }
+    }
+
+    fn insert_place_node(&mut self, place: Place<'tcx>, kind: Option<CapabilityKind>) -> NodeId {
+        let id = self.node_id(&place);
+        let node = GraphNode {
+            id,
+            node_type: NodeType::PlaceNode {
+                label: format!("{:?}: {}", place, place.ty(*self.repacker).ty),
+                capability: kind,
+            },
+        };
+        self.graph.insert_node(node);
+        id
+    }
+
+    fn insert_place_and_previous_projections(
+        &mut self,
+        place: Place<'tcx>,
+        kind: Option<CapabilityKind>,
+    ) -> NodeId {
+        let node = self.insert_place_node(place, kind);
+        let mut projection = place.projection;
+        let mut last_node = node;
+        while !projection.is_empty() {
+            projection = &projection[..projection.len() - 1];
+            let place = Place::new(place.local, &projection);
+            let node = self.insert_place_node(place, None);
+            self.graph.insert_edge(GraphEdge::ProjectionEdge {
+                source: node,
+                target: last_node,
+            });
+            last_node = node.clone();
+        }
+        node
+    }
+
+    fn construct_graph(mut self) -> Graph {
+        for (local, capability) in self.summary.iter().enumerate() {
+            match capability {
+                CapabilityLocal::Unallocated => {}
+                CapabilityLocal::Allocated(projections) => {
+                    for (place, kind) in projections.iter() {
+                        self.insert_place_and_previous_projections(*place, Some(*kind));
+                    }
+                }
+            }
+        }
+        for borrow in &self.borrows_domain.live_borrows {
+            match borrow {
+                Borrow::Rustc(borrow_index) => {
+                    let borrow_data = &self.borrow_set[*borrow_index];
+                    let borrowed_place = self.insert_place_and_previous_projections(
+                        borrow_data.borrowed_place.into(),
+                        None,
+                    );
+                    let assigned_place = self.insert_place_and_previous_projections(
+                        borrow_data.assigned_place.into(),
+                        None,
+                    );
+                    self.graph.insert_edge(GraphEdge::ReferenceEdge {
+                        borrowed_place,
+                        assigned_place,
+                        edge_type: ReferenceEdgeType::RustcBorrow(
+                            *borrow_index,
+                            borrow_data.region,
+                        ),
+                    });
+                }
+                Borrow::PCS {
+                    borrowed_place,
+                    assigned_place,
+                } => {
+                    let borrowed_place =
+                        self.insert_place_and_previous_projections(*borrowed_place, None);
+                    let assigned_place =
+                        self.insert_place_and_previous_projections(*assigned_place, None);
+                    self.graph.insert_edge(GraphEdge::ReferenceEdge {
+                        borrowed_place,
+                        assigned_place,
+                        edge_type: ReferenceEdgeType::PCS,
+                    });
+                }
+            }
+        }
+        self.graph
+    }
+}
+
+impl GraphDrawer {
+    fn new(file_path: &str) -> Self {
+        let file = File::create(file_path).unwrap();
+        Self { file }
+    }
+
+    fn draw(mut self, graph: Graph) -> io::Result<()> {
+        writeln!(self.file, "digraph CapabilitySummary {{")?;
+        writeln!(self.file, "node [shape=rect]")?;
+        for node in graph.nodes {
+            self.draw_node(node)?;
+        }
+        for edge in graph.edges {
+            self.draw_edge(edge)?;
+        }
+        writeln!(&mut self.file, "}}")
+    }
+
+    fn draw_node(&mut self, node: GraphNode) -> io::Result<()> {
+        match node.node_type {
+            NodeType::PlaceNode { capability, label } => {
+                let (capability_text, color) = match capability {
+                    Some(k) => (format!("{:?}", k), "black"),
+                    None => ("0".to_string(), "gray"),
+                };
+                writeln!(
+                    self.file,
+                    "    \"{}\" [label=\"{} {}\", fontcolor=\"{}\", color=\"{}\"];",
+                    node.id, label, capability_text, color, color
+                )?;
+            }
         }
         Ok(())
     }
 
-    pub fn edge_between_places(
+    fn draw_dot_edge(
         &mut self,
-        summary: &CapabilitySummary<'tcx>,
-        source: &Place<'tcx>,
-        target: &Place<'tcx>,
+        source: NodeId,
+        target: NodeId,
         label: &str,
+        disabled: bool,
     ) -> io::Result<()> {
-        let disabled = !has_place(summary, source) || !has_place(summary, target);
-        self.add_place_if_necessary(source.clone())?;
-        self.add_place_if_necessary(target.clone())?;
-        dot_edge(
-            &mut self.file,
-            &place_id(source),
-            &place_id(target),
-            label,
-            disabled,
-        )
+        if disabled {
+            writeln!(
+            self.file,
+            "    \"{}\" -> \"{}\" [label=\"{}\", color=\"gray\", style=\"dashed\", fontcolor=\"gray\"];",
+            source, target, label
+        )?;
+        } else {
+            writeln!(
+                self.file,
+                "    \"{}\" -> \"{}\" [label=\"{}\"];",
+                source, target, label
+            )?;
+        }
+        Ok(())
     }
 
-    fn write_place(&mut self, place: Place<'tcx>, kind: Option<CapabilityKind>) -> io::Result<()> {
-        self.written_places.insert(place);
-        let (label_text, color) = match kind {
-            Some(k) => (format!("{:?}", k), "black"),
-            None => ("?".to_string(), "gray"),
-        };
-        writeln!(
-            self.file,
-            "    \"{:?}\" [label=\"{:?}: {} {}\", fontcolor=\"{}\", color=\"{}\"];",
-            place,
-            place,
-            place.ty(*self.repacker).ty,
-            label_text,
-            color,
-            color
-        )
+    fn draw_edge(&mut self, edge: GraphEdge) -> io::Result<()> {
+        match edge {
+            GraphEdge::ReferenceEdge { borrowed_place, assigned_place, edge_type } => {
+                self.draw_dot_edge(borrowed_place, assigned_place, &format!("{}", edge_type), false)?;
+            }
+            GraphEdge::ProjectionEdge { source, target } => {
+                self.draw_dot_edge(source, target, "", false)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -317,71 +508,37 @@ pub fn generate_dot_graph<'a, 'tcx: 'a>(
     input_facts: &PoloniusInput,
     file_path: &str,
 ) -> io::Result<()> {
-    let mut drawer = GraphDrawer::new(file_path, repacker);
-    writeln!(drawer.file, "digraph CapabilitySummary {{")?;
-    writeln!(drawer.file, "node [shape=rect]")?;
+    let constructor = GraphConstructor::new(summary, repacker, borrows_domain, borrow_set);
+    let graph = constructor.construct_graph();
+    let mut drawer = GraphDrawer::new(file_path);
+    drawer.draw(graph)
 
-    for (local, capability) in summary.iter().enumerate() {
-        match capability {
-            CapabilityLocal::Unallocated => {}
-            CapabilityLocal::Allocated(projections) => {
-                for (place, kind) in projections.iter() {
-                    drawer.write_place(*place, Some(*kind))?;
-                }
-            }
-        }
-    }
-    for borrow in &borrows_domain.live_borrows {
-        match borrow {
-            Borrow::Rustc(borrow_index) => {
-                let borrow_data = &borrow_set[*borrow_index];
-                drawer.edge_between_places(
-                    summary,
-                    &borrow_data.borrowed_place.into(),
-                    &borrow_data.assigned_place.into(),
-                    &format!("{:?}: {:?}", borrow_index, borrow_data.region),
-                )?
-            }
-            Borrow::PCS { borrowed_place, assigned_place } => {
-                drawer.edge_between_places(
-                    summary,
-                    borrowed_place,
-                    assigned_place,
-                    "PCS",
-                )?
-            }
-        }
-    }
-
-    for (idx, region_abstraction) in borrows_domain.region_abstractions.iter().enumerate() {
-        let ra_node_label = format!("ra{}", idx);
-        writeln!(
-            drawer.file,
-            "    \"{}\" [label=\"{}\", shape=egg];",
-            ra_node_label, ra_node_label
-        )?;
-        for loan_in in &region_abstraction.loans_in {
-            drawer.add_place_if_necessary((*loan_in).into())?;
-            dot_edge(
-                &mut drawer.file,
-                &place_id(&(*loan_in).into()),
-                &ra_node_label,
-                "loan_in",
-                false,
-            )?;
-        }
-        for loan_out in &region_abstraction.loans_out {
-            drawer.add_place_if_necessary((*loan_out).into())?;
-            dot_edge(
-                &mut drawer.file,
-                &ra_node_label,
-                &place_id(&(*loan_out).into()),
-                "loan_out",
-                false,
-            )?;
-        }
-    }
-
-    writeln!(&mut drawer.file, "}}");
-    Ok(())
+    // for (idx, region_abstraction) in borrows_domain.region_abstractions.iter().enumerate() {
+    //     let ra_node_label = format!("ra{}", idx);
+    //     writeln!(
+    //         drawer.file,
+    //         "    \"{}\" [label=\"{}\", shape=egg];",
+    //         ra_node_label, ra_node_label
+    //     )?;
+    //     for loan_in in &region_abstraction.loans_in {
+    //         drawer.add_place_if_necessary((*loan_in).into())?;
+    //         dot_edge(
+    //             &mut drawer.file,
+    //             &place_id(&(*loan_in).into()),
+    //             &ra_node_label,
+    //             "loan_in",
+    //             false,
+    //         )?;
+    //     }
+    //     for loan_out in &region_abstraction.loans_out {
+    //         drawer.add_place_if_necessary((*loan_out).into())?;
+    //         dot_edge(
+    //             &mut drawer.file,
+    //             &ra_node_label,
+    //             &place_id(&(*loan_out).into()),
+    //             "loan_out",
+    //             false,
+    //         )?;
+    //     }
+    // }
 }

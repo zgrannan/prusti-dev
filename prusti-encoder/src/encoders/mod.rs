@@ -1,6 +1,5 @@
 mod generic;
 mod mir_builtin;
-mod mir_impure;
 mod mir_pure;
 mod spec;
 mod mir_pure_function;
@@ -18,7 +17,6 @@ pub use mir_builtin::{
     MirBuiltinEnc,
     MirBuiltinEncTask,
 };
-pub use mir_impure::MirImpureEnc;
 pub use mir_pure::{
     MirPureEnc,
     MirPureEncTask,

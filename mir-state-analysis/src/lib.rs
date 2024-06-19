@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#![allow(unused_imports)]
+#![allow(unused)]
 #![feature(rustc_private)]
 #![feature(box_patterns, hash_extract_if, extract_if)]
 
@@ -50,6 +50,7 @@ impl<'mir, 'tcx> HasExtra<BorrowsDomain<'tcx>> for PlaceCapabilitySummary<'mir, 
 pub fn run_free_pcs<'mir, 'tcx>(
     mir: &'mir BodyWithBorrowckFacts<'tcx>,
     tcx: TyCtxt<'tcx>,
+    visualization_output_path: &str
 ) -> FpcsOutput<'mir, 'tcx> {
     let cgx = coupling_graph::CgContext::new(tcx, mir);
     let fpcs = PcsEngine::new(cgx);
@@ -59,14 +60,15 @@ pub fn run_free_pcs<'mir, 'tcx>(
         .iterate_to_fixpoint();
     let mut fpcs_analysis = free_pcs::FreePcsAnalysis::new(analysis.into_results_cursor(&mir.body));
 
-    generate_json_from_mir(&mir.body).expect("Failed to generate JSON from MIR");
-
-    // Delete all contents from the directory
-    let dir_path = "visualization/dot_graphs";
-    if std::path::Path::new(dir_path).exists() {
-        std::fs::remove_dir_all(dir_path).expect("Failed to delete directory contents");
+    let fn_name = tcx.item_name(mir.body.source.def_id());
+    let dir_path = format!("{}/{}", visualization_output_path, fn_name);
+    if std::path::Path::new(&dir_path).exists() {
+        std::fs::remove_dir_all(&dir_path).expect("Failed to delete directory contents");
     }
-    create_dir_all(dir_path).expect("Failed to create directory for DOT files");
+    create_dir_all(&dir_path).expect("Failed to create directory for DOT files");
+    generate_json_from_mir(&format!("{}/mir.json", dir_path), &mir.body)
+        .expect("Failed to generate JSON from MIR");
+
     let input_facts = mir.input_facts.as_ref().unwrap().clone();
     let output_facts = mir.output_facts.as_ref().unwrap().clone();
     let location_table = mir.location_table.as_ref().unwrap().clone();
@@ -79,12 +81,12 @@ pub fn run_free_pcs<'mir, 'tcx>(
         let pcs_block = fpcs_analysis.get_all_for_bb(block);
         for (statement_index, statement) in pcs_block.statements.iter().enumerate() {
             let file_path = format!(
-                "{}/{}_block_{}_stmt_{}.dot",
-                dir_path,
-                tcx.item_name(mir.body.source.def_id()),
+                "{}/block_{}_stmt_{}.dot",
+                &dir_path,
                 block.index(),
                 statement_index
             );
+            eprintln!("{}", file_path);
             generate_dot_graph(
                 statement.location,
                 Rc::new(rp),
@@ -106,15 +108,6 @@ pub fn get_cgx<'mir, 'tcx>(
     tcx: TyCtxt<'tcx>,
 ) -> coupling_graph::CgContext<'mir, 'tcx> {
     coupling_graph::CgContext::new(tcx, mir)
-}
-
-pub fn test_free_pcs<'tcx>(
-    mir: &BodyWithBorrowckFacts<'tcx>,
-    promoted: &IndexVec<Promoted, Body<'tcx>>,
-    tcx: TyCtxt<'tcx>,
-) {
-    let analysis = run_free_pcs(mir, tcx);
-    free_pcs::check(analysis);
 }
 
 #[tracing::instrument(name = "run_coupling_graph", level = "debug", skip(tcx))]
@@ -139,25 +132,3 @@ pub fn run_coupling_graph<'mir, 'tcx>(
     c.seek_to_block_start(START_BLOCK);
     coupling_graph::cursor::CgAnalysis::new(c)
 }
-
-pub fn test_coupling_graph<'tcx>(
-    mir: &BodyWithBorrowckFacts<'tcx>,
-    tcx: TyCtxt<'tcx>,
-    top_crates: bool,
-) {
-    // println!("{:?}", mir.source.def_id());
-    // if !format!("{:?}", mir.source.def_id())
-    //     .ends_with("parse_delimited)")
-    // {
-    //     return;
-    // }
-
-    let fpcs_analysis = run_free_pcs(mir, tcx);
-    let cgx = coupling_graph::CgContext::new(tcx, mir);
-    let cg_analysis = run_coupling_graph(cgx, tcx, top_crates);
-    // coupling_graph::check(cg_analysis, fpcs_analysis);
-
-    // panic!()
-}
-
-

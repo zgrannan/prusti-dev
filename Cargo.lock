@@ -1553,6 +1553,7 @@ dependencies = [
  "mir-state-analysis",
  "prusti-interface",
  "prusti-rustc-interface",
+ "serde_json",
  "task-encoder",
  "tracing 0.1.0",
  "vir",

@@ -42,11 +42,11 @@ pub(crate) enum Condition<'tcx> {
 }
 
 impl<'tcx> Condition<'tcx> {
-    fn capability_for_place_stripping_deref(
+    fn capability(
         place: Place<'tcx>,
         kind: CapabilityKind,
     ) -> Condition<'tcx> {
-        Condition::Capability(place.stripping_deref(), kind)
+        Condition::Capability(place, kind)
     }
 }
 
@@ -108,7 +108,7 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
             Operand::Copy(place) => {
                 let place: Place<'tcx> = place.into();
                 Triple {
-                    pre: Condition::Capability(place.stripping_deref(), CapabilityKind::Exclusive),
+                    pre: Condition::Capability(place, CapabilityKind::Exclusive),
                     post: Condition::Unchanged,
                 }
             }
@@ -144,7 +144,7 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
             | &CopyForDeref(place) => self.triple(
                 Stage::Before,
                 Triple {
-                    pre: Condition::capability_for_place_stripping_deref(
+                    pre: Condition::capability(
                         place.into(),
                         CapabilityKind::Exclusive,
                     ),
@@ -160,42 +160,42 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
         use StatementKind::*;
         let t = match &statement.kind {
             &Assign(box (place, ref rvalue)) => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Write,
                 ),
-                post: Condition::capability_for_place_stripping_deref(
+                post: Condition::capability(
                     place.into(),
                     rvalue.capability(),
                 ),
             },
             &FakeRead(box (_, place)) => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Exclusive,
                 ),
                 post: Condition::Unchanged,
             },
             &PlaceMention(box place) => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Write,
                 ),
                 post: Condition::Unchanged,
             },
             &SetDiscriminant { box place, .. } => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Exclusive,
                 ),
                 post: Condition::Unchanged,
             },
             &Deinit(box place) => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Exclusive,
                 ),
-                post: Condition::capability_for_place_stripping_deref(
+                post: Condition::capability(
                     place.into(),
                     CapabilityKind::Write,
                 ),
@@ -209,7 +209,7 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
                 post: Condition::Unalloc(local),
             },
             &Retag(_, box place) => Triple {
-                pre: Condition::capability_for_place_stripping_deref(
+                pre: Condition::capability(
                     place.into(),
                     CapabilityKind::Exclusive,
                 ),
