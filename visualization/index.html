@@ -47,6 +47,9 @@
         border-left: 1px solid #ccc;
         padding-left: 10px;
       }
+      tr:hover {
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -204,9 +207,8 @@
           .text((d) => g.edge(d).label);
 
         svg.on("click", async function (event) {
-          const target = event.target;
-          if (target.tagName === "TD" || target.tagName === "TR") {
-            const row = target.closest("tr");
+          const row = event.target.closest("tr");
+          if (row) {
             highlightRow(row);
           }
         });

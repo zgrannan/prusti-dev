@@ -52,6 +52,32 @@ impl<'mir, 'tcx> BorrowsEngine<'mir, 'tcx> {
         }
     }
 
+    fn tag_deref_of_place_with_location(
+        &self,
+        state: &mut BorrowsDomain<'tcx>,
+        place: utils::Place<'tcx>,
+        location: Location,
+    ) {
+        state.live_borrows = state
+            .live_borrows
+            .clone()
+            .into_iter()
+            .map(|mut borrow| {
+                if borrow.borrowed_place(&self.borrow_set).is_deref_of(place) {
+                    eprintln!("!!!!!!");
+                    borrow.before = Some(location);
+                } else {
+                    eprintln!(
+                        "NR {:?} {:?}",
+                        place,
+                        borrow.borrowed_place(&self.borrow_set)
+                    );
+                }
+                borrow
+            })
+            .collect();
+    }
+
     fn get_regions_in(&self, ty: ty::Ty<'tcx>, location: Location) -> HashSet<RegionVid> {
         struct RegionVisitor(HashSet<RegionVid>);
 
@@ -214,6 +240,7 @@ impl<'tcx, 'a> Analysis<'tcx> for BorrowsEngine<'a, 'tcx> {
                             None,
                         ));
                     }
+                    self.tag_deref_of_place_with_location(state, (*target).into(), location);
                 }
                 _ => {}
             },

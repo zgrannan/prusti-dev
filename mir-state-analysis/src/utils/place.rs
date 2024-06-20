@@ -19,7 +19,12 @@ use prusti_rustc_interface::middle::{
     ty::Ty,
 };
 #[derive(Clone, Copy, Deref, DerefMut)]
-pub struct Place<'tcx>(#[deref] #[deref_mut] PlaceRef<'tcx>, DebugInfo<'static>);
+pub struct Place<'tcx>(
+    #[deref]
+    #[deref_mut]
+    PlaceRef<'tcx>,
+    DebugInfo<'static>,
+);
 
 impl<'tcx> Place<'tcx> {
     pub(crate) fn new(local: Local, projection: &'tcx [PlaceElem<'tcx>]) -> Self {
@@ -177,8 +182,10 @@ impl<'tcx> Place<'tcx> {
         })
     }
 
-    pub fn is_deref(&self) -> bool {
-        self.projection.first() == Some(&ProjectionElem::Deref)
+    pub fn is_deref_of(self, other: Self) -> bool {
+        other.is_prefix(self)
+            && other.projection.len() == self.projection.len() - 1
+            && self.projection.last().unwrap() == &ProjectionElem::Deref
     }
 
     pub fn debug_info(&self) -> DebugInfo<'static> {

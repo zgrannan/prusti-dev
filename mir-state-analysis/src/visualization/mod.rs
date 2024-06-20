@@ -66,6 +66,7 @@ enum NodeType {
     PlaceNode {
         label: String,
         capability: Option<CapabilityKind>,
+        location: Option<Location>,
     },
 }
 
@@ -157,7 +158,7 @@ struct GraphConstructor<'a, 'tcx> {
     repacker: Rc<PlaceRepacker<'a, 'tcx>>,
     borrows_domain: &'a BorrowsDomain<'tcx>,
     borrow_set: &'a BorrowSet<'tcx>,
-    places: Vec<Place<'tcx>>,
+    inserted_nodes: Vec<(Place<'tcx>, Option<Location>)>,
     nodes: Vec<GraphNode>,
     edges: HashSet<GraphEdge>,
     rank: HashMap<NodeId, usize>,
@@ -175,26 +176,26 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
             repacker,
             borrows_domain,
             borrow_set,
-            places: vec![],
+            inserted_nodes: vec![],
             nodes: vec![],
             edges: HashSet::new(),
             rank: HashMap::new(),
         }
     }
 
-    fn existing_node_id(&self, place: &Place<'tcx>) -> Option<NodeId> {
-        self.places
+    fn existing_node_id(&self, place: Place<'tcx>, location: Option<Location>) -> Option<NodeId> {
+        self.inserted_nodes
             .iter()
-            .position(|p| p == place)
+            .position(|(p, n)| *p == place && *n == location)
             .map(|idx| NodeId(idx))
     }
 
-    fn node_id(&mut self, place: &Place<'tcx>) -> NodeId {
-        if let Some(idx) = self.places.iter().position(|p| p == place) {
-            NodeId(idx)
+    fn node_id(&mut self, place: Place<'tcx>, location: Option<Location>) -> NodeId {
+        if let Some(idx) = self.existing_node_id(place, location) {
+            idx
         } else {
-            self.places.push(place.clone());
-            NodeId(self.places.len() - 1)
+            self.inserted_nodes.push((place, location));
+            NodeId(self.inserted_nodes.len() - 1)
         }
     }
 
@@ -208,11 +209,16 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
         }
     }
 
-    fn insert_place_node(&mut self, place: Place<'tcx>, kind: Option<CapabilityKind>) -> NodeId {
-        if let Some(node_id) = self.existing_node_id(&place) {
+    fn insert_place_node(
+        &mut self,
+        place: Place<'tcx>,
+        location: Option<Location>,
+        kind: Option<CapabilityKind>,
+    ) -> NodeId {
+        if let Some(node_id) = self.existing_node_id(place, location) {
             return node_id;
         }
-        let id = self.node_id(&place);
+        let id = self.node_id(place, location);
         let label = get_source_name_from_place(&place, &self.repacker.body().var_debug_info)
             .unwrap_or_else(|| format!("{:?}: {}", place, place.ty(*self.repacker).ty));
         let node = GraphNode {
@@ -220,6 +226,7 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
             node_type: NodeType::PlaceNode {
                 label,
                 capability: kind,
+                location,
             },
         };
         self.insert_node(node);
@@ -230,15 +237,16 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
     fn insert_place_and_previous_projections(
         &mut self,
         place: Place<'tcx>,
+        location: Option<Location>,
         kind: Option<CapabilityKind>,
     ) -> NodeId {
-        let node = self.insert_place_node(place, kind);
+        let node = self.insert_place_node(place, location, kind);
         let mut projection = place.projection;
         let mut last_node = node;
         while !projection.is_empty() {
             projection = &projection[..projection.len() - 1];
             let place = Place::new(place.local, &projection);
-            let node = self.insert_place_node(place, None);
+            let node = self.insert_place_node(place, None, None);
             self.edges.insert(GraphEdge::ProjectionEdge {
                 source: node,
                 target: last_node,
@@ -254,7 +262,7 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
                 CapabilityLocal::Unallocated => {}
                 CapabilityLocal::Allocated(projections) => {
                     for (place, kind) in projections.iter() {
-                        self.insert_place_and_previous_projections(*place, Some(*kind));
+                        self.insert_place_and_previous_projections(*place, None, Some(*kind));
                     }
                 }
             }
@@ -262,10 +270,12 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
         for borrow in &self.borrows_domain.live_borrows {
             let borrowed_place = self.insert_place_and_previous_projections(
                 borrow.borrowed_place(&self.borrow_set).into(),
+                borrow.before,
                 None,
             );
             let assigned_place = self.insert_place_and_previous_projections(
                 borrow.assigned_place(&self.borrow_set).into(),
+                None,
                 None,
             );
             match borrow.kind {
@@ -321,15 +331,26 @@ impl GraphDrawer {
 
     fn draw_node(&mut self, node: GraphNode) -> io::Result<()> {
         match node.node_type {
-            NodeType::PlaceNode { capability, label } => {
+            NodeType::PlaceNode {
+                capability,
+                label,
+                location,
+            } => {
                 let (capability_text, color) = match capability {
                     Some(k) => (format!("{:?}", k), "black"),
                     None => ("N".to_string(), "gray"),
                 };
+                let location_text = match location {
+                    Some(l) => {
+                        let base = Self::escape_html(format!("before {:?}", l));
+                        format!("<br/>{}", base)
+                    }
+                    None => "".to_string(),
+                };
                 writeln!(
                     self.file,
-                    "    \"{}\" [label=<<FONT FACE=\"courier\">{}</FONT>&nbsp;{}>, fontcolor=\"{}\", color=\"{}\"];",
-                    node.id, Self::escape_html(label), Self::escape_html(capability_text), color, color
+                    "    \"{}\" [label=<<FONT FACE=\"courier\">{}</FONT>&nbsp;{}{}>, fontcolor=\"{}\", color=\"{}\"];",
+                    node.id, Self::escape_html(label), Self::escape_html(capability_text), location_text, color, color
                 )?;
             }
         }
