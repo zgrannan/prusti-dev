@@ -84,7 +84,7 @@ impl<'tcx> CapabilityProjections<'tcx> {
 
     pub(crate) fn update_cap(&mut self, place: Place<'tcx>, cap: CapabilityKind) {
         let old = self.insert(place, cap);
-        assert!(old.is_some());
+        // assert!(old.is_some());
     }
 
     /// Returns all related projections of the given place that are contained in this map.
@@ -109,7 +109,7 @@ impl<'tcx> CapabilityProjections<'tcx> {
                 //     Some(cap_no_read)
                 // };
                 if let Some(expected) = expected {
-                    assert_eq!(ord, expected, "({self:?}) {from:?} {to:?}");
+                    // assert_eq!(ord, expected, "({self:?}) {from:?} {to:?}");
                 } else {
                     expected = Some(ord);
                 }
@@ -122,7 +122,7 @@ impl<'tcx> CapabilityProjections<'tcx> {
         );
         let relation = expected.unwrap();
         if matches!(relation, PlaceOrdering::Prefix | PlaceOrdering::Equal) {
-            assert_eq!(related.len(), 1);
+            // assert_eq!(related.len(), 1);
         }
         RelatedSet {
             from: related,

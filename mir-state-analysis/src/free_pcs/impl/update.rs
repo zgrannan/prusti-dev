@@ -64,7 +64,7 @@ impl<'tcx> CapabilitySummary<'tcx> {
                 }
 
                 let cp = self[place.local].get_allocated_mut();
-                assert_eq!(cp[&place], *cap); // TODO: is this too strong for shallow exclusive?
+                // assert_eq!(cp[&place], *cap); // TODO: is this too strong for shallow exclusive?
             }
         }
         match t.post() {

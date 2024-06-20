@@ -159,16 +159,19 @@ impl<'tcx> Visitor<'tcx> for TripleWalker<'_, '_, 'tcx> {
         self.super_statement(statement, location);
         use StatementKind::*;
         let t = match &statement.kind {
-            &Assign(box (place, ref rvalue)) => Triple {
+            &Assign(box (place, ref rvalue)) => {
+                let place: Place<'_> = place.into();
+                let place = place.target_place().unwrap_or(place);
+                Triple {
                 pre: Condition::capability(
-                    place.into(),
-                    CapabilityKind::Write,
+                    place,
+                    CapabilityKind::Exclusive,
                 ),
                 post: Condition::capability(
-                    place.into(),
-                    rvalue.capability(),
+                    place,
+                    CapabilityKind::Exclusive,
                 ),
-            },
+            }},
             &FakeRead(box (_, place)) => Triple {
                 pre: Condition::capability(
                     place.into(),

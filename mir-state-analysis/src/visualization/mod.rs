@@ -241,6 +241,9 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
         kind: Option<CapabilityKind>,
     ) -> NodeId {
         let node = self.insert_place_node(place, location, kind);
+        if location.is_some() {
+            return node;
+        }
         let mut projection = place.projection;
         let mut last_node = node;
         while !projection.is_empty() {

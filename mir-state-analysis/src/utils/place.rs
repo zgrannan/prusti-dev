@@ -188,6 +188,14 @@ impl<'tcx> Place<'tcx> {
             && self.projection.last().unwrap() == &ProjectionElem::Deref
     }
 
+    pub fn target_place(self) -> Option<Self> {
+        if let Some(ProjectionElem::Deref) = self.projection.last() {
+            Some(Place::new(self.local, &self.projection[..self.projection.len() - 1]))
+        } else {
+            None
+        }
+    }
+
     pub fn debug_info(&self) -> DebugInfo<'static> {
         self.1
     }
