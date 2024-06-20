@@ -23,7 +23,7 @@ use prusti_rustc_interface::{
 
 use crate::{borrows::domain::RegionAbstraction, utils};
 
-use super::domain::{Borrow, BorrowsDomain};
+use super::domain::{Borrow, BorrowKind, BorrowsDomain};
 
 pub struct BorrowsEngine<'mir, 'tcx> {
     tcx: TyCtxt<'tcx>,
@@ -206,10 +206,13 @@ impl<'tcx, 'a> Analysis<'tcx> for BorrowsEngine<'a, 'tcx> {
                     self.remove_loans_assigned_to(state, *target);
                     let loans_to_move = self.remove_loans_assigned_to(state, *from);
                     for loan in loans_to_move {
-                        state.add_borrow(Borrow::PCS {
-                            borrowed_place: loan.borrowed_place(&self.borrow_set),
-                            assigned_place: (*target).into(),
-                        });
+                        state.add_borrow(Borrow::new(
+                            BorrowKind::PCS {
+                                borrowed_place: loan.borrowed_place(&self.borrow_set),
+                                assigned_place: (*target).into(),
+                            },
+                            None,
+                        ));
                     }
                 }
                 _ => {}

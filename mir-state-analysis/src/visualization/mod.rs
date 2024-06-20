@@ -7,7 +7,7 @@
 pub mod mir_graph;
 
 use crate::{
-    borrows::domain::{Borrow, BorrowsDomain, RegionAbstraction},
+    borrows::domain::{Borrow, BorrowKind, BorrowsDomain, RegionAbstraction},
     free_pcs::{CapabilityKind, CapabilityLocal, CapabilitySummary},
     utils::{Place, PlaceRepacker},
 };
@@ -256,34 +256,24 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
             }
         }
         for borrow in &self.borrows_domain.live_borrows {
-            match borrow {
-                Borrow::Rustc(borrow_index) => {
-                    let borrow_data = &self.borrow_set[*borrow_index];
-                    let borrowed_place = self.insert_place_and_previous_projections(
-                        borrow_data.borrowed_place.into(),
-                        None,
-                    );
-                    let assigned_place = self.insert_place_and_previous_projections(
-                        borrow_data.assigned_place.into(),
-                        None,
-                    );
+            let borrowed_place = self.insert_place_and_previous_projections(
+                borrow.borrowed_place(&self.borrow_set).into(),
+                None,
+            );
+            let assigned_place = self.insert_place_and_previous_projections(
+                borrow.assigned_place(&self.borrow_set).into(),
+                None,
+            );
+            match borrow.kind {
+                BorrowKind::Rustc(borrow_index) => {
+                    let borrow_data = &self.borrow_set[borrow_index];
                     self.edges.insert(GraphEdge::ReferenceEdge {
                         borrowed_place,
                         assigned_place,
-                        edge_type: ReferenceEdgeType::RustcBorrow(
-                            *borrow_index,
-                            borrow_data.region,
-                        ),
+                        edge_type: ReferenceEdgeType::RustcBorrow(borrow_index, borrow_data.region),
                     });
                 }
-                Borrow::PCS {
-                    borrowed_place,
-                    assigned_place,
-                } => {
-                    let borrowed_place =
-                        self.insert_place_and_previous_projections(*borrowed_place, None);
-                    let assigned_place =
-                        self.insert_place_and_previous_projections(*assigned_place, None);
+                BorrowKind::PCS { .. } => {
                     self.edges.insert(GraphEdge::ReferenceEdge {
                         borrowed_place,
                         assigned_place,

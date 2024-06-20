@@ -7,7 +7,7 @@ use prusti_rustc_interface::{
     },
     data_structures::fx::{FxHashMap, FxHashSet},
     dataflow::{AnalysisDomain, JoinSemiLattice},
-    middle::mir,
+    middle::mir::{self, Location},
 };
 
 use crate::utils::Place;
@@ -54,26 +54,46 @@ impl<'tcx> RegionAbstraction<'tcx> {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub enum Borrow<'tcx> {
-    Rustc(BorrowIndex),
-    PCS {
-        borrowed_place: Place<'tcx>,
-        assigned_place: Place<'tcx>
-    }
+pub struct Borrow<'tcx> {
+    pub kind: BorrowKind<'tcx>,
+    pub before: Option<Location>,
 }
 
 impl<'tcx> Borrow<'tcx> {
-    pub fn assigned_place(&self, borrow_set: &Rc<BorrowSet<'tcx>>) -> Place<'tcx> {
+    pub fn new(kind: BorrowKind<'tcx>, before: Option<Location>) -> Self {
+        Self { kind, before }
+    }
+
+    pub fn assigned_place(&self, borrow_set: &BorrowSet<'tcx>) -> Place<'tcx> {
+        self.kind.assigned_place(borrow_set)
+    }
+
+    pub fn borrowed_place(&self, borrow_set: &BorrowSet<'tcx>) -> Place<'tcx> {
+        self.kind.borrowed_place(borrow_set)
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum BorrowKind<'tcx> {
+    Rustc(BorrowIndex),
+    PCS {
+        borrowed_place: Place<'tcx>,
+        assigned_place: Place<'tcx>,
+    }
+}
+
+impl<'tcx> BorrowKind<'tcx> {
+    pub fn assigned_place(&self, borrow_set: &BorrowSet<'tcx>) -> Place<'tcx> {
         match self {
-            Borrow::Rustc(borrow_index) => borrow_set[*borrow_index].assigned_place.into(),
-            Borrow::PCS { borrowed_place, assigned_place } => *assigned_place,
+            BorrowKind::Rustc(borrow_index) => borrow_set[*borrow_index].assigned_place.into(),
+            BorrowKind::PCS { assigned_place, .. } => *assigned_place,
         }
     }
 
-    pub fn borrowed_place(&self, borrow_set: &Rc<BorrowSet<'tcx>>) -> Place<'tcx> {
+    pub fn borrowed_place(&self, borrow_set: &BorrowSet<'tcx>) -> Place<'tcx> {
         match self {
-            Borrow::Rustc(borrow_index) => borrow_set[*borrow_index].borrowed_place.into(),
-            Borrow::PCS { borrowed_place, assigned_place } => *borrowed_place,
+            BorrowKind::Rustc(borrow_index) => borrow_set[*borrow_index].borrowed_place.into(),
+            BorrowKind::PCS { borrowed_place, .. } => *borrowed_place,
         }
     }
 }
@@ -103,10 +123,16 @@ impl<'tcx> BorrowsDomain<'tcx> {
     }
 
     pub fn add_rustc_borrow(&mut self, borrow: BorrowIndex) {
-        self.live_borrows.insert(Borrow::Rustc(borrow));
+        self.live_borrows.insert(Borrow {
+            kind: BorrowKind::Rustc(borrow),
+            before: None,
+        });
     }
 
     pub fn remove_borrow(&mut self, borrow: &BorrowIndex) {
-        self.live_borrows.remove(&Borrow::Rustc(*borrow));
+        self.live_borrows.remove(&Borrow {
+            kind: BorrowKind::Rustc(*borrow),
+            before: None,
+        });
     }
 }
