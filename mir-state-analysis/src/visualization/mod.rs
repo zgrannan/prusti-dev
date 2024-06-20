@@ -32,7 +32,7 @@ use prusti_rustc_interface::{
     middle::{
         mir::{
             self, Body, Local, Location, PlaceElem, Promoted, TerminatorKind, UnwindAction,
-            RETURN_PLACE,
+            VarDebugInfo, RETURN_PLACE,
         },
         ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
     },
@@ -110,6 +110,48 @@ impl Graph {
     }
 }
 
+pub fn get_source_name_from_local(local: &Local, debug_info: &[VarDebugInfo]) -> Option<String> {
+    if local.as_usize() == 0 {
+        return None;
+    }
+    debug_info
+        .get(&local.as_usize() - 1)
+        .map(|source_info| format!("{}", source_info.name))
+}
+
+pub fn get_source_name_from_place<'tcx>(
+    place: &Place<'tcx>,
+    debug_info: &[VarDebugInfo],
+) -> Option<String> {
+    get_source_name_from_local(&place.local, debug_info).map(|mut name| {
+        let mut iter = place.projection.iter().peekable();
+        while let Some(elem) = iter.next() {
+            match elem {
+                mir::ProjectionElem::Deref => {
+                    if iter.peek().is_some() {
+                        name = format!("(*{})", name);
+                    } else {
+                        name = format!("*{}", name);
+                    }
+                }
+                mir::ProjectionElem::Field(field, _) => {
+                    name = format!("{}.{}", name, field.as_usize());
+                }
+                mir::ProjectionElem::Index(_) => todo!(),
+                mir::ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end,
+                } => todo!(),
+                mir::ProjectionElem::Subslice { from, to, from_end } => todo!(),
+                mir::ProjectionElem::Downcast(_, _) => todo!(),
+                mir::ProjectionElem::OpaqueCast(_) => todo!(),
+            }
+        }
+        name
+    })
+}
+
 struct GraphConstructor<'a, 'tcx> {
     summary: &'a CapabilitySummary<'tcx>,
     repacker: Rc<PlaceRepacker<'a, 'tcx>>,
@@ -166,50 +208,12 @@ impl<'a, 'tcx> GraphConstructor<'a, 'tcx> {
         }
     }
 
-    fn get_source_name_from_place(&self, place: &Place<'tcx>) -> Option<String> {
-        let debug_info = &self.repacker.body().var_debug_info;
-        if place.local.as_usize() == 0 {
-            return None;
-        }
-        if let Some(source_info) = debug_info.get(&place.local.as_usize() - 1) {
-            let mut name = format!("{}", source_info.name);
-            let mut iter = place.projection.iter().peekable();
-            while let Some(elem) = iter.next() {
-                match elem {
-                    mir::ProjectionElem::Deref => {
-                        if iter.peek().is_some() {
-                            name = format!("(*{})", name);
-                        } else {
-                            name = format!("*{}", name);
-                        }
-                    }
-                    mir::ProjectionElem::Field(field, _) => {
-                        name = format!("{}.{}", name, field.as_usize());
-                    }
-                    mir::ProjectionElem::Index(_) => todo!(),
-                    mir::ProjectionElem::ConstantIndex {
-                        offset,
-                        min_length,
-                        from_end,
-                    } => todo!(),
-                    mir::ProjectionElem::Subslice { from, to, from_end } => todo!(),
-                    mir::ProjectionElem::Downcast(_, _) => todo!(),
-                    mir::ProjectionElem::OpaqueCast(_) => todo!(),
-                }
-            }
-            Some(name)
-        } else {
-            None
-        }
-    }
-
     fn insert_place_node(&mut self, place: Place<'tcx>, kind: Option<CapabilityKind>) -> NodeId {
         if let Some(node_id) = self.existing_node_id(&place) {
             return node_id;
         }
         let id = self.node_id(&place);
-        let label = self
-            .get_source_name_from_place(&place)
+        let label = get_source_name_from_place(&place, &self.repacker.body().var_debug_info)
             .unwrap_or_else(|| format!("{:?}: {}", place, place.ty(*self.repacker).ty));
         let node = GraphNode {
             id,

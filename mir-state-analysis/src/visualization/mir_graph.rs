@@ -23,11 +23,13 @@ use prusti_rustc_interface::{
     middle::{
         mir::{
             self, Body, Local, Location, PlaceElem, Promoted, TerminatorKind, UnwindAction,
-            RETURN_PLACE,
+            RETURN_PLACE, Statement, VarDebugInfo, Operand, Rvalue
         },
         ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
     },
 };
+
+use super::{get_source_name_from_local, get_source_name_from_place};
 
 #[derive(Serialize)]
 struct MirGraph {
@@ -46,6 +48,69 @@ struct MirEdge {
     source: String,
     target: String,
     label: String,
+}
+
+fn format_local(local: &Local, debug_info: &[VarDebugInfo]) -> String {
+    get_source_name_from_local(local, debug_info).unwrap_or_else(|| format!("{:?}", local))
+}
+
+fn format_place<'tcx>(place: &mir::Place<'tcx>, debug_info: &[VarDebugInfo]) -> String {
+    get_source_name_from_place(&(*place).into(), debug_info).unwrap_or_else(|| format!("{:?}", place))
+}
+
+fn format_operand<'tcx>(operand: &Operand<'tcx>, debug_info: &[VarDebugInfo]) -> String {
+    match operand {
+        Operand::Copy(p) => format_place(p, debug_info),
+        Operand::Move(p) => format!("move {}", format_place(p, debug_info)),
+        Operand::Constant(c) => format!("{}", c),
+    }
+}
+
+fn format_rvalue<'tcx>(rvalue: &Rvalue<'tcx>, debug_info: &[VarDebugInfo]) -> String {
+    match rvalue {
+        Rvalue::Use(operand) => format_operand(operand, debug_info),
+        Rvalue::Repeat(_, _) => todo!(),
+        Rvalue::Ref(region, kind, place) => {
+            let kind = match kind {
+                mir::BorrowKind::Shared => "",
+                mir::BorrowKind::Shallow => "",
+                mir::BorrowKind::Mut { .. } => "mut"
+            };
+            format!("&{} {}", kind, format_place(place, debug_info))
+        }
+        Rvalue::ThreadLocalRef(_) => todo!(),
+        Rvalue::AddressOf(_, _) => todo!(),
+        Rvalue::Len(_) => todo!(),
+        Rvalue::Cast(_, _, _) => todo!(),
+        Rvalue::BinaryOp(_, _) => todo!(),
+        Rvalue::CheckedBinaryOp(_, _) => todo!(),
+        Rvalue::NullaryOp(_, _) => todo!(),
+        Rvalue::UnaryOp(_, _) => todo!(),
+        Rvalue::Discriminant(_) => todo!(),
+        Rvalue::Aggregate(_, _) => todo!(),
+        Rvalue::ShallowInitBox(_, _) => todo!(),
+        Rvalue::CopyForDeref(_) => todo!(),
+    }
+}
+
+fn format_stmt<'tcx>(stmt: &Statement<'tcx>, debug_info: &[VarDebugInfo]) -> String {
+    match &stmt.kind {
+        mir::StatementKind::Assign(box (place, rvalue)) => {
+            format!("{} = {}", format_place(place, debug_info), format_rvalue(rvalue, debug_info))
+        }
+        mir::StatementKind::FakeRead(box (_, place)) => format!("FakeRead({})", format_place(place, debug_info)),
+        mir::StatementKind::SetDiscriminant { place, variant_index } => todo!(),
+        mir::StatementKind::Deinit(_) => todo!(),
+        mir::StatementKind::StorageLive(local) => format!("StorageLive({})", format_local(local, debug_info)),
+        mir::StatementKind::StorageDead(local) => format!("StorageDead({})", format_local(local, debug_info)),
+        mir::StatementKind::Retag(_, _) => todo!(),
+        mir::StatementKind::PlaceMention(_) => todo!(),
+        mir::StatementKind::AscribeUserType(_, _) => todo!(),
+        mir::StatementKind::Coverage(_) => todo!(),
+        mir::StatementKind::Intrinsic(_) => todo!(),
+        mir::StatementKind::ConstEvalCounter => todo!(),
+        mir::StatementKind::Nop => todo!(),
+    }
 }
 
 fn mk_mir_graph(body: &Body<'_>) -> MirGraph {
@@ -67,11 +132,11 @@ fn mk_mir_graph(body: &Body<'_>) -> MirGraph {
 
         for (i, stmt) in data.statements.iter().enumerate() {
             label.push_str(&format!(
-                "<tr data-bb=\"{}\" data-statement=\"{}\"><td>{}</td> <td>{:?}</td></tr>",
+                "<tr data-bb=\"{}\" data-statement=\"{}\"><td>{}</td> <td><code>{}</code></td></tr>",
                 bb.as_usize(),
                 i,
                 i,
-                stmt
+                format_stmt(stmt, &body.var_debug_info)
             ));
         }
 

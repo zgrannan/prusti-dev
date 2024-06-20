@@ -106,7 +106,7 @@
           .setDefaultEdgeLabel(() => ({}));
 
         graph.nodes.forEach((node) => {
-          g.setNode(node.id, { label: node.label, width: 200, height: 200 });
+          g.setNode(node.id, { label: node.label });
         });
 
         graph.edges.forEach((edge) => {
@@ -133,7 +133,7 @@
         node
           .append("foreignObject")
           .attr("width", 200)
-          .attr("height", 400)
+          .attr("height", 600)
           .attr("class", "foreign-object")
           .html((d) => g.node(d).label);
 
