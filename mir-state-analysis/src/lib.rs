@@ -8,6 +8,7 @@
 #![feature(rustc_private)]
 #![feature(box_patterns, hash_extract_if, extract_if)]
 
+pub mod visualization;
 pub mod free_pcs;
 pub mod utils;
 pub mod coupling_graph;
@@ -19,7 +20,7 @@ use std::{fs::create_dir_all, rc::Rc};
 
 use borrows::domain::BorrowsDomain;
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
-use free_pcs::{generate_dot_graph, HasExtra};
+use free_pcs::HasExtra;
 use prusti_rustc_interface::{
     borrowck::consumers::BodyWithBorrowckFacts,
     dataflow::Analysis,
@@ -29,8 +30,9 @@ use prusti_rustc_interface::{
         ty::TyCtxt,
     },
 };
+use visualization::mir_graph::generate_json_from_mir;
 
-use crate::free_pcs::generate_json_from_mir;
+use crate::visualization::generate_dot_graph;
 
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<
     'mir,
