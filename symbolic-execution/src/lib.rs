@@ -1,25 +1,27 @@
-pub mod place;
+#![feature(rustc_private)]
+#![feature(box_patterns)]
+
+pub mod havoc;
 pub mod heap;
-pub mod value;
 pub mod path;
 pub mod path_conditions;
+pub mod place;
+pub mod value;
 
-use crate::{
-    coupling_graph::BodyWithBorrowckFacts,
-    havoc::HavocData,
-    symbolic_execution::{heap::SymbolicHeap, value::SymValueData},
-};
 use debug_info::{add_debug_note, DebugInfo};
+use havoc::HavocData;
+use heap::SymbolicHeap;
+use pcs::{free_pcs::RepackOp, FpcsOutput};
 use prusti_rustc_interface::{
+    borrowck::consumers::BodyWithBorrowckFacts,
     hir::def_id::DefId,
     middle::{
-        mir,
+        mir::{self, Body},
         ty::{self, GenericArgsRef, TyCtxt},
     },
 };
 use std::{collections::BTreeSet, ops::Deref, rc::Rc};
-
-use crate::FpcsOutput;
+use value::SymValueData;
 
 use self::{
     path::{AcyclicPath, Path},
@@ -172,7 +174,7 @@ impl SymExArena {
 
 pub struct SymbolicExecution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> {
     tcx: TyCtxt<'tcx>,
-    body: &'mir BodyWithBorrowckFacts<'tcx>,
+    body: &'mir Body<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
     havoc: HavocData,
     symvars: Vec<ty::Ty<'tcx>>,
@@ -194,7 +196,7 @@ pub trait VerifierSemantics<'sym, 'tcx> {
 impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir, 'sym, 'tcx, S> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
-        body: &'mir BodyWithBorrowckFacts<'tcx>,
+        body: &'mir Body<'tcx>,
         fpcs_analysis: FpcsOutput<'mir, 'tcx>,
         verifier_semantics: S,
         arena: &'sym SymExArena,
@@ -203,8 +205,8 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
             tcx,
             body,
             fpcs_analysis,
-            havoc: HavocData::new(&body.body),
-            symvars: Vec::with_capacity(body.body.arg_count),
+            havoc: HavocData::new(&body),
+            symvars: Vec::with_capacity(body.arg_count),
             verifier_semantics,
             arena,
         }
@@ -234,7 +236,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                 }
             }
             mir::TerminatorKind::SwitchInt { discr, targets } => {
-                let ty = discr.ty(&self.body.body.local_decls, self.tcx);
+                let ty = discr.ty(&self.body.local_decls, self.tcx);
                 for (value, target) in targets.iter() {
                     let pred = PathConditionPredicate::Eq(value, ty);
                     if let Some(mut path) = path.push_if_acyclic(target) {
@@ -277,7 +279,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                 destination,
                 target,
                 ..
-            } => match func.ty(&self.body.body.local_decls, self.tcx).kind() {
+            } => match func.ty(&self.body.local_decls, self.tcx).kind() {
                 ty::TyKind::FnDef(def_id, substs) => {
                     let args: Vec<_> = args
                         .iter()
@@ -298,7 +300,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         .encode_fn_call(self.arena, *def_id, substs, args)
                         .unwrap_or_else(|| {
                             let sym_var = self.mk_fresh_symvar(
-                                destination.ty(&self.body.body.local_decls, self.tcx).ty,
+                                destination.ty(&self.body.local_decls, self.tcx).ty,
                             );
                             add_debug_note!(
                                 sym_var.debug_info,
@@ -336,8 +338,8 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
         let mut assertions: BTreeSet<ResultAssertion<'sym, 'tcx, S::SymValSynthetic>> =
             BTreeSet::new();
         let mut init_heap = SymbolicHeap::new();
-        for (idx, arg) in self.body.body.args_iter().enumerate() {
-            let local = &self.body.body.local_decls[arg];
+        for (idx, arg) in self.body.args_iter().enumerate() {
+            let local = &self.body.local_decls[arg];
             let arg_ty = local.ty;
             self.symvars.push(arg_ty);
             let place = Place::new(arg, Vec::new());
@@ -346,7 +348,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                 sym_var.debug_info,
                 "Symvar for arg {:?} in {:?}",
                 arg,
-                self.body.body.span
+                self.body.span
             );
             init_heap.insert(place, sym_var);
         }
@@ -360,11 +362,11 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
             for local in self.havoc.get(block).iter() {
                 path.heap.insert(
                     (*local).into(),
-                    self.mk_fresh_symvar(self.body.body.local_decls[*local].ty),
+                    self.mk_fresh_symvar(self.body.local_decls[*local].ty),
                 );
             }
             let pcs_block = self.fpcs_analysis.get_all_for_bb(block);
-            let block_data = &self.body.body.basic_blocks[block];
+            let block_data = &self.body.basic_blocks[block];
             for (stmt_idx, stmt) in block_data.statements.iter().enumerate() {
                 let fpcs_loc = &pcs_block.statements[stmt_idx];
                 self.handle_repacks(&fpcs_loc.repacks_start, &mut path.heap);
@@ -414,7 +416,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         let lhs = heap.encode_operand(self.arena, &lhs);
                         let rhs = heap.encode_operand(self.arena, &rhs);
                         self.arena.mk_checked_bin_op(
-                            place.ty(&self.body.body.local_decls, self.tcx).ty,
+                            place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
                             lhs,
                             rhs,
@@ -424,7 +426,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         let lhs = heap.encode_operand(self.arena, &lhs);
                         let rhs = heap.encode_operand(self.arena, &rhs);
                         self.arena.mk_bin_op(
-                            place.ty(&self.body.body.local_decls, self.tcx).ty,
+                            place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
                             lhs,
                             rhs,
@@ -438,7 +440,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         self.arena.mk_aggregate(
                             AggregateKind::rust(
                                 *kind.clone(),
-                                place.ty(&self.body.body.local_decls, self.tcx).ty,
+                                place.ty(&self.body.local_decls, self.tcx).ty,
                             ),
                             self.alloc_slice(&ops),
                         )
@@ -447,26 +449,25 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         .arena
                         .mk_discriminant(heap.get(&(*target).into()).unwrap()),
                     mir::Rvalue::Ref(_, _, target_place) => self.arena.mk_ref(
-                        place.ty(&self.body.body.local_decls, self.tcx).ty,
+                        place.ty(&self.body.local_decls, self.tcx).ty,
                         heap.get(&(*target_place).into()).unwrap_or_else(|| {
-                            panic!("{:?} in {:?} at {:?}", target_place, self.body.body.span, stmt.source_info)
+                            panic!(
+                                "{:?} in {:?} at {:?}",
+                                target_place, self.body.span, stmt.source_info
+                            )
                         }),
                     ),
                     mir::Rvalue::UnaryOp(op, operand) => {
                         let operand = heap.encode_operand(self.arena, operand);
                         self.arena.mk_unary_op(
-                            place.ty(&self.body.body.local_decls, self.tcx).ty,
+                            place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
                             operand,
                         )
                     }
                     mir::Rvalue::Cast(kind, operand, ty) => {
                         let operand = heap.encode_operand(self.arena, operand);
-                        self.arena.mk_cast(
-                            (*kind).into(),
-                            operand,
-                            *ty,
-                        )
+                        self.arena.mk_cast((*kind).into(), operand, *ty)
                     }
                     _ => todo!("{rvalue:?}"),
                 };
@@ -489,7 +490,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
 
     fn handle_repacks(
         &self,
-        repacks: &Vec<crate::free_pcs::RepackOp<'tcx>>,
+        repacks: &Vec<RepackOp<'tcx>>,
         heap: &mut SymbolicHeap<'sym, 'tcx, S::SymValSynthetic>,
     ) {
         for repack in repacks {
@@ -506,14 +507,14 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
 
     fn handle_repack(
         &self,
-        repack: &crate::free_pcs::RepackOp<'tcx>,
+        repack: &RepackOp<'tcx>,
         heap: &mut SymbolicHeap<'sym, 'tcx, S::SymValSynthetic>,
     ) {
         match repack {
-            crate::free_pcs::RepackOp::StorageDead(_) => todo!(),
-            crate::free_pcs::RepackOp::IgnoreStorageDead(_) => todo!(),
-            crate::free_pcs::RepackOp::Weaken(_, _, _) => todo!(),
-            crate::free_pcs::RepackOp::Expand(place, guide, _) => {
+            RepackOp::StorageDead(_) => todo!(),
+            RepackOp::IgnoreStorageDead(_) => todo!(),
+            RepackOp::Weaken(_, _, _) => todo!(),
+            RepackOp::Expand(place, guide, _) => {
                 let value = heap.take(&place.deref().into());
                 let old_proj_len = place.projection.len();
                 let (field, rest, _) =
@@ -526,7 +527,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                     heap.insert(f.deref().into(), value)
                 }
             }
-            crate::free_pcs::RepackOp::Collapse(place, from, _) => {
+            RepackOp::Collapse(place, from, _) => {
                 let places: Vec<_> = place
                     .expand_field(None, self.fpcs_analysis.repacker())
                     .iter()
@@ -545,7 +546,17 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                     ),
                 );
             }
-            crate::free_pcs::RepackOp::DerefShallowInit(_, _) => todo!(),
+            RepackOp::DerefShallowInit(_, _) => todo!(),
         }
     }
+}
+
+pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
+    mir: &'mir Body<'tcx>,
+    tcx: TyCtxt<'tcx>,
+    fpcs_analysis: FpcsOutput<'mir, 'tcx>,
+    verifier_semantics: S,
+    arena: &'sym SymExArena,
+) -> SymbolicExecutionResult<'sym, 'tcx, S::SymValSynthetic> {
+    SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics, arena).execute()
 }

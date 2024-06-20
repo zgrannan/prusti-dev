@@ -9,7 +9,7 @@ members = [
     "prusti-utils",
     "prusti-viper",
     "tracing",
-    "mir-state-analysis",
+    # "mir-state-analysis",
     "mir-ssa-analysis",
     "prusti-interface",
     "prusti-server",

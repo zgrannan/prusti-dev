@@ -1,4 +1,4 @@
-use mir_state_analysis::symbolic_execution::{
+use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate},
     value::{AggregateKind, Substs, SymValueKind},
     SymExArena,

@@ -1,5 +1,5 @@
 use cfg_if::cfg_if;
-use mir_state_analysis::symbolic_execution::SymExArena;
+use symbolic_execution::SymExArena;
 use prusti_rustc_interface::{
     middle::ty::{self, GenericArgs},
     span::def_id::DefId,

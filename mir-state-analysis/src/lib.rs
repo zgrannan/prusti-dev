@@ -13,8 +13,6 @@ pub mod utils;
 pub mod coupling_graph;
 pub mod r#loop;
 pub mod combined_pcs;
-pub mod symbolic_execution;
-pub mod havoc;
 
 use combined_pcs::{PcsEngine, PlaceCapabilitySummary};
 use coupling_graph::BodyWithBorrowckFacts;
@@ -28,31 +26,12 @@ use prusti_rustc_interface::{
         ty::TyCtxt,
     },
 };
-use symbolic_execution::{
-    SymExArena, SymbolicExecution, SymbolicExecutionResult, VerifierSemantics,
-};
-
 pub type FpcsOutput<'mir, 'tcx> = free_pcs::FreePcsAnalysis<
     'mir,
     'tcx,
     PlaceCapabilitySummary<'mir, 'tcx>,
     PcsEngine<'mir, 'tcx>,
 >;
-
-#[tracing::instrument(
-    name = "run_symbolic_execution",
-    level = "debug",
-    skip(mir, tcx, fpcs_analysis, verifier_semantics, arena)
-)]
-pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
-    mir: &'mir BodyWithBorrowckFacts<'tcx>,
-    tcx: TyCtxt<'tcx>,
-    fpcs_analysis: FpcsOutput<'mir, 'tcx>,
-    verifier_semantics: S,
-    arena: &'sym SymExArena,
-) -> SymbolicExecutionResult<'sym, 'tcx, S::SymValSynthetic> {
-    SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics, arena).execute()
-}
 
 use std::fs::create_dir_all;
 

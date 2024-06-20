@@ -1,4 +1,5 @@
-use mir_state_analysis::symbolic_execution::{
+use pcs::combined_pcs::BodyWithBorrowckFacts;
+use symbolic_execution::{
     path_conditions::PathConditions,
     value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
     ResultPath, SymExArena, VerifierSemantics,
@@ -253,11 +254,19 @@ impl SymPureEnc {
                     .get_pure_fn_body(def_id, substs, caller_def_id),
                 PureKind::Constant(promoted) => todo!(),
             };
-            let body = &*body.body();
-            let symbolic_execution = mir_state_analysis::run_symbolic_execution(
-                body,
+            let body = body.body().as_ref().clone();
+            let symbolic_execution = symbolic_execution::run_symbolic_execution(
+                &body.body.clone(),
                 vcx.tcx(),
-                mir_state_analysis::run_free_pcs(body, vcx.tcx()),
+                pcs::run_free_pcs(&BodyWithBorrowckFacts {
+                    body: body.body,
+                    promoted: body.promoted,
+                    borrow_set: body.borrow_set,
+                    region_inference_context: body.region_inference_context,
+                    location_table: body.location_table,
+                    input_facts: body.input_facts,
+                    output_facts: body.output_facts,
+                }, vcx.tcx(), None),
                 PrustiSemantics(PhantomData),
                 arena,
             );

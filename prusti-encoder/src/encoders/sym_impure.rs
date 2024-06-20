@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
-use mir_state_analysis::symbolic_execution::{
+use pcs::combined_pcs::BodyWithBorrowckFacts;
+use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     value::{Substs, SymValueData, SymValueKind},
     Assertion, SymExArena,
@@ -115,14 +116,27 @@ impl TaskEncoder for SymImpureEnc {
             let body = vcx
                 .body_mut()
                 .get_impure_fn_body_identity(local_def_id)
-                .body();
+                .body()
+                .as_ref()
+                .clone();
+
+            let local_decls = body.body.local_decls.clone();
+            let arg_count = body.body.arg_count;
 
             let arena = SymExArena::new();
 
-            let symbolic_execution = mir_state_analysis::run_symbolic_execution(
-                &body,
+            let symbolic_execution = symbolic_execution::run_symbolic_execution(
+                &body.body.clone(),
                 vcx.tcx(),
-                mir_state_analysis::run_free_pcs(&body, vcx.tcx()),
+                pcs::run_free_pcs(&BodyWithBorrowckFacts {
+                    body: body.body,
+                    promoted: body.promoted,
+                    borrow_set: body.borrow_set,
+                    region_inference_context: body.region_inference_context,
+                    location_table: body.location_table,
+                    input_facts: body.input_facts,
+                    output_facts: body.output_facts,
+                }, vcx.tcx(), None),
                 PrustiSemantics(PhantomData),
                 &arena,
             );
@@ -144,7 +158,7 @@ impl TaskEncoder for SymImpureEnc {
             let result_local = vcx.mk_local(
                 "res",
                 deps.require_ref::<RustTySnapshotsEnc>(
-                    body.body.local_decls.iter().next().unwrap().ty,
+                    local_decls.iter().next().unwrap().ty,
                 )
                 .unwrap()
                 .generic_snapshot
@@ -152,12 +166,11 @@ impl TaskEncoder for SymImpureEnc {
             );
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
-            let body = &body.body;
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut stmts = Vec::new();
             let mut visitor = EncVisitor {
                 vcx,
-                local_decls: &body.local_decls,
+                local_decls: &local_decls,
                 encoder: SymExprEncoder::new(
                     vcx,
                     deps,
@@ -214,7 +227,7 @@ impl TaskEncoder for SymImpureEnc {
                         // corresponds to the spec's symbolic input argument.
                         visitor.encoder.encode_pure_spec(
                             p,
-                            Some(arena.alloc(Substs::singleton(body.arg_count, expr))),
+                            Some(arena.alloc(Substs::singleton(arg_count, expr))),
                         )
                         .unwrap_or_else(|err| {
                             panic!("Error when encoding the postcondition {:?} of {:?} for path {:?}: {}", p, def_id, path, err)

@@ -1641,6 +1641,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
 
 [[package]]
+name = "pcs"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "dot",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smallvec",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1802,7 +1815,6 @@ dependencies = [
  "env_logger",
  "lazy_static",
  "log",
- "mir-state-analysis",
  "prusti-encoder",
  "prusti-interface",
  "prusti-rustc-interface",
@@ -1830,9 +1842,10 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "mir-ssa-analysis",
- "mir-state-analysis",
+ "pcs",
  "prusti-interface",
  "prusti-rustc-interface",
+ "symbolic-execution",
  "task-encoder",
  "tracing 0.1.0",
  "vir",
@@ -2417,6 +2430,16 @@ name = "strsim"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ee073c9e4cd00e28217186dbe12796d692868f432bf2e97ee73bed0c56dfa01"
+
+[[package]]
+name = "symbolic-execution"
+version = "0.1.0"
+dependencies = [
+ "bumpalo",
+ "debug-info",
+ "pcs",
+ "prusti-rustc-interface",
+]
 
 [[package]]
 name = "syn"

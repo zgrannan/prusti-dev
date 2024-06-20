@@ -4,7 +4,7 @@ use prusti_rustc_interface::middle::mir::{
     BasicBlock, Body, Local, StatementKind, TerminatorKind,
 };
 
-use crate::symbolic_execution::path::AcyclicPath;
+use crate::path::AcyclicPath;
 
 pub struct HavocData {
     havoced_locals: BTreeMap<BasicBlock, BTreeSet<Local>>,

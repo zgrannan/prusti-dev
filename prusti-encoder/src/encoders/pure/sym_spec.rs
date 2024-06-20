@@ -2,7 +2,7 @@ use middle::{
     mir::interpret::{ConstValue, Scalar},
     ty::VariantDiscr,
 };
-use mir_state_analysis::symbolic_execution::{
+use symbolic_execution::{
     path_conditions::PathConditions,
     value::{Constant, SymValueData, Ty},
     ResultPath, SymExArena,
