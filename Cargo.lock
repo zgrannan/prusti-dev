@@ -2436,9 +2436,7 @@ name = "symbolic-execution"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
- "debug-info",
  "pcs",
- "prusti-rustc-interface",
  "serde",
  "serde_json",
 ]

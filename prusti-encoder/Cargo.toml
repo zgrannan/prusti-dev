@@ -17,7 +17,7 @@ pcs = { path = "../../pcs" }
 task-encoder = { path = "../task-encoder" }
 vir = { path = "../vir" }
 tracing = { path = "../tracing" }
-symbolic-execution = { path = "../symbolic-execution" }
+symbolic-execution = { path = "../../symbolic-execution" }
 
 [package.metadata.rust-analyzer]
 # This crate uses #[feature(rustc_private)]

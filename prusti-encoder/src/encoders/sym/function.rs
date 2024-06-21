@@ -1,9 +1,9 @@
 use cfg_if::cfg_if;
-use symbolic_execution::SymExArena;
 use prusti_rustc_interface::{
     middle::ty::{self, GenericArgs},
     span::def_id::DefId,
 };
+use symbolic_execution::context::SymExContext;
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
@@ -130,7 +130,7 @@ impl TaskEncoder for SymFunctionEnc {
             );
             deps.emit_output_ref(*task_key, SymFunctionEncOutputRef { function_ident })?;
 
-            let arena = SymExArena::new();
+            let arena = SymExContext::new();
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, None));
             let symvars: Vec<_> = decls
                 .iter()

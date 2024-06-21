@@ -1,8 +1,3 @@
-use symbolic_execution::{
-    path_conditions::{PathConditionAtom, PathConditionPredicate},
-    value::{AggregateKind, Substs, SymValueKind},
-    SymExArena,
-};
 use prusti_rustc_interface::{
     abi,
     middle::{
@@ -10,6 +5,11 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgs},
     },
     span::def_id::{DefId, LocalDefId},
+};
+use symbolic_execution::{
+    context::SymExContext,
+    path_conditions::{PathConditionAtom, PathConditionPredicate},
+    value::{AggregateKind, Substs, SymValueKind},
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 
@@ -41,7 +41,7 @@ type PrustiPathConditionAtom<'sym, 'tcx> =
 pub struct SymExprEncoder<'enc, 'vir: 'tcx, 'sym, 'tcx, T: TaskEncoder> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     pub deps: &'enc mut TaskEncoderDependencies<'vir, T>,
-    arena: &'sym SymExArena,
+    arena: &'sym SymExContext,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
 }
@@ -50,7 +50,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
     pub fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         symvars: Vec<vir::Expr<'vir>>,
         def_id: DefId,
     ) -> Self {

@@ -5,7 +5,7 @@ use middle::{
 use symbolic_execution::{
     path_conditions::PathConditions,
     value::{Constant, SymValueData, Ty},
-    ResultPath, SymExArena,
+    results::ResultPath, context::SymExContext,
 };
 use prusti_rustc_interface::{
     hir::lang_items,
@@ -60,7 +60,7 @@ type SymSpecEncTask<'tcx> = (
 );
 
 pub fn mk_conj<'sym, 'tcx>(
-    arena: &'sym SymExArena,
+    arena: &'sym SymExContext,
     tcx: ty::TyCtxt<'tcx>,
     sym_values: Vec<PrustiSymValue<'sym, 'tcx>>,
 ) -> PrustiSymValue<'sym, 'tcx> {
@@ -76,7 +76,7 @@ pub fn mk_conj<'sym, 'tcx>(
 
 impl SymSpecEnc {
     pub fn spec_bool<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         b: bool,
     ) -> SymSpec<'sym, 'tcx> {
@@ -85,7 +85,7 @@ impl SymSpecEnc {
     }
 
     fn encode_discr<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         discr: VariantDiscr,
         ty: ty::Ty<'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
@@ -96,7 +96,7 @@ impl SymSpecEnc {
     }
 
     fn encode_variant_eq<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         variant: &VariantDef,
         substs: ty::GenericArgsRef<'tcx>,
@@ -121,7 +121,7 @@ impl SymSpecEnc {
     }
 
     fn partial_eq_expr<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         lhs: PrustiSymValue<'sym, 'tcx>,
         rhs: PrustiSymValue<'sym, 'tcx>,
@@ -198,7 +198,7 @@ impl SymSpecEnc {
     }
 
     fn structural_eq_spec<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         ty: ty::Ty<'tcx>,
         negate: bool,
@@ -227,7 +227,7 @@ impl SymSpecEnc {
     }
 
     pub fn encode<'sym, 'tcx, 'vir, T: TaskEncoder>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         task_key: SymSpecEncTask<'tcx>,
     ) -> SymSpecEncOutput<'sym, 'tcx> {

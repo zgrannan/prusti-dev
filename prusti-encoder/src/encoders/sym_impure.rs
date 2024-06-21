@@ -4,7 +4,7 @@ use pcs::combined_pcs::BodyWithBorrowckFacts;
 use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     value::{Substs, SymValueData, SymValueKind},
-    Assertion, SymExArena,
+    Assertion, context::SymExContext,
 };
 use prusti_rustc_interface::{
     abi,
@@ -123,7 +123,7 @@ impl TaskEncoder for SymImpureEnc {
             let local_decls = body.body.local_decls.clone();
             let arg_count = body.body.arg_count;
 
-            let arena = SymExArena::new();
+            let arena = SymExContext::new();
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
                 &body.body.clone(),
@@ -275,7 +275,7 @@ where
     vcx: &'vir vir::VirCtxt<'tcx>,
     encoder: SymExprEncoder<'enc, 'vir, 'sym, 'tcx, SymImpureEnc>,
     local_decls: &'enc mir::LocalDecls<'tcx>,
-    arena: &'sym SymExArena,
+    arena: &'sym SymExContext,
 }
 
 impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'_, 'vir, 'vir, 'enc> {

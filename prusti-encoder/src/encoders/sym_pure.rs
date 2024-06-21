@@ -15,9 +15,10 @@ use std::{
     marker::PhantomData,
 };
 use symbolic_execution::{
+    context::SymExContext,
     path_conditions::PathConditions,
     value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
-    ResultPath, SymExArena, VerifierSemantics, VisFormat,
+    results::ResultPath, semantics::VerifierSemantics, VisFormat,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -69,7 +70,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
 
     pub fn subst(
         self,
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         substs: &'sym PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
@@ -155,7 +156,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
 impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         tcx: ty::TyCtxt<'tcx>,
         substs: &Substs<'sym, 'tcx, Self>,
     ) -> Self {
@@ -202,7 +203,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
         }
     }
 
-    fn optimize(self, arena: &'sym SymExArena, tcx: ty::TyCtxt<'tcx>) -> Self {
+    fn optimize(self, arena: &'sym SymExContext, tcx: ty::TyCtxt<'tcx>) -> Self {
         match &self {
             PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
                 PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
@@ -241,7 +242,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 
     fn encode_fn_call(
         &self,
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
         args: &'sym [PrustiSymValue<'sym, 'tcx>],
@@ -265,7 +266,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 
 impl SymPureEnc {
     pub fn encode<'sym, 'tcx>(
-        arena: &'sym SymExArena,
+        arena: &'sym SymExContext,
         task: SymPureEncTask<'tcx>,
     ) -> SymPureEncResult<'sym, 'tcx> {
         let kind = task.kind;
