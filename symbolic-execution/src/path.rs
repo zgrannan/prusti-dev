@@ -6,6 +6,11 @@ use super::{heap::SymbolicHeap, path_conditions::PathConditions};
 pub struct AcyclicPath(Vec<BasicBlock>);
 
 impl AcyclicPath {
+
+    pub fn blocks(&self) -> &[BasicBlock] {
+        &self.0
+    }
+
     pub fn from_start_block() -> Self {
         AcyclicPath(vec![START_BLOCK])
     }

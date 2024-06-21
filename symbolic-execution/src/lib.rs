@@ -1,5 +1,6 @@
 #![feature(rustc_private)]
 #![feature(box_patterns)]
+#![feature(associated_type_bounds)]
 
 pub mod havoc;
 pub mod heap;
@@ -11,12 +12,16 @@ pub mod value;
 use debug_info::{add_debug_note, DebugInfo};
 use havoc::HavocData;
 use heap::SymbolicHeap;
-use pcs::{free_pcs::RepackOp, FpcsOutput};
+use pcs::{
+    borrows::domain::BorrowsDomain,
+    free_pcs::{FreePcsLocation, RepackOp},
+    FpcsOutput,
+};
 use prusti_rustc_interface::{
     borrowck::consumers::BodyWithBorrowckFacts,
     hir::def_id::DefId,
     middle::{
-        mir::{self, Body},
+        mir::{self, Body, VarDebugInfo},
         ty::{self, GenericArgsRef, TyCtxt},
     },
 };
@@ -193,7 +198,9 @@ pub trait VerifierSemantics<'sym, 'tcx> {
     ) -> Option<SymValue<'sym, 'tcx, Self::SymValSynthetic>>;
 }
 
-impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir, 'sym, 'tcx, S> {
+impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx, SymValSynthetic: VisFormat>>
+    SymbolicExecution<'mir, 'sym, 'tcx, S>
+{
     pub fn new(
         tcx: TyCtxt<'tcx>,
         body: &'mir Body<'tcx>,
@@ -338,6 +345,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
         let mut assertions: BTreeSet<ResultAssertion<'sym, 'tcx, S::SymValSynthetic>> =
             BTreeSet::new();
         let mut init_heap = SymbolicHeap::new();
+        let fn_name = &format!("{}", self.tcx.item_name(self.body.source.def_id()));
         for (idx, arg) in self.body.args_iter().enumerate() {
             let local = &self.body.local_decls[arg];
             let arg_ty = local.ty;
@@ -367,10 +375,12 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
             }
             let pcs_block = self.fpcs_analysis.get_all_for_bb(block);
             let block_data = &self.body.basic_blocks[block];
+            export_path_json(fn_name, &path, 0, &self.body.var_debug_info);
             for (stmt_idx, stmt) in block_data.statements.iter().enumerate() {
+                export_path_json(fn_name, &path, stmt_idx + 1, &self.body.var_debug_info);
                 let fpcs_loc = &pcs_block.statements[stmt_idx];
                 self.handle_repacks(&fpcs_loc.repacks_start, &mut path.heap);
-                self.handle_stmt(stmt, &mut path.heap);
+                self.handle_stmt(stmt, &mut path.heap, fpcs_loc);
             }
             let last_fpcs_loc = pcs_block.statements.last().unwrap();
             self.handle_repacks(&last_fpcs_loc.repacks_start, &mut path.heap);
@@ -407,14 +417,19 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
         &mut self,
         stmt: &mir::Statement<'tcx>,
         heap: &mut SymbolicHeap<'sym, 'tcx, S::SymValSynthetic>,
+        pcs: &FreePcsLocation<'tcx, BorrowsDomain<'tcx>>,
     ) {
+        eprintln!("Handle stmt {:?}", stmt);
         match &stmt.kind {
             mir::StatementKind::Assign(box (place, rvalue)) => {
+                eprintln!("Handle rvalue {:?}", rvalue);
                 let sym_value = match rvalue {
-                    mir::Rvalue::Use(operand) => heap.encode_operand(self.arena, &operand),
+                    mir::Rvalue::Use(operand) => {
+                        heap.encode_operand(self.arena, &operand, &pcs.extra)
+                    }
                     mir::Rvalue::CheckedBinaryOp(op, box (lhs, rhs)) => {
-                        let lhs = heap.encode_operand(self.arena, &lhs);
-                        let rhs = heap.encode_operand(self.arena, &rhs);
+                        let lhs = heap.encode_operand(self.arena, &lhs, &pcs.extra);
+                        let rhs = heap.encode_operand(self.arena, &rhs, &pcs.extra);
                         self.arena.mk_checked_bin_op(
                             place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
@@ -423,8 +438,8 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         )
                     }
                     mir::Rvalue::BinaryOp(op, box (lhs, rhs)) => {
-                        let lhs = heap.encode_operand(self.arena, &lhs);
-                        let rhs = heap.encode_operand(self.arena, &rhs);
+                        let lhs = heap.encode_operand(self.arena, &lhs, &pcs.extra);
+                        let rhs = heap.encode_operand(self.arena, &rhs, &pcs.extra);
                         self.arena.mk_bin_op(
                             place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
@@ -435,7 +450,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                     mir::Rvalue::Aggregate(kind, ops) => {
                         let ops = ops
                             .iter()
-                            .map(|op| heap.encode_operand(self.arena, op))
+                            .map(|op| heap.encode_operand(self.arena, op, &pcs.extra))
                             .collect::<Vec<_>>();
                         self.arena.mk_aggregate(
                             AggregateKind::rust(
@@ -458,7 +473,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         }),
                     ),
                     mir::Rvalue::UnaryOp(op, operand) => {
-                        let operand = heap.encode_operand(self.arena, operand);
+                        let operand = heap.encode_operand(self.arena, operand, &pcs.extra);
                         self.arena.mk_unary_op(
                             place.ty(&self.body.local_decls, self.tcx).ty,
                             *op,
@@ -466,7 +481,7 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
                         )
                     }
                     mir::Rvalue::Cast(kind, operand, ty) => {
-                        let operand = heap.encode_operand(self.arena, operand);
+                        let operand = heap.encode_operand(self.arena, operand, &pcs.extra);
                         self.arena.mk_cast((*kind).into(), operand, *ty)
                     }
                     _ => todo!("{rvalue:?}"),
@@ -551,7 +566,12 @@ impl<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>> SymbolicExecution<'mir,
     }
 }
 
-pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>>(
+pub fn run_symbolic_execution<
+    'mir,
+    'sym,
+    'tcx,
+    S: VerifierSemantics<'sym, 'tcx, SymValSynthetic: VisFormat>,
+>(
     mir: &'mir Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     fpcs_analysis: FpcsOutput<'mir, 'tcx>,
@@ -559,4 +579,30 @@ pub fn run_symbolic_execution<'mir, 'sym, 'tcx, S: VerifierSemantics<'sym, 'tcx>
     arena: &'sym SymExArena,
 ) -> SymbolicExecutionResult<'sym, 'tcx, S::SymValSynthetic> {
     SymbolicExecution::new(tcx, mir, fpcs_analysis, verifier_semantics, arena).execute()
+}
+
+fn export_path_json<'sym, 'tcx, T: VisFormat>(
+    fn_name: &str,
+    path: &Path<'sym, 'tcx, T>,
+    instruction_index: usize,
+    debug_info: &[VarDebugInfo],
+) {
+    let path_component = path
+        .path
+        .blocks()
+        .iter()
+        .map(|block| format!("{:?}", block))
+        .collect::<Vec<_>>()
+        .join("_");
+    let filename = format!(
+        "../pcs/visualization/data/{}/path_{}_stmt_{}.json",
+        fn_name, path_component, instruction_index
+    );
+    let heap_json = path.heap.to_json(debug_info);
+    std::fs::write(filename, serde_json::to_string_pretty(&heap_json).unwrap())
+        .expect("Unable to write file");
+}
+
+pub trait VisFormat {
+    fn to_vis_string(&self, debug_info: &[VarDebugInfo]) -> String;
 }

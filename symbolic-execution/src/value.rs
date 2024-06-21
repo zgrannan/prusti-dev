@@ -4,7 +4,7 @@ use prusti_rustc_interface::{
     const_eval::interpret::ConstValue,
     data_structures::fx::FxHasher,
     middle::{
-        mir::{self, tcx::PlaceTy, ProjectionElem},
+        mir::{self, tcx::PlaceTy, ProjectionElem, VarDebugInfo},
         ty::{self},
     },
     span::{def_id::DefId, DUMMY_SP},
@@ -16,6 +16,8 @@ use std::{
     hash::{Hash, Hasher},
     rc::Rc,
 };
+
+use crate::VisFormat;
 
 use super::SymExArena;
 
@@ -71,25 +73,65 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueData<'sym, 'tcx, T> {
         self.kind.ty(tcx)
     }
 }
-
-impl<'sym, 'tcx, T: std::fmt::Display> std::fmt::Display for SymValueData<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: VisFormat> std::fmt::Display for SymValueData<'sym, 'tcx, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_vis_string(&[]))
+    }
+}
+
+impl<'sym, 'tcx, T: VisFormat> VisFormat for SymValueData<'sym, 'tcx, T> {
+    fn to_vis_string(&self, debug_info: &[VarDebugInfo]) -> String {
         match &self.kind {
-            SymValueKind::Var(idx, ty) => write!(f, "(s{}: {})", idx, ty),
-            SymValueKind::Ref(_, t) => {
-                write!(f, "(&{})", t)
+            SymValueKind::Var(idx, ty) => {
+                if *idx < debug_info.len() {
+                    format!("{}", debug_info[*idx].name)
+                } else {
+                    format!("(s{}: {})", idx, ty)
+                }
             }
-            SymValueKind::Constant(c) => write!(f, "{:?}", c),
-            SymValueKind::CheckedBinaryOp(_, _, _, _) => todo!(),
-            SymValueKind::BinaryOp(_, op, lhs, rhs) => {
-                write!(f, "({} {:?} {})", lhs, op, rhs)
+            SymValueKind::Ref(_, t) => format!("(&{})", t.to_vis_string(debug_info)),
+            SymValueKind::Constant(c) => format!("{}", c.literal()),
+            SymValueKind::CheckedBinaryOp(_, op, lhs, rhs)
+            | SymValueKind::BinaryOp(_, op, lhs, rhs) => {
+                let op = match op {
+                    mir::BinOp::Add => "+",
+                    mir::BinOp::AddUnchecked => "+",
+                    mir::BinOp::Sub => "-",
+                    mir::BinOp::SubUnchecked => "-",
+                    mir::BinOp::Mul => "*",
+                    mir::BinOp::MulUnchecked => "*",
+                    mir::BinOp::Div => todo!(),
+                    mir::BinOp::Rem => todo!(),
+                    mir::BinOp::BitXor => todo!(),
+                    mir::BinOp::BitAnd => todo!(),
+                    mir::BinOp::BitOr => todo!(),
+                    mir::BinOp::Shl => todo!(),
+                    mir::BinOp::ShlUnchecked => todo!(),
+                    mir::BinOp::Shr => todo!(),
+                    mir::BinOp::ShrUnchecked => todo!(),
+                    mir::BinOp::Eq => "==",
+                    mir::BinOp::Lt => "<",
+                    mir::BinOp::Le => "<=",
+                    mir::BinOp::Ne => "!=",
+                    mir::BinOp::Ge => ">=",
+                    mir::BinOp::Gt => ">",
+                    mir::BinOp::Offset => todo!(),
+                };
+                format!(
+                    "({} {} {})",
+                    lhs.to_vis_string(debug_info),
+                    op,
+                    rhs.to_vis_string(debug_info)
+                )
             }
             SymValueKind::UnaryOp(_, op, expr) => {
-                write!(f, "({:?} {})", op, expr)
+                format!("({:?} {})", op, expr.to_vis_string(debug_info))
             }
             SymValueKind::Projection(kind, value) => match &kind {
-                ProjectionElem::Deref => write!(f, "*({})", value),
-                ProjectionElem::Field(_, _) => todo!(),
+                ProjectionElem::Deref => format!("*({})", value.to_vis_string(debug_info)),
+                ProjectionElem::Field(lhs, rhs) => {
+                    format!("({}.{:?})", value.to_vis_string(debug_info), lhs)
+                }
                 ProjectionElem::Index(_) => todo!(),
                 ProjectionElem::ConstantIndex {
                     offset,
@@ -103,13 +145,13 @@ impl<'sym, 'tcx, T: std::fmt::Display> std::fmt::Display for SymValueData<'sym, 
             SymValueKind::Aggregate(kind, values) => {
                 let values_str = values
                     .iter()
-                    .map(|v| format!("{}", v))
+                    .map(|v| v.to_vis_string(debug_info))
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(f, "(compose [{}] to {:?})", values_str, kind)
+                format!("(compose [{}] to {:?})", values_str, kind)
             }
             SymValueKind::Discriminant(_) => todo!(),
-            SymValueKind::Synthetic(s) => write!(f, "{}", s),
+            SymValueKind::Synthetic(s) => s.to_vis_string(debug_info),
             SymValueKind::Cast(_, _, _) => todo!(),
         }
     }
@@ -117,14 +159,14 @@ impl<'sym, 'tcx, T: std::fmt::Display> std::fmt::Display for SymValueData<'sym, 
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum CastKind {
-    IntToInt
+    IntToInt,
 }
 
 impl From<mir::CastKind> for CastKind {
     fn from(value: mir::CastKind) -> Self {
         match value {
             mir::CastKind::IntToInt => CastKind::IntToInt,
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
@@ -334,47 +376,45 @@ impl<'sym, 'tcx, T: SyntheticSymValue<'sym, 'tcx>> SymValueKind<'sym, 'tcx, T> {
             SymValueKind::CheckedBinaryOp(ty, _, _, _) => Ty::new(*ty, None),
             SymValueKind::BinaryOp(ty, _, _, _) => Ty::new(*ty, None),
             SymValueKind::Projection(elem, val) => match elem {
-                ProjectionElem::Deref => {
-                    match val.kind.ty(tcx).rust_ty().kind() {
-                        ty::TyKind::Bool => todo!(),
-                        ty::TyKind::Char => todo!(),
-                        ty::TyKind::Int(_) => todo!(),
-                        ty::TyKind::Uint(_) => todo!(),
-                        ty::TyKind::Float(_) => todo!(),
-                        ty::TyKind::Adt(def, substs) => {
-                            if let Some(box_def_id) = tcx.lang_items().owned_box() {
-                                if def.did() == box_def_id {
-                                    Ty::new(substs.type_at(0), None)
-                                } else {
-                                    panic!()
-                                }
+                ProjectionElem::Deref => match val.kind.ty(tcx).rust_ty().kind() {
+                    ty::TyKind::Bool => todo!(),
+                    ty::TyKind::Char => todo!(),
+                    ty::TyKind::Int(_) => todo!(),
+                    ty::TyKind::Uint(_) => todo!(),
+                    ty::TyKind::Float(_) => todo!(),
+                    ty::TyKind::Adt(def, substs) => {
+                        if let Some(box_def_id) = tcx.lang_items().owned_box() {
+                            if def.did() == box_def_id {
+                                Ty::new(substs.type_at(0), None)
                             } else {
                                 panic!()
                             }
+                        } else {
+                            panic!()
                         }
-                        ty::TyKind::Foreign(_) => todo!(),
-                        ty::TyKind::Str => todo!(),
-                        ty::TyKind::Array(_, _) => todo!(),
-                        ty::TyKind::Slice(_) => todo!(),
-                        ty::TyKind::RawPtr(_) => todo!(),
-                        ty::TyKind::Ref(_, ty, _) => Ty::new(*ty, None),
-                        ty::TyKind::FnDef(_, _) => todo!(),
-                        ty::TyKind::FnPtr(_) => todo!(),
-                        ty::TyKind::Dynamic(_, _, _) => todo!(),
-                        ty::TyKind::Closure(_, _) => todo!(),
-                        ty::TyKind::Generator(_, _, _) => todo!(),
-                        ty::TyKind::GeneratorWitness(_) => todo!(),
-                        ty::TyKind::GeneratorWitnessMIR(_, _) => todo!(),
-                        ty::TyKind::Never => todo!(),
-                        ty::TyKind::Tuple(_) => todo!(),
-                        ty::TyKind::Alias(_, _) => todo!(),
-                        ty::TyKind::Param(_) => todo!(),
-                        ty::TyKind::Bound(_, _) => todo!(),
-                        ty::TyKind::Placeholder(_) => todo!(),
-                        ty::TyKind::Infer(_) => todo!(),
-                        ty::TyKind::Error(_) => todo!(),
                     }
-                }
+                    ty::TyKind::Foreign(_) => todo!(),
+                    ty::TyKind::Str => todo!(),
+                    ty::TyKind::Array(_, _) => todo!(),
+                    ty::TyKind::Slice(_) => todo!(),
+                    ty::TyKind::RawPtr(_) => todo!(),
+                    ty::TyKind::Ref(_, ty, _) => Ty::new(*ty, None),
+                    ty::TyKind::FnDef(_, _) => todo!(),
+                    ty::TyKind::FnPtr(_) => todo!(),
+                    ty::TyKind::Dynamic(_, _, _) => todo!(),
+                    ty::TyKind::Closure(_, _) => todo!(),
+                    ty::TyKind::Generator(_, _, _) => todo!(),
+                    ty::TyKind::GeneratorWitness(_) => todo!(),
+                    ty::TyKind::GeneratorWitnessMIR(_, _) => todo!(),
+                    ty::TyKind::Never => todo!(),
+                    ty::TyKind::Tuple(_) => todo!(),
+                    ty::TyKind::Alias(_, _) => todo!(),
+                    ty::TyKind::Param(_) => todo!(),
+                    ty::TyKind::Bound(_, _) => todo!(),
+                    ty::TyKind::Placeholder(_) => todo!(),
+                    ty::TyKind::Infer(_) => todo!(),
+                    ty::TyKind::Error(_) => todo!(),
+                },
                 ProjectionElem::Field(_, ty) => Ty::new(*ty, None),
                 ProjectionElem::Index(_) => todo!(),
                 ProjectionElem::ConstantIndex {

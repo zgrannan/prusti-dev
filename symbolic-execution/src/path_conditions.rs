@@ -1,5 +1,7 @@
 use std::collections::{btree_set::Iter, BTreeSet};
 
+use crate::VisFormat;
+
 use super::{
     value::{Substs, SymValue, SymValueData, SyntheticSymValue},
     SymExArena,
@@ -55,7 +57,7 @@ pub struct PathConditionAtom<'sym, 'tcx, T> {
     pub predicate: PathConditionPredicate<'sym, 'tcx, T>,
 }
 
-impl<'sym, 'tcx, T: std::fmt::Display + std::fmt::Debug> std::fmt::Display for PathConditionAtom<'sym, 'tcx, T> {
+impl<'sym, 'tcx, T: std::fmt::Display + std::fmt::Debug + VisFormat> std::fmt::Display for PathConditionAtom<'sym, 'tcx, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.predicate {
             PathConditionPredicate::Eq(v, ty) => {

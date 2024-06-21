@@ -1,14 +1,39 @@
 use crate::{
     place::Place,
     value::{Constant, SymValueData},
+    VisFormat,
 };
-use prusti_rustc_interface::middle::mir;
+use pcs::{borrows::domain::BorrowsDomain, visualization::get_source_name_from_place};
+use prusti_rustc_interface::middle::mir::{self, VarDebugInfo};
 use std::collections::BTreeMap;
 
-use super::{value::{SymValue, SyntheticSymValue}, SymExArena};
+use super::{
+    value::{SymValue, SyntheticSymValue},
+    SymExArena,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SymbolicHeap<'sym, 'tcx, T>(BTreeMap<Place<'tcx>, SymValue<'sym, 'tcx, T>>);
+
+impl<'sym, 'tcx, T: VisFormat> SymbolicHeap<'sym, 'tcx, T> {
+    pub fn to_json(&self, debug_info: &[VarDebugInfo]) -> serde_json::Value {
+        let map: BTreeMap<_, _> = self
+            .0
+            .iter()
+            .map(|(place, value)| {
+                (
+                    format!(
+                        "{}",
+                        get_source_name_from_place(place.local, &place.projection, debug_info)
+                            .unwrap_or_else(|| format!("{:?}", place))
+                    ),
+                    format!("{}", value.to_vis_string(debug_info)),
+                )
+            })
+            .collect();
+        serde_json::to_value(map).unwrap()
+    }
+}
 
 impl<'sym, 'tcx, T: std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
     // pub fn check_eq_debug(&self, other: &Self) {
@@ -40,6 +65,12 @@ impl<'sym, 'tcx, T: std::fmt::Debug> SymbolicHeap<'sym, 'tcx, T> {
         self.0.get(&place).copied()
     }
 
+    pub fn get_deref_of(&self, place: &Place<'tcx>) -> Option<SymValue<'sym, 'tcx, T>> {
+        self.0.iter().find(|(p, v)| {
+            p.is_deref_of(place)
+        }).map(|(_, v)| v).copied()
+    }
+
     pub fn take(&mut self, place: &Place<'tcx>) -> SymValue<'sym, 'tcx, T> {
         self.0
             .remove(&place)
@@ -58,6 +89,7 @@ impl<'sym, 'tcx, T: Clone + std::fmt::Debug + SyntheticSymValue<'sym, 'tcx>>
         &self,
         arena: &'sym SymExArena,
         operand: &mir::Operand<'tcx>,
+        borrows: &BorrowsDomain<'tcx>
     ) -> SymValue<'sym, 'tcx, T> {
         match *operand {
             mir::Operand::Copy(place) | mir::Operand::Move(place) => self

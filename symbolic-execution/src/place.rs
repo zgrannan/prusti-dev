@@ -10,10 +10,10 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Place<'tcx> {
-    local: mir::Local,
-    projection: Vec<ProjectionElem<mir::Local, ty::Ty<'tcx>>>,
+    pub local: mir::Local,
+    pub projection: Vec<ProjectionElem<mir::Local, ty::Ty<'tcx>>>,
 }
 
 impl<'tcx> From<mir::Local> for Place<'tcx> {
@@ -43,6 +43,20 @@ impl<'tcx> Place<'tcx> {
         projection: Vec<ProjectionElem<mir::Local, ty::Ty<'tcx>>>,
     ) -> Self {
         Place { local, projection }
+    }
+
+    pub fn deref_target(&self) -> Option<Self> {
+        if let Some(ProjectionElem::Deref) = self.projection.last() {
+            let mut projection = self.projection.clone();
+            projection.pop();
+            Some(Place::new(self.local, projection))
+        } else {
+            None
+        }
+    }
+
+    pub fn is_deref_of(&self, other: &Place) -> bool {
+        self.deref_target() == &other
     }
 }
 

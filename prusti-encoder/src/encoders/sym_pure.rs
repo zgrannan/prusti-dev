@@ -1,15 +1,10 @@
 use pcs::combined_pcs::BodyWithBorrowckFacts;
-use symbolic_execution::{
-    path_conditions::PathConditions,
-    value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
-    ResultPath, SymExArena, VerifierSemantics,
-};
 use prusti_rustc_interface::{
     ast,
     ast::Local,
     index::IndexVec,
     middle::{
-        mir,
+        mir::VarDebugInfo,
         ty::{self, GenericArgsRef},
     },
     span::def_id::DefId,
@@ -18,6 +13,11 @@ use prusti_rustc_interface::{
 use std::{
     collections::{BTreeSet, HashMap},
     marker::PhantomData,
+};
+use symbolic_execution::{
+    path_conditions::PathConditions,
+    value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
+    ResultPath, SymExArena, VerifierSemantics, VisFormat,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -57,7 +57,6 @@ pub struct SymPureEncResult<'sym, 'tcx>(
 );
 
 impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
-
     pub fn from_sym_value(value: PrustiSymValue<'sym, 'tcx>) -> Self {
         Self(vec![(PathConditions::new(), value)].into_iter().collect())
     }
@@ -101,7 +100,37 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
         GenericArgsRef<'tcx>,
         &'sym [PrustiSymValue<'sym, 'tcx>],
     ),
-    Result(ty::Ty<'tcx>)
+    Result(ty::Ty<'tcx>),
+}
+
+impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
+    fn to_vis_string(&self, debug_info: &[VarDebugInfo]) -> String {
+        match self {
+            PrustiSymValSyntheticData::And(l, r) => format!(
+                "({} && {})",
+                l.to_vis_string(debug_info),
+                r.to_vis_string(debug_info)
+            ),
+            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => format!(
+                "({} ? {} : {})",
+                cond.to_vis_string(debug_info),
+                then_expr.to_vis_string(debug_info),
+                else_expr.to_vis_string(debug_info)
+            ),
+            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => {
+                let fn_name = format!("{:?}", def_id);
+                let args_str = args
+                    .iter()
+                    .map(|arg| arg.to_vis_string(debug_info))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", fn_name, args_str)
+            }
+            PrustiSymValSyntheticData::Result(ty) => {
+                todo!()
+            }
+        }
+    }
 }
 
 impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -169,7 +198,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     .skip_binder(),
                 None,
             ),
-            PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None)
+            PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None),
         }
     }
 
@@ -178,15 +207,15 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
             PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
                 PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
             ),
-            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => arena.alloc(
-                PrustiSymValSyntheticData::If(
+            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
+                arena.alloc(PrustiSymValSyntheticData::If(
                     cond.optimize(arena, tcx),
                     then_expr.optimize(arena, tcx),
                     else_expr.optimize(arena, tcx),
-                )
-            ),
-            PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => arena.alloc(
-                PrustiSymValSyntheticData::PureFnCall(
+                ))
+            }
+            PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
+                arena.alloc(PrustiSymValSyntheticData::PureFnCall(
                     *def_id,
                     ty_substs,
                     arena.alloc_slice(
@@ -195,9 +224,9 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                             .map(|arg| arg.optimize(arena, tcx))
                             .collect::<Vec<_>>()),
                     ),
-                )
-            ),
-            PrustiSymValSyntheticData::Result(_) => self
+                ))
+            }
+            PrustiSymValSyntheticData::Result(_) => self,
         }
     }
 }
@@ -258,15 +287,19 @@ impl SymPureEnc {
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
                 &body.body.clone(),
                 vcx.tcx(),
-                pcs::run_free_pcs(&BodyWithBorrowckFacts {
-                    body: body.body,
-                    promoted: body.promoted,
-                    borrow_set: body.borrow_set,
-                    region_inference_context: body.region_inference_context,
-                    location_table: body.location_table,
-                    input_facts: body.input_facts,
-                    output_facts: body.output_facts,
-                }, vcx.tcx(), None),
+                pcs::run_free_pcs(
+                    &BodyWithBorrowckFacts {
+                        body: body.body,
+                        promoted: body.promoted,
+                        borrow_set: body.borrow_set,
+                        region_inference_context: body.region_inference_context,
+                        location_table: body.location_table,
+                        input_facts: body.input_facts,
+                        output_facts: body.output_facts,
+                    },
+                    vcx.tcx(),
+                    None,
+                ),
                 PrustiSemantics(PhantomData),
                 arena,
             );
