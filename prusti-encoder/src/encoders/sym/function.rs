@@ -1,6 +1,9 @@
 use cfg_if::cfg_if;
 use prusti_rustc_interface::{
-    middle::ty::{self, GenericArgs},
+    middle::{
+        mir,
+        ty::{self, GenericArgs},
+    },
     span::def_id::DefId,
 };
 use symbolic_execution::context::SymExContext;
@@ -14,7 +17,7 @@ use crate::{
     encoders::{
         lifted::func_def_ty_params::LiftedTyParamsEnc,
         rust_ty_snapshots::RustTySnapshotsEnc,
-        sym::expr::SymExprEncoder,
+        sym::{builtin::partial_eq_expr, expr::SymExprEncoder},
         sym_pure::{PrustiSubsts, PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult},
         sym_spec::SymSpecEnc,
         FunctionCallTaskDescription, PureKind, SymPureEnc, SymPureEncTask,
@@ -157,6 +160,23 @@ impl TaskEncoder for SymFunctionEnc {
                         caller_def_id: caller_def_id,
                     },
                 ))
+            } else if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
+                || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
+            {
+                let expr = partial_eq_expr(
+                    &arena,
+                    vcx.tcx(),
+                    arena.mk_var(0, inputs[0]),
+                    arena.mk_var(1, inputs[1]),
+                );
+                expr.map(|expr| {
+                    let expr = if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne" {
+                        arena.mk_unary_op(vcx.tcx().types.bool, mir::UnOp::Not, expr)
+                    } else {
+                        expr
+                    };
+                    SymPureEncResult::from_sym_value(expr)
+                })
             } else {
                 None
             };

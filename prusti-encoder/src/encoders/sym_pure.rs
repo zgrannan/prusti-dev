@@ -17,8 +17,10 @@ use std::{
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::PathConditions,
+    results::ResultPath,
+    semantics::VerifierSemantics,
     value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
-    results::ResultPath, semantics::VerifierSemantics, visualization::VisFormat,
+    visualization::VisFormat,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -118,15 +120,15 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                 then_expr.to_vis_string(debug_info),
                 else_expr.to_vis_string(debug_info)
             ),
-            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => {
-                let fn_name = format!("{:?}", def_id);
+            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => vir::with_vcx(|vcx| {
+                let fn_name = vcx.tcx().item_name(*def_id);
                 let args_str = args
                     .iter()
                     .map(|arg| arg.to_vis_string(debug_info))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({})", fn_name, args_str)
-            }
+            }),
             PrustiSymValSyntheticData::Result(ty) => {
                 todo!()
             }
