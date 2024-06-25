@@ -31,6 +31,8 @@ use crate::encoders::{
     ConstEnc, FunctionCallTaskDescription, MirBuiltinEnc, MirBuiltinEncTask, SymFunctionEnc,
 };
 
+mod r#ref;
+
 type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
 type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
 pub type EncodePCAtomResult<'vir> = Result<vir::Expr<'vir>, String>;
@@ -64,7 +66,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
     }
     pub fn encode_sym_value(
         &mut self,
-        sym_value: &PrustiSymValue<'sym, 'tcx>,
+        sym_value: PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
         let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
@@ -118,6 +120,9 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(viper_fn.apply(self.vcx, &[expr]))
             }
             SymValueKind::Aggregate(kind, exprs) => {
+                if let AggregateKind::PCS(ty, _) = kind && ty.is_ref() {
+                    return self.encode_ref(*ty, exprs[0]);
+                }
                 let vir_exprs = exprs
                     .iter()
                     .map(|e| self.encode_sym_value(e).unwrap())
@@ -156,7 +161,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
                                 AggregateType::Tuple
                             }
-                            _ => todo!(),
+                            other => todo!("aggregate kind {:?}", other),
                         },
                     })
                     .unwrap();
@@ -256,19 +261,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
             }
             SymValueKind::Ref(ty, e) => {
-                let base = self.encode_sym_value(e).unwrap();
-                let cast = self
-                    .deps
-                    .require_local::<RustTyCastersEnc<CastTypePure>>(e.ty(self.vcx.tcx()).rust_ty())
-                    .unwrap();
-                let base = cast.cast_to_generic_if_necessary(self.vcx, base);
-                let ty = self.deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
-                if let domain::DomainEncSpecifics::StructLike(s) = ty.generic_snapshot.specifics {
-                    Ok(s.field_snaps_to_snap
-                        .apply(self.vcx, self.vcx.alloc(&vec![base])))
-                } else {
-                    unreachable!()
-                }
+                self.encode_ref(*ty, e)
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
                 fn_def_id,
@@ -370,6 +363,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
                 // TODO: Make this more robust
             }
+            SymValueKind::InternalError(_, _) => todo!(),
         }
     }
 

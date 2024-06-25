@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Unset PCS_VIS_DATA_DIR if it's set
+unset PCS_VIS_DATA_DIR
+
 directory_pass="local-testing/rpe/pass"
 directory_fail="local-testing/rpe/fail"
 

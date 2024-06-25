@@ -18,7 +18,7 @@ use symbolic_execution::{
     context::SymExContext,
     path_conditions::PathConditions,
     value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
-    results::ResultPath, semantics::VerifierSemantics, VisFormat,
+    results::ResultPath, semantics::VerifierSemantics, visualization::VisFormat,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -299,7 +299,7 @@ impl SymPureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    None,
+                    std::env::var("PCS_VIS_DATA_DIR").ok().as_deref(),
                 ),
                 PrustiSemantics(PhantomData),
                 arena,

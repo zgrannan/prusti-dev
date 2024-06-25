@@ -2,6 +2,7 @@
 #![feature(associated_type_defaults)]
 #![feature(box_patterns)]
 #![feature(never_type)]
+#![feature(let_chains)]
 #![allow(unused_imports)]
 
 extern crate rustc_middle;
@@ -62,6 +63,21 @@ pub fn test_entrypoint<'tcx>(
                 tracing::debug!("unsupported item: {unsupported_item_kind:?}");
             }
         }
+    }
+
+    if let Ok(dir) = std::env::var("PCS_VIS_DATA_DIR") {
+        let mut function_names = Vec::new();
+        for def_id in tcx.hir().body_owners() {
+            let kind = tcx.def_kind(def_id);
+            if matches!(kind, hir::def::DefKind::Fn | hir::def::DefKind::AssocFn) {
+                let name = tcx.item_name(def_id.to_def_id());
+                function_names.push(name.to_string());
+            }
+        }
+
+        let json_content = serde_json::to_string(&function_names).unwrap();
+        let file_path = std::path::Path::new(&dir).join("functions.json");
+        std::fs::write(file_path, json_content).unwrap();
     }
 
     fn header(code: &mut String, title: &str) {

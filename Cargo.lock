@@ -1845,6 +1845,7 @@ dependencies = [
  "pcs",
  "prusti-interface",
  "prusti-rustc-interface",
+ "serde_json",
  "symbolic-execution",
  "task-encoder",
  "tracing 0.1.0",

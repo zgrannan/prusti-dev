@@ -18,6 +18,7 @@ task-encoder = { path = "../task-encoder" }
 vir = { path = "../vir" }
 tracing = { path = "../tracing" }
 symbolic-execution = { path = "../../symbolic-execution" }
+serde_json = "1.0"
 
 [package.metadata.rust-analyzer]
 # This crate uses #[feature(rustc_private)]

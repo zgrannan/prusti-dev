@@ -1,11 +1,6 @@
 use std::marker::PhantomData;
 
 use pcs::combined_pcs::BodyWithBorrowckFacts;
-use symbolic_execution::{
-    path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
-    value::{Substs, SymValueData, SymValueKind},
-    Assertion, context::SymExContext,
-};
 use prusti_rustc_interface::{
     abi,
     middle::{
@@ -13,6 +8,12 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgs},
     },
     span::def_id::{DefId, LocalDefId},
+};
+use symbolic_execution::{
+    context::SymExContext,
+    path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
+    value::{Substs, SymValueData, SymValueKind},
+    Assertion,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, MethodIdent, UnknownArity};
@@ -35,14 +36,18 @@ pub struct MirImpureEncOutput<'vir> {
     pub method: vir::Method<'vir>,
 }
 
-use crate::{encoder_traits::pure_function_enc::mk_type_assertion, encoders::{
-    lifted::{cast::CastToEnc, casters::CastTypePure},
-    ConstEnc, MirBuiltinEnc,
-}};
+use crate::{
+    encoder_traits::pure_function_enc::mk_type_assertion,
+    encoders::{
+        lifted::{cast::CastToEnc, casters::CastTypePure},
+        ConstEnc, MirBuiltinEnc,
+    },
+};
 
 use super::{
     lifted::{
-        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc, func_def_ty_params::LiftedTyParamsEnc, rust_ty_cast::RustTyCastersEnc
+        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
+        func_def_ty_params::LiftedTyParamsEnc, rust_ty_cast::RustTyCastersEnc,
     },
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
@@ -128,15 +133,19 @@ impl TaskEncoder for SymImpureEnc {
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
                 &body.body.clone(),
                 vcx.tcx(),
-                pcs::run_free_pcs(&BodyWithBorrowckFacts {
-                    body: body.body,
-                    promoted: body.promoted,
-                    borrow_set: body.borrow_set,
-                    region_inference_context: body.region_inference_context,
-                    location_table: body.location_table,
-                    input_facts: body.input_facts,
-                    output_facts: body.output_facts,
-                }, vcx.tcx(), None),
+                pcs::run_free_pcs(
+                    &BodyWithBorrowckFacts {
+                        body: body.body,
+                        promoted: body.promoted,
+                        borrow_set: body.borrow_set,
+                        region_inference_context: body.region_inference_context,
+                        location_table: body.location_table,
+                        input_facts: body.input_facts,
+                        output_facts: body.output_facts,
+                    },
+                    vcx.tcx(),
+                    std::env::var("PCS_VIS_DATA_DIR").ok().as_deref(),
+                ),
                 PrustiSemantics(PhantomData),
                 &arena,
             );
@@ -157,12 +166,10 @@ impl TaskEncoder for SymImpureEnc {
                 .collect::<Vec<_>>();
             let result_local = vcx.mk_local(
                 "res",
-                deps.require_ref::<RustTySnapshotsEnc>(
-                    local_decls.iter().next().unwrap().ty,
-                )
-                .unwrap()
-                .generic_snapshot
-                .snapshot,
+                deps.require_ref::<RustTySnapshotsEnc>(local_decls.iter().next().unwrap().ty)
+                    .unwrap()
+                    .generic_snapshot
+                    .snapshot,
             );
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
@@ -196,7 +203,12 @@ impl TaskEncoder for SymImpureEnc {
             );
 
             for (local, symvar) in symvar_locals.iter().zip(symbolic_execution.symvars.iter()) {
-                if let Some(expr) = mk_type_assertion(vcx, visitor.encoder.deps, vcx.mk_local_ex(local.name, local.ty), *symvar) {
+                if let Some(expr) = mk_type_assertion(
+                    vcx,
+                    visitor.encoder.deps,
+                    vcx.mk_local_ex(local.name, local.ty),
+                    *symvar,
+                ) {
                     stmts.push(vcx.mk_inhale_stmt(expr));
                 }
             }
