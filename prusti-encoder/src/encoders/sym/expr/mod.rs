@@ -185,13 +185,17 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         let expr = e_ty.field_access[0].read.apply(self.vcx, [expr.unwrap()]);
                         // Since the `expr` is the target of a reference, it is encoded as a `Param`.
                         // If it is not a type parameter, we cast it to its concrete Snapshot.
+                        let rust_ty = sym_value.ty(self.vcx.tcx()).rust_ty();
                         let cast = self
                             .deps
                             .require_local::<RustTyCastersEnc<CastTypePure>>(
-                                sym_value.ty(self.vcx.tcx()).rust_ty(),
+                                rust_ty
                             )
                             .unwrap();
-                        Ok(cast.cast_to_concrete_if_possible(self.vcx, expr))
+                        eprintln!("CAST: {:?}", rust_ty);
+                        let casted = cast.cast_to_concrete_if_possible(self.vcx, expr);
+                        eprintln!("CASTED {:?} to {:?}", expr, casted);
+                        Ok(casted)
                     }
                     ProjectionElem::Downcast(..) => expr,
                     ProjectionElem::Field(field_idx, field_ty) => {
@@ -225,9 +229,10 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     GenericArgs::identity_for_item(self.vcx.tcx(), def.did()),
                                 );
                                 let cast_args = CastArgs {
-                                    expected: *field_ty,
-                                    actual: generic_field_ty,
+                                    expected: *field_ty, //  S<i32>
+                                    actual: generic_field_ty, // T
                                 };
+                                eprintln!("ARGS: {:?}", cast_args);
                                 Ok(self
                                     .deps
                                     .require_ref::<CastToEnc<CastTypePure>>(cast_args)

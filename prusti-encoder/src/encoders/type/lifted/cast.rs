@@ -149,7 +149,7 @@ impl<'vir, T> task_encoder::OutputRefAny for GenericCastOutputRef<'vir, T> {}
 /// concrete version. Likewise, if the function expects the generic version of
 /// the type and the argument is concrete, it returns a function to cast the
 /// concrete expression to its generic version. Otherwise, no cast is necessary
-/// and it returns [`PureGenericCastOutputRef::NoCast`].
+/// and it returns [`GenericCastOutputRef::NoCast`].
 ///
 /// The type parameter `T` is used to choose whether a pure or impure cast
 /// should be encoded, it should be instantiated with either [`CastTypePure`] or

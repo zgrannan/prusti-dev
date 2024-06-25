@@ -484,7 +484,6 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                 // e.g type of (t: (T1,T2)).0 should be T1
                 let self_ty = self.typeof_function.apply(self.vcx, [self.self_ex]);
 
-                eprintln!("Ty data for {}: {:?}", name, field_ty.rust_ty_data);
                 if let Some(lifted) = &field_ty.rust_ty_data {
 
                     // Lookup the encoding of the generic from a rust `ParamTy`

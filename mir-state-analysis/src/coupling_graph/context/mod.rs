@@ -7,23 +7,28 @@
 use std::{cell::RefCell, fmt, rc::Rc};
 
 use self::{
-    outlives_info::OutlivesInfo, region_info::{map::RegionKind, RegionInfo}, shared_borrow_set::SharedBorrowSet,
+    outlives_info::OutlivesInfo,
+    region_info::{map::RegionKind, RegionInfo},
+    shared_borrow_set::SharedBorrowSet,
 };
 use crate::{
     r#loop::LoopAnalysis,
     utils::{Place, PlaceRepacker},
 };
 use prusti_rustc_interface::{
-    borrowck::consumers::{BorrowIndex, Borrows, calculate_borrows_out_of_scope_at_location},
-    borrowck::borrow_set::BorrowSet,
-    borrowck::consumers::{PoloniusInput, RegionInferenceContext, LocationTable, PoloniusOutput},
-    data_structures::fx::FxHashMap,
+    borrowck::{
+        borrow_set::BorrowSet,
+        consumers::{
+            calculate_borrows_out_of_scope_at_location, BorrowIndex, Borrows, LocationTable,
+            PoloniusInput, PoloniusOutput, RegionInferenceContext,
+        },
+    },
+    data_structures::fx::{FxHashMap, FxIndexMap},
     dataflow::{Analysis, ResultsCursor},
     index::IndexVec,
-    data_structures::fx::FxIndexMap,
     middle::{
-        mir::{Body, Location, Promoted, RETURN_PLACE, Local},
-        ty::{self, RegionVid, TyCtxt, GenericArgsRef, ParamEnv},
+        mir::{Body, Local, Location, Promoted, RETURN_PLACE},
+        ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
     },
 };
 
@@ -42,13 +47,17 @@ pub struct BodyWithBorrowckFacts<'tcx> {
     pub output_facts: Option<Rc<PoloniusOutput>>,
 }
 
-impl <'tcx> BodyWithBorrowckFacts<'tcx> {
-    pub fn monomorphize(self,
+impl<'tcx> BodyWithBorrowckFacts<'tcx> {
+    pub fn monomorphize(
+        self,
         tcx: ty::TyCtxt<'tcx>,
         substs: GenericArgsRef<'tcx>,
         param_env: ParamEnv<'tcx>,
     ) -> Self {
-        let monomorphized_body = tcx.subst_and_normalize_erasing_regions(substs, param_env, ty::EarlyBinder::bind(self.body));
+        eprintln!("Subst {:?} with args {:?}", self.body, substs);
+        let body = tcx.erase_regions(self.body.clone());
+        let monomorphized_body =
+            tcx.subst_and_normalize_erasing_regions(substs, param_env, ty::EarlyBinder::bind(body));
         Self {
             body: monomorphized_body,
             promoted: self.promoted,
@@ -85,22 +94,34 @@ impl fmt::Debug for CgContext<'_, '_> {
     }
 }
 
-
 impl<'a, 'tcx> CgContext<'a, 'tcx> {
     #[tracing::instrument(name = "CgContext::new", level = "debug", skip_all, ret)]
-    pub fn new(
-        tcx: TyCtxt<'tcx>,
-        mir: &'a BodyWithBorrowckFacts<'tcx>,
-    ) -> Self {
+    pub fn new(tcx: TyCtxt<'tcx>, mir: &'a BodyWithBorrowckFacts<'tcx>) -> Self {
         let borrow_set = &mir.borrow_set;
         let sbs = SharedBorrowSet::build(tcx, &mir.body, borrow_set);
         let rp = PlaceRepacker::new(&mir.body, &mir.promoted, tcx);
         let input_facts = mir.input_facts.as_ref().unwrap();
         let loops = LoopAnalysis::find_loops(&mir.body);
 
-        let region_info = RegionInfo::new(rp, input_facts, mir.region_inference_context.as_ref(), borrow_set.as_ref(), &sbs);
-        let outlives_info = OutlivesInfo::new(input_facts, rp, mir.region_inference_context.as_ref(), borrow_set.as_ref(), &region_info);
-        let borrows_killed_at = calculate_borrows_out_of_scope_at_location(&mir.body, &mir.region_inference_context, borrow_set);
+        let region_info = RegionInfo::new(
+            rp,
+            input_facts,
+            mir.region_inference_context.as_ref(),
+            borrow_set.as_ref(),
+            &sbs,
+        );
+        let outlives_info = OutlivesInfo::new(
+            input_facts,
+            rp,
+            mir.region_inference_context.as_ref(),
+            borrow_set.as_ref(),
+            &region_info,
+        );
+        let borrows_killed_at = calculate_borrows_out_of_scope_at_location(
+            &mir.body,
+            &mir.region_inference_context,
+            borrow_set,
+        );
 
         Self {
             rp,
@@ -114,17 +135,21 @@ impl<'a, 'tcx> CgContext<'a, 'tcx> {
     }
 
     pub fn borrows_killed_at_location(&self, location: Location) -> &[BorrowIndex] {
-        self.borrows_killed_at.get(&location).map_or(&[], |borrows| &borrows[..])
+        self.borrows_killed_at
+            .get(&location)
+            .map_or(&[], |borrows| &borrows[..])
     }
 
     /// Copied from `rustc`'s `activations_at_location`.
     pub fn activations_at_location(&self, location: Location) -> &[BorrowIndex] {
-        self.mir.borrow_set.activation_map.get(&location).map_or(&[], |activations| &activations[..])
+        self.mir
+            .borrow_set
+            .activation_map
+            .get(&location)
+            .map_or(&[], |activations| &activations[..])
     }
 
-    pub fn signature_constraints(
-        &self,
-    ) -> Vec<(Vec<(RegionVid, Local)>, Vec<(RegionVid, Local)>)> {
+    pub fn signature_constraints(&self) -> Vec<(Vec<(RegionVid, Local)>, Vec<(RegionVid, Local)>)> {
         // let to_param = |r| (r, self.region_info.map.get(r).get_param().unwrap());
         // fn outlives(universal_constraints: )
         // self.region_info.map.universal_regions()
@@ -132,22 +157,34 @@ impl<'a, 'tcx> CgContext<'a, 'tcx> {
         //     .map(|(r, p)| {
         //         ((r, p), [(r, p)].into_iter().chain(self.region_info.map.get(r).get_place().map(|p| (r, p))).collect())
         //     })
-        self.outlives_info.universal_constraints.iter().flat_map(|&(a, b)| {
-            // println!("[outlives_info] a: {:?}, b: {:?}", a, b);
-            match (self.region_info.map.get(a), self.region_info.map.get(b)) {
-                (RegionKind::Param(a), RegionKind::Param(b)) => {
-                    // println!("[params] a: {:?}, b: {:?}", a, b);
-                    let a: Vec<_> = a.regions.iter().flat_map(|&r| self.region_info.map.get(r).get_place().map(|p| (r, p))).collect();
-                    let b: Vec<_> = b.regions.iter().flat_map(|&r| self.region_info.map.get(r).get_place().map(|p| (r, p))).collect();
-                    // println!("[locals] a: {:?}, b: {:?}", a, b);
-                    if a.is_empty() || b.is_empty() {
-                        None
-                    } else {
-                        Some((a, b))
+        self.outlives_info
+            .universal_constraints
+            .iter()
+            .flat_map(|&(a, b)| {
+                // println!("[outlives_info] a: {:?}, b: {:?}", a, b);
+                match (self.region_info.map.get(a), self.region_info.map.get(b)) {
+                    (RegionKind::Param(a), RegionKind::Param(b)) => {
+                        // println!("[params] a: {:?}, b: {:?}", a, b);
+                        let a: Vec<_> = a
+                            .regions
+                            .iter()
+                            .flat_map(|&r| self.region_info.map.get(r).get_place().map(|p| (r, p)))
+                            .collect();
+                        let b: Vec<_> = b
+                            .regions
+                            .iter()
+                            .flat_map(|&r| self.region_info.map.get(r).get_place().map(|p| (r, p)))
+                            .collect();
+                        // println!("[locals] a: {:?}, b: {:?}", a, b);
+                        if a.is_empty() || b.is_empty() {
+                            None
+                        } else {
+                            Some((a, b))
+                        }
                     }
+                    _ => None,
                 }
-                _ => None,
-            }
-        }).collect()
+            })
+            .collect()
     }
 }

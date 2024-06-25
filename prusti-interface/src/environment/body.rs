@@ -248,8 +248,8 @@ impl<'tcx> EnvBody<'tcx> {
             return body;
         }
         let body = self.pure_fns.expect(def_id);
-        body
-        // self.set_monomorphised(def_id, substs, caller_def_id, body)
+        // body.monomorphized(self.tcx, substs, self.tcx.param_env(caller_def_id.unwrap_or(def_id)))
+        self.set_monomorphised(def_id, substs, caller_def_id, body)
     }
 
     fn set_monomorphised(
