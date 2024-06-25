@@ -157,7 +157,7 @@ impl TaskEncoder for SymFunctionEnc {
                         parent_def_id: def_id,
                         param_env: vcx.tcx().param_env(def_id),
                         substs,
-                        caller_def_id: caller_def_id,
+                        caller_def_id
                     },
                 ))
             } else if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"

@@ -213,7 +213,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     de.variants[idx].fields.field_access[usize::from(*field_idx)]
                                         .read
                                 } else {
-                                    unreachable!()
+                                    de.variants[0].fields.field_access[usize::from(*field_idx)].read
                                 }
                             }
                             _ => todo!("projection to {:?}", ty_out.generic_snapshot.specifics),
