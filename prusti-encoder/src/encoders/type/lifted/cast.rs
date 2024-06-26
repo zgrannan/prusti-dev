@@ -30,7 +30,7 @@ impl<'tcx> CastArgs<'tcx> {
 
 /// Holds the necessary information to cast to a generic or concrete
 /// version.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Cast<'vir, T> {
     /// Either a function or method identifier that can be applied to perform
     /// the cast

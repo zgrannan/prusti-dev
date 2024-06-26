@@ -149,6 +149,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .iter()
                     .map(|e| e.ty(self.vcx.tcx()).rust_ty())
                     .collect::<Vec<_>>();
+                eprintln!("Field tys: {:?}", field_tys);
                 let ty_caster = self
                     .deps
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
@@ -168,6 +169,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         },
                     })
                     .unwrap();
+                eprintln!("CASTER: {:?}", ty_caster);
                 let casted_args = ty_caster.apply_casts(self.vcx, vir_exprs.into_iter());
                 Ok(sl
                     .field_snaps_to_snap

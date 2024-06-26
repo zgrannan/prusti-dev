@@ -1,5 +1,6 @@
 use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
+    abi::FIRST_VARIANT,
     ast,
     ast::Local,
     index::IndexVec,
@@ -10,6 +11,7 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
+use rustc_middle::mir;
 use std::{
     collections::{BTreeSet, HashMap},
     marker::PhantomData,
@@ -19,7 +21,7 @@ use symbolic_execution::{
     path_conditions::PathConditions,
     results::ResultPath,
     semantics::VerifierSemantics,
-    value::{Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
+    value::{AggregateKind, Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
     visualization::VisFormat,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
@@ -129,9 +131,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                     .join(", ");
                 format!("{}({})", fn_name, args_str)
             }),
-            PrustiSymValSyntheticData::Result(ty) => {
-                "result".to_string()
-            }
+            PrustiSymValSyntheticData::Result(ty) => "result".to_string(),
         }
     }
 }
@@ -249,20 +249,53 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         substs: GenericArgsRef<'tcx>,
         args: &'sym [PrustiSymValue<'sym, 'tcx>],
     ) -> Option<PrustiSymValue<'sym, 'tcx>> {
-        let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
-            proc_spec.kind.is_pure().unwrap_or_default()
+        vir::with_vcx(|vcx| {
+            let fn_name = vcx.tcx().def_path_str(def_id);
+            eprintln!("fn_name: {fn_name}");
+            if fn_name == "std::boxed::Box::<T>::new" {
+                assert_eq!(args.len(), 1);
+                let output_ty = vcx
+                    .tcx()
+                    .fn_sig(def_id)
+                    .instantiate(vcx.tcx(), substs)
+                    .output()
+                    .skip_binder();
+                let substs = if let ty::TyKind::Adt(_, substs) = output_ty.kind() {
+                    substs
+                } else {
+                    unreachable!()
+                };
+                return Some(
+                    arena.mk_aggregate(
+                        AggregateKind::Rust(
+                            mir::AggregateKind::Adt(
+                                vcx.tcx().lang_items().owned_box().unwrap(),
+                                FIRST_VARIANT,
+                                substs,
+                                None,
+                                None,
+                            ),
+                            output_ty
+                        ),
+                        args,
+                    ),
+                );
+            }
+
+            let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
+                proc_spec.kind.is_pure().unwrap_or_default()
+            })
+            .unwrap_or(
+                fn_name == "std::cmp::PartialEq::eq" || fn_name == "std::cmp::PartialEq::ne",
+            );
+            if is_pure {
+                Some(arena.mk_synthetic(
+                    arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
+                ))
+            } else {
+                None
+            }
         })
-        .unwrap_or(vir::with_vcx(|vcx| {
-            vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
-                || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
-        }));
-        if is_pure {
-            Some(arena.mk_synthetic(
-                arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
-            ))
-        } else {
-            None
-        }
     }
 }
 
@@ -270,7 +303,7 @@ impl SymPureEnc {
     pub fn encode<'sym, 'tcx>(
         arena: &'sym SymExContext<'tcx>,
         task: SymPureEncTask<'tcx>,
-        debug_output_dir: Option<&str>
+        debug_output_dir: Option<&str>,
     ) -> SymPureEncResult<'sym, 'tcx> {
         let kind = task.kind;
         let def_id = task.parent_def_id;
@@ -302,11 +335,11 @@ impl SymPureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    debug_output_dir
+                    debug_output_dir,
                 ),
                 PrustiSemantics(PhantomData),
                 arena,
-                debug_output_dir
+                debug_output_dir,
             );
             SymPureEncResult(
                 symbolic_execution
