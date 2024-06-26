@@ -13,6 +13,8 @@ mod encoders;
 mod encoder_traits;
 pub mod request;
 
+use std::hash::{Hash, Hasher};
+
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::{
     middle::ty,
@@ -65,20 +67,7 @@ pub fn test_entrypoint<'tcx>(
         }
     }
 
-    if let Ok(dir) = std::env::var("PCS_VIS_DATA_DIR") {
-        let mut function_names = Vec::new();
-        for def_id in tcx.hir().body_owners() {
-            let kind = tcx.def_kind(def_id);
-            if matches!(kind, hir::def::DefKind::Fn | hir::def::DefKind::AssocFn) {
-                let name = tcx.item_name(def_id.to_def_id());
-                function_names.push(name.to_string());
-            }
-        }
-
-        let json_content = serde_json::to_string(&function_names).unwrap();
-        let file_path = std::path::Path::new(&dir).join("functions.json");
-        std::fs::write(file_path, json_content).unwrap();
-    }
+    let mut function_names = Vec::new();
 
     fn header(code: &mut String, title: &str) {
         code.push_str("// -----------------------------\n");
@@ -97,6 +86,7 @@ pub fn test_entrypoint<'tcx>(
     for output in crate::encoders::SymImpureEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.method));
         program_methods.push(output.method);
+        function_names.push(output.fn_debug_name);
     }
 
     header(&mut viper_code, "functions");
@@ -106,9 +96,10 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "sym functions");
-    for function in SymFunctionEnc::all_outputs() {
+    for (function, debug_name) in SymFunctionEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", function));
         program_functions.push(function);
+        function_names.push(debug_name);
     }
 
     header(&mut viper_code, "MIR builtins");
@@ -195,6 +186,20 @@ pub fn test_entrypoint<'tcx>(
         .to_owned();
     */
 
+    if let Ok(dir) = std::env::var("PCS_VIS_DATA_DIR") {
+        let function_map: std::collections::HashMap<String, String> = function_names
+            .into_iter()
+            .map(|name| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                name.hash(&mut hasher);
+                let hash = format!("{:x}", hasher.finish());
+                (hash, name)
+            })
+            .collect();
+        let json_content = serde_json::to_string(&function_map).unwrap();
+        let file_path = std::path::Path::new(&dir).join("functions.json");
+        std::fs::write(file_path, json_content).unwrap();
+    }
     request::RequestWithContext {
         program: program.to_ref(),
     }

@@ -43,7 +43,7 @@ type PrustiPathConditionAtom<'sym, 'tcx> =
 pub struct SymExprEncoder<'enc, 'vir: 'tcx, 'sym, 'tcx, T: TaskEncoder> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     pub deps: &'enc mut TaskEncoderDependencies<'vir, T>,
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
 }
@@ -52,7 +52,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
     pub fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         symvars: Vec<vir::Expr<'vir>>,
         def_id: DefId,
     ) -> Self {
@@ -69,6 +69,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         sym_value: PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
         let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
+        eprintln!("SYM VALUE: {}", sym_value);
+        eprintln!("SYM VALUE: {:?}", sym_value);
         match &sym_value.kind {
             SymValueKind::Var(idx, ..) => self.symvars.get(*idx).cloned().ok_or_else(|| {
                 panic!("{}", sym_value.debug_info);
@@ -99,6 +101,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             SymValueKind::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
+                eprintln!("{} is a binary op", sym_value);
                 let lhs = self.encode_sym_value(lhs)?;
                 let rhs = self.encode_sym_value(rhs)?;
                 let viper_fn = self
@@ -192,9 +195,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                 rust_ty
                             )
                             .unwrap();
-                        eprintln!("CAST: {:?}", rust_ty);
                         let casted = cast.cast_to_concrete_if_possible(self.vcx, expr);
-                        eprintln!("CASTED {:?} to {:?}", expr, casted);
                         Ok(casted)
                     }
                     ProjectionElem::Downcast(..) => expr,
@@ -213,7 +214,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     de.variants[idx].fields.field_access[usize::from(*field_idx)]
                                         .read
                                 } else {
-                                    de.variants[0].fields.field_access[usize::from(*field_idx)].read
+                                    unreachable!("Ty {:?} is an enumlike, but no variant idx is set", ty);
+                                    // de.variants[0].fields.field_access[usize::from(*field_idx)].read
                                 }
                             }
                             _ => todo!("projection to {:?}", ty_out.generic_snapshot.specifics),

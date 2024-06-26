@@ -72,7 +72,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
 
     pub fn subst(
         self,
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         tcx: ty::TyCtxt<'tcx>,
         substs: &'sym PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
@@ -130,7 +130,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                 format!("{}({})", fn_name, args_str)
             }),
             PrustiSymValSyntheticData::Result(ty) => {
-                todo!()
+                "result".to_string()
             }
         }
     }
@@ -158,7 +158,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
 impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         tcx: ty::TyCtxt<'tcx>,
         substs: &Substs<'sym, 'tcx, Self>,
     ) -> Self {
@@ -205,7 +205,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
         }
     }
 
-    fn optimize(self, arena: &'sym SymExContext, tcx: ty::TyCtxt<'tcx>) -> Self {
+    fn optimize(self, arena: &'sym SymExContext<'tcx>, tcx: ty::TyCtxt<'tcx>) -> Self {
         match &self {
             PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
                 PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
@@ -244,7 +244,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 
     fn encode_fn_call(
         &self,
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
         args: &'sym [PrustiSymValue<'sym, 'tcx>],
@@ -268,8 +268,9 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 
 impl SymPureEnc {
     pub fn encode<'sym, 'tcx>(
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         task: SymPureEncTask<'tcx>,
+        debug_output_dir: Option<&str>
     ) -> SymPureEncResult<'sym, 'tcx> {
         let kind = task.kind;
         let def_id = task.parent_def_id;
@@ -301,10 +302,11 @@ impl SymPureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    std::env::var("PCS_VIS_DATA_DIR").ok().as_deref(),
+                    debug_output_dir
                 ),
                 PrustiSemantics(PhantomData),
                 arena,
+                debug_output_dir
             );
             SymPureEncResult(
                 symbolic_execution

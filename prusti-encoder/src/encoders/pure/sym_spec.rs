@@ -60,7 +60,7 @@ type SymSpecEncTask<'tcx> = (
 );
 
 pub fn mk_conj<'sym, 'tcx>(
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
     tcx: ty::TyCtxt<'tcx>,
     sym_values: Vec<PrustiSymValue<'sym, 'tcx>>,
 ) -> PrustiSymValue<'sym, 'tcx> {
@@ -76,7 +76,7 @@ pub fn mk_conj<'sym, 'tcx>(
 
 impl SymSpecEnc {
     pub fn spec_bool<'sym, 'tcx>(
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         tcx: ty::TyCtxt<'tcx>,
         b: bool,
     ) -> SymSpec<'sym, 'tcx> {
@@ -85,7 +85,7 @@ impl SymSpecEnc {
     }
 
     pub fn encode<'sym, 'tcx, 'vir, T: TaskEncoder>(
-        arena: &'sym SymExContext,
+        arena: &'sym SymExContext<'tcx>,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         task_key: SymSpecEncTask<'tcx>,
     ) -> SymSpecEncOutput<'sym, 'tcx> {
@@ -132,6 +132,7 @@ impl SymSpecEnc {
                             // TODO: should this be `def_id` or `caller_def_id`
                             caller_def_id: Some(def_id),
                         },
+                        None
                     )
                 })
                 .collect::<BTreeSet<_>>();
@@ -150,6 +151,7 @@ impl SymSpecEnc {
                             // TODO: should this be `def_id` or `caller_def_id`
                             caller_def_id: Some(def_id),
                         },
+                        None
                     );
                     post
                 })

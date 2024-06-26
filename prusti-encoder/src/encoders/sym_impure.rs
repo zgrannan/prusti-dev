@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{collections::hash_map::DefaultHasher, marker::PhantomData};
 
 use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
@@ -17,6 +17,8 @@ use symbolic_execution::{
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, MethodIdent, UnknownArity};
+use std::hash::Hash;
+use std::hash::Hasher;
 
 pub struct SymImpureEnc;
 
@@ -33,6 +35,7 @@ impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
 pub struct MirImpureEncOutput<'vir> {
+    pub fn_debug_name: String,
     pub method: vir::Method<'vir>,
 }
 
@@ -128,7 +131,15 @@ impl TaskEncoder for SymImpureEnc {
             let local_decls = body.body.local_decls.clone();
             let arg_count = body.body.arg_count;
 
-            let arena = SymExContext::new();
+            let arena = SymExContext::new(vcx.tcx());
+
+            let fn_debug_name = vcx.tcx().def_path_str_with_args(def_id, substs);
+            let debug_dir = std::env::var("PCS_VIS_DATA_DIR").map(|dir| {
+                let mut hasher = DefaultHasher::new();
+                fn_debug_name.hash(&mut hasher);
+                let hash = format!("{:x}", hasher.finish());
+                format!("{}/{}", dir, hash)
+            });
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
                 &body.body.clone(),
@@ -144,10 +155,11 @@ impl TaskEncoder for SymImpureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    std::env::var("PCS_VIS_DATA_DIR").ok().as_deref(),
+                    debug_dir.clone().ok().as_deref(),
                 ),
                 PrustiSemantics(PhantomData),
                 &arena,
+                debug_dir.ok().as_deref(),
             );
 
             let symvar_locals = symbolic_execution
@@ -261,6 +273,7 @@ impl TaskEncoder for SymImpureEnc {
 
             Ok((
                 MirImpureEncOutput {
+                    fn_debug_name,
                     method: vcx.mk_method(
                         method_ident,
                         &[],
@@ -287,7 +300,7 @@ where
     vcx: &'vir vir::VirCtxt<'tcx>,
     encoder: SymExprEncoder<'enc, 'vir, 'sym, 'tcx, SymImpureEnc>,
     local_decls: &'enc mir::LocalDecls<'tcx>,
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
 }
 
 impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'_, 'vir, 'vir, 'enc> {

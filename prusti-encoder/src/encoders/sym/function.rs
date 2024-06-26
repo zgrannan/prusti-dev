@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+
 use cfg_if::cfg_if;
 use prusti_rustc_interface::{
     middle::{
@@ -11,6 +13,8 @@ use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
 };
+use std::hash::Hasher;
+use std::hash::Hash;
 
 use crate::{
     encoder_traits::pure_function_enc::{mk_type_assertion, PureFunctionEnc},
@@ -46,7 +50,7 @@ impl TaskEncoder for SymFunctionEnc {
     type OutputRef<'vir> = SymFunctionEncOutputRef<'vir>
         where Self: 'vir;
 
-    type OutputFullLocal<'vir> = Function<'vir>;
+    type OutputFullLocal<'vir> = (Function<'vir>, String);
 
     type OutputFullDependency<'vir> = ()
         where Self: 'vir;
@@ -133,7 +137,7 @@ impl TaskEncoder for SymFunctionEnc {
             );
             deps.emit_output_ref(*task_key, SymFunctionEncOutputRef { function_ident })?;
 
-            let arena = SymExContext::new();
+            let arena = SymExContext::new(vcx.tcx());
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, None));
             let symvars: Vec<_> = decls
                 .iter()
@@ -149,6 +153,13 @@ impl TaskEncoder for SymFunctionEnc {
                 def_spec.trusted.extract_inherit().unwrap_or_default()
             })
             .unwrap_or_default();
+            let debug_fn_name = vcx.tcx().def_path_str_with_args(def_id, substs);
+            let debug_output_dir = std::env::var("PCS_VIS_DATA_DIR").map(|dir| {
+                let mut hasher = DefaultHasher::new();
+                debug_fn_name.hash(&mut hasher);
+                let hash = format!("{:x}", hasher.finish());
+                format!("{}/{}", dir, hash)
+            });
             let body = if !trusted && def_id.is_local() {
                 Some(SymPureEnc::encode(
                     &arena,
@@ -157,8 +168,9 @@ impl TaskEncoder for SymFunctionEnc {
                         parent_def_id: def_id,
                         param_env: vcx.tcx().param_env(def_id),
                         substs,
-                        caller_def_id
+                        caller_def_id,
                     },
+                    debug_output_dir.ok().as_deref(),
                 ))
             } else if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
                 || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
@@ -216,7 +228,7 @@ impl TaskEncoder for SymFunctionEnc {
                 ),
                 body.map(|b| encoder.encode_pure_body(&b).unwrap()),
             );
-            Ok((function, ()))
+            Ok(((function, debug_fn_name), ()))
         })
     }
 }

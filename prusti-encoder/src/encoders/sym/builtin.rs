@@ -19,7 +19,7 @@ use crate::encoders::{
 };
 
 fn encode_discr<'sym, 'tcx>(
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
     discr: VariantDiscr,
     ty: ty::Ty<'tcx>,
 ) -> PrustiSymValue<'sym, 'tcx> {
@@ -30,7 +30,7 @@ fn encode_discr<'sym, 'tcx>(
 }
 
 pub fn partial_eq_expr<'sym, 'tcx>(
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
     tcx: ty::TyCtxt<'tcx>,
     lhs: PrustiSymValue<'sym, 'tcx>,
     rhs: PrustiSymValue<'sym, 'tcx>,
@@ -62,9 +62,22 @@ pub fn partial_eq_expr<'sym, 'tcx>(
             if tcx.has_structural_eq_impls(ty) {
                 let lhs_discriminant = arena.mk_discriminant(lhs);
                 let rhs_discriminant = arena.mk_discriminant(rhs);
-                let mut iter = adt_def.variants().iter();
-                let first_variant = iter.next().unwrap();
-                let first_case = encode_variant_eq(arena, tcx, first_variant, substs, lhs, rhs)?;
+                let mut iter = adt_def.variants().iter_enumerated();
+                let (first_variant_idx, first_variant) = iter.next().unwrap();
+                let first_case = encode_variant_eq(
+                    arena,
+                    tcx,
+                    first_variant,
+                    substs,
+                    arena.mk_projection(
+                        PlaceElem::Downcast(Some(first_variant.name), first_variant_idx),
+                        lhs,
+                    ),
+                    arena.mk_projection(
+                        PlaceElem::Downcast(Some(first_variant.name), first_variant_idx),
+                        rhs,
+                    ),
+                )?;
                 if adt_def.variants().len() == 1 {
                     return Some(first_case);
                 }
@@ -74,7 +87,7 @@ pub fn partial_eq_expr<'sym, 'tcx>(
                     lhs_discriminant,
                     rhs_discriminant,
                 );
-                let deep_eq = iter.try_fold(first_case, |acc, variant| {
+                let deep_eq = iter.try_fold(first_case, |acc, (variant_idx, variant)| {
                     Some(
                         arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::If(
                             arena.mk_bin_op(
@@ -87,8 +100,21 @@ pub fn partial_eq_expr<'sym, 'tcx>(
                                     lhs_discriminant.ty(tcx).rust_ty(),
                                 ),
                             ),
+                            encode_variant_eq(
+                                arena,
+                                tcx,
+                                variant,
+                                substs,
+                                arena.mk_projection(
+                                    PlaceElem::Downcast(Some(variant.name), variant_idx),
+                                    lhs,
+                                ),
+                                arena.mk_projection(
+                                    PlaceElem::Downcast(Some(variant.name), variant_idx),
+                                    rhs,
+                                ),
+                            )?,
                             acc,
-                            encode_variant_eq(arena, tcx, variant, substs, lhs, rhs)?,
                         ))),
                     )
                 })?;
@@ -106,7 +132,7 @@ pub fn partial_eq_expr<'sym, 'tcx>(
 }
 
 fn encode_variant_eq<'sym, 'tcx>(
-    arena: &'sym SymExContext,
+    arena: &'sym SymExContext<'tcx>,
     tcx: ty::TyCtxt<'tcx>,
     variant: &VariantDef,
     substs: ty::GenericArgsRef<'tcx>,
