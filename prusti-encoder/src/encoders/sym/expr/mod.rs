@@ -191,9 +191,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         let rust_ty = sym_value.ty(self.vcx.tcx()).rust_ty();
                         let cast = self
                             .deps
-                            .require_local::<RustTyCastersEnc<CastTypePure>>(
-                                rust_ty
-                            )
+                            .require_local::<RustTyCastersEnc<CastTypePure>>(rust_ty)
                             .unwrap();
                         let casted = cast.cast_to_concrete_if_possible(self.vcx, expr);
                         Ok(casted)
@@ -214,7 +212,10 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     de.variants[idx].fields.field_access[usize::from(*field_idx)]
                                         .read
                                 } else {
-                                    unreachable!("Ty {:?} is an enumlike, but no variant idx is set", ty);
+                                    unreachable!(
+                                        "Ty {:?} is an enumlike, but no variant idx is set",
+                                        ty
+                                    );
                                     // de.variants[0].fields.field_access[usize::from(*field_idx)].read
                                 }
                             }
@@ -231,7 +232,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     GenericArgs::identity_for_item(self.vcx.tcx(), def.did()),
                                 );
                                 let cast_args = CastArgs {
-                                    expected: *field_ty, //  S<i32>
+                                    expected: *field_ty,      //  S<i32>
                                     actual: generic_field_ty, // T
                                 };
                                 eprintln!("ARGS: {:?}", cast_args);
@@ -267,9 +268,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     other => panic!("discriminant of {:?}", other),
                 }
             }
-            SymValueKind::Ref(ty, e) => {
-                self.encode_ref(*ty, e)
-            }
+            SymValueKind::Ref(ty, e) => self.encode_ref(*ty, e),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
                 fn_def_id,
                 substs,
@@ -302,7 +301,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         .into_iter()
                         .zip(args.iter())
                         .map(|(expected_ty, arg)| {
-                            let base = self.encode_sym_value(arg).unwrap();
+                            let base = self.encode_sym_value(arg)?;
                             let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
                             let caster = self
                                 .deps
@@ -311,8 +310,9 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     actual: arg_ty,
                                 })
                                 .unwrap();
-                            caster.apply_cast_if_necessary(self.vcx, base)
-                        });
+                            let result: EncodeSymValueResult<'vir> = Ok(caster.apply_cast_if_necessary(self.vcx, base));
+                            result
+                        }).collect::<Result<Vec<_>, _>>()?;
                 let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
                 let function_ref = self
                     .deps
@@ -370,7 +370,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
                 // TODO: Make this more robust
             }
-            SymValueKind::InternalError(_, _) => todo!(),
+            SymValueKind::InternalError(err, _) => Err(format!("Encountered internal err {}", err)),
         }
     }
 
@@ -490,16 +490,11 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         }
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            exprs.push(
-                self.encode_pc_atom(atom)
-                    .map_err(|err| {
-                        format!(
-                            "Failed to encode pc atom {:?} for pc {:?}: {}",
-                            atom, pc, err
-                        )
-                    })
-                    .unwrap(),
-            );
+            let encoded = self.encode_pc_atom(atom);
+            match encoded {
+                Ok(encoded) => exprs.push(encoded),
+                Err(err) => return Some(Err(err))
+            }
         }
         Some(Ok(self.vcx.mk_conj(&exprs)))
     }

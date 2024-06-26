@@ -9,6 +9,7 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
+use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
@@ -17,8 +18,6 @@ use symbolic_execution::{
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, MethodIdent, UnknownArity};
-use std::hash::Hash;
-use std::hash::Hasher;
 
 pub struct SymImpureEnc;
 
@@ -232,7 +231,15 @@ impl TaskEncoder for SymImpureEnc {
 
             for (path, pcs, assertion) in symbolic_execution.assertions.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
-                stmts.push(visitor.encode_pc_assertion(pcs, assertion));
+                match visitor.encode_pc_assertion(pcs, assertion) {
+                    Ok(assertion) => {
+                        stmts.push(assertion);
+                    }
+                    Err(err) => {
+                        stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                    }
+                }
             }
             for (path, pcs, expr) in symbolic_execution.paths.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
@@ -262,12 +269,21 @@ impl TaskEncoder for SymImpureEnc {
                 if pcs.is_empty() {
                     stmts.push(assertions);
                 } else {
-                    let if_stmt = vcx.mk_if_stmt(
-                        visitor.encoder.encode_path_condition(pcs).unwrap().unwrap(),
-                        vcx.alloc_slice(&[assertions]),
-                        &[],
-                    );
-                    stmts.push(if_stmt);
+                    match visitor.encoder.encode_path_condition(pcs) {
+                        Some(Ok(pc)) => {
+                            let if_stmt = vcx.mk_if_stmt(
+                                pc,
+                                vcx.alloc_slice(&[assertions]),
+                                &[],
+                            );
+                            stmts.push(if_stmt);
+                        }
+                        Some(Err(err)) => {
+                            stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                            stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                        }
+                        None => stmts.push(assertions),
+                    }
                 }
             }
 
@@ -345,15 +361,19 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         &mut self,
         pc: &PrustiPathConditions<'sym, 'tcx>,
         assertion: &PrustiAssertion<'sym, 'tcx>,
-    ) -> vir::Stmt<'vir> {
+    ) -> Result<vir::Stmt<'vir>, String> {
         if let Some(pc_expr) = self.encoder.encode_path_condition(pc) {
-            self.vcx.mk_if_stmt(
-                pc_expr.unwrap(),
+            let pc_expr = match pc_expr {
+                Ok(expr) => expr,
+                Err(err) => return Err(err),
+            };
+            Ok(self.vcx.mk_if_stmt(
+                pc_expr,
                 self.vcx.alloc_slice(&[self.encode_assertion(assertion)]),
                 &[],
-            )
+            ))
         } else {
-            self.encode_assertion(assertion)
+            Ok(self.encode_assertion(assertion))
         }
     }
 }

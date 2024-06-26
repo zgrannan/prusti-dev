@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    middle::ty::{self, TyKind},
+    middle::ty::{self, TyKind, TypeAndMut},
     span::symbol,
 };
 use vir::{DomainParamData, NullaryArityAny};
@@ -40,7 +40,14 @@ impl<'tcx> MostGenericTy<'tcx> {
                 } else {
                     String::from("Ref_immutable")
                 }
-            },
+            }
+            TyKind::RawPtr(type_and_mut) => {
+                if type_and_mut.mutbl.is_mut() {
+                    String::from("Ptr_mutable")
+                } else {
+                    String::from("Ptr_immutable")
+                }
+            }
             TyKind::Param(_) => String::from("Param"),
             other => unimplemented!("get_domain_base_name for {:?}", other),
         }
@@ -84,6 +91,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Array(orig, _) => vec![as_param_ty(*orig)],
             TyKind::Slice(orig) => vec![as_param_ty(*orig)],
             TyKind::Ref(_, orig, _) => vec![as_param_ty(*orig)],
+            TyKind::RawPtr(type_and_mut) => vec![as_param_ty(type_and_mut.ty)],
             TyKind::Bool
             | TyKind::Char
             | TyKind::Float(_)
@@ -149,8 +157,20 @@ pub fn extract_type_params<'tcx>(
             (MostGenericTy(ty), vec![orig])
         }
         TyKind::Param(_) => (MostGenericTy(to_placeholder(tcx, None)), Vec::new()),
-        TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Never | TyKind::Str => {
-            (MostGenericTy(ty), Vec::new())
+        TyKind::Bool
+        | TyKind::Char
+        | TyKind::Int(_)
+        | TyKind::Uint(_)
+        | TyKind::Float(_)
+        | TyKind::Never
+        | TyKind::Str => (MostGenericTy(ty), Vec::new()),
+        TyKind::RawPtr(type_and_mut) => {
+            let ty = to_placeholder(tcx, None);
+            let ty = tcx.mk_ty_from_kind(TyKind::RawPtr(TypeAndMut {
+                ty,
+                mutbl: type_and_mut.mutbl,
+            }));
+            (MostGenericTy(ty), vec![type_and_mut.ty])
         }
         _ => todo!("extract_type_params for {:?}", ty),
     }
