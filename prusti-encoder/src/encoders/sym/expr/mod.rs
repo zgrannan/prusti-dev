@@ -1,3 +1,4 @@
+use abi::FIRST_VARIANT;
 use prusti_rustc_interface::{
     abi,
     middle::{
@@ -69,16 +70,12 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         sym_value: PrustiSymValue<'sym, 'tcx>,
     ) -> EncodeSymValueResult<'vir> {
         let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
-        eprintln!("SYM VALUE: {}", sym_value);
-        eprintln!("SYM VALUE: {:?}", sym_value);
         match &sym_value.kind {
-            SymValueKind::Var(idx, ..) => self.symvars.get(*idx).cloned().ok_or_else(|| {
-                panic!("{}", sym_value.debug_info);
-                format!(
-                    "No symvar at idx {}. The symvar was created via {}",
-                    *idx, sym_value.debug_info
-                )
-            }),
+            SymValueKind::Var(idx, ..) => self
+                .symvars
+                .get(*idx)
+                .cloned()
+                .ok_or_else(|| format!("No symvar at idx {}.", *idx)),
 
             SymValueKind::Constant(c) => Ok(self
                 .deps
@@ -101,7 +98,6 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             SymValueKind::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                eprintln!("{} is a binary op", sym_value);
                 let lhs = self.encode_sym_value(lhs)?;
                 let rhs = self.encode_sym_value(rhs)?;
                 let viper_fn = self
@@ -149,7 +145,6 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .iter()
                     .map(|e| e.ty(self.vcx.tcx()).rust_ty())
                     .collect::<Vec<_>>();
-                eprintln!("Field tys: {:?}", field_tys);
                 let ty_caster = self
                     .deps
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
@@ -165,18 +160,27 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
                                 AggregateType::Tuple
                             }
+                            AggregateKind::PCS(ty, variant_idx) => {
+                                if let ty::TyKind::Adt(def, substs) = ty.kind() {
+                                    AggregateType::Adt {
+                                        def_id: def.did(),
+                                        variant_index: variant_idx.unwrap_or(FIRST_VARIANT)
+                                    }
+                                } else {
+                                    todo!()
+                                }
+                            }
                             other => todo!("aggregate kind {:?}", other),
                         },
                     })
                     .unwrap();
-                eprintln!("CASTER: {:?}", ty_caster);
                 let casted_args = ty_caster.apply_casts(self.vcx, vir_exprs.into_iter());
                 Ok(sl
                     .field_snaps_to_snap
                     .apply(self.vcx, self.vcx.alloc_slice(&casted_args)))
             }
             SymValueKind::Projection(elem, base) => {
-                let expr = self.encode_sym_value(base);
+                let expr = self.encode_sym_value(base)?;
                 let ty = base.ty(self.vcx.tcx());
                 match elem {
                     ProjectionElem::Deref => {
@@ -187,7 +191,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             .generic_snapshot
                             .specifics
                             .expect_structlike();
-                        let expr = e_ty.field_access[0].read.apply(self.vcx, [expr.unwrap()]);
+                        let expr = e_ty.field_access[0].read.apply(self.vcx, [expr]);
                         // Since the `expr` is the target of a reference, it is encoded as a `Param`.
                         // If it is not a type parameter, we cast it to its concrete Snapshot.
                         let rust_ty = sym_value.ty(self.vcx.tcx()).rust_ty();
@@ -198,7 +202,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         let casted = cast.cast_to_concrete_if_possible(self.vcx, expr);
                         Ok(casted)
                     }
-                    ProjectionElem::Downcast(..) => expr,
+                    ProjectionElem::Downcast(..) => Ok(expr),
                     ProjectionElem::Field(field_idx, field_ty) => {
                         let ty_out = self
                             .deps
@@ -223,7 +227,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             }
                             _ => todo!("projection to {:?}", ty_out.generic_snapshot.specifics),
                         };
-                        let proj_app = proj_fn.apply(self.vcx, [expr.unwrap()]);
+                        let proj_app = proj_fn.apply(self.vcx, [expr]);
                         match ty.rust_ty().kind() {
                             ty::TyKind::Adt(def, _) => {
                                 // The ADT type for the field might be generic, concretize if necessary
@@ -237,7 +241,6 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     expected: *field_ty,      //  S<i32>
                                     actual: generic_field_ty, // T
                                 };
-                                eprintln!("ARGS: {:?}", cast_args);
                                 Ok(self
                                     .deps
                                     .require_ref::<CastToEnc<CastTypePure>>(cast_args)
@@ -298,23 +301,24 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .require_local::<LiftedFuncAppTyParamsEnc>((mono, substs))
                     .unwrap();
                 let encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx));
-                let encoded_fn_args =
-                    fn_arg_tys
-                        .into_iter()
-                        .zip(args.iter())
-                        .map(|(expected_ty, arg)| {
-                            let base = self.encode_sym_value(arg)?;
-                            let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
-                            let caster = self
-                                .deps
-                                .require_ref::<CastToEnc<CastTypePure>>(CastArgs {
-                                    expected: expected_ty,
-                                    actual: arg_ty,
-                                })
-                                .unwrap();
-                            let result: EncodeSymValueResult<'vir> = Ok(caster.apply_cast_if_necessary(self.vcx, base));
-                            result
-                        }).collect::<Result<Vec<_>, _>>()?;
+                let encoded_fn_args = fn_arg_tys
+                    .into_iter()
+                    .zip(args.iter())
+                    .map(|(expected_ty, arg)| {
+                        let base = self.encode_sym_value(arg)?;
+                        let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
+                        let caster = self
+                            .deps
+                            .require_ref::<CastToEnc<CastTypePure>>(CastArgs {
+                                expected: expected_ty,
+                                actual: arg_ty,
+                            })
+                            .unwrap();
+                        let result: EncodeSymValueResult<'vir> =
+                            Ok(caster.apply_cast_if_necessary(self.vcx, base));
+                        result
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
                 let function_ref = self
                     .deps
@@ -332,8 +336,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(function_ref.apply(self.vcx, &args))
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::And(lhs, rhs)) => {
-                let lhs = self.encode_sym_value_as_prim(lhs);
-                let rhs = self.encode_sym_value_as_prim(rhs);
+                let lhs = self.encode_sym_value_as_prim(lhs)?;
+                let rhs = self.encode_sym_value_as_prim(rhs)?;
                 let raw = self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs);
                 if let domain::DomainEncSpecifics::Primitive(dd) = self
                     .deps
@@ -348,7 +352,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::If(cond, lhs, rhs)) => {
-                let cond = self.encode_sym_value_as_prim(cond);
+                let cond = self.encode_sym_value_as_prim(cond)?;
                 let lhs = self.encode_sym_value(lhs)?;
                 let rhs = self.encode_sym_value(rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
@@ -358,7 +362,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
             }
             SymValueKind::Cast(_, operand, ty) => {
-                let prim_val = self.encode_sym_value_as_prim(operand);
+                let prim_val = self.encode_sym_value_as_prim(operand)?;
                 if let domain::DomainEncSpecifics::Primitive(dd) = self
                     .deps
                     .require_local::<RustTySnapshotsEnc>(*ty)
@@ -379,7 +383,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
     pub fn encode_sym_value_as_prim(
         &mut self,
         expr: &PrustiSymValue<'sym, 'tcx>,
-    ) -> vir::Expr<'vir> {
+    ) -> Result<vir::Expr<'vir>, String> {
         let snap_to_prim = match self
             .deps
             .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
@@ -390,7 +394,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
-        snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr).unwrap()])
+        Ok(snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr)?]))
     }
 
     fn encode_pc_atom(
@@ -405,8 +409,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
                         .posts
                         .into_iter()
-                        .map(|p| self.encode_pure_spec(&p, Some(arg_substs)).unwrap())
-                        .collect::<Vec<_>>();
+                        .map(|p| self.encode_pure_spec(&p, Some(arg_substs)))
+                        .collect::<Result<Vec<_>, _>>()?;
                 Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
             }
             PathConditionPredicate::Eq(target, ty) => {
@@ -471,7 +475,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         let clauses = spec
             .iter()
             .map(|(pc, value)| {
-                let encoded_value = self.encode_sym_value_as_prim(&value);
+                let encoded_value = self.encode_sym_value_as_prim(&value)?;
                 if let Some(pc) = self.encode_path_condition(pc) {
                     let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
                     Ok::<vir::Expr<'vir>, String>(impl_expr)
@@ -495,7 +499,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             let encoded = self.encode_pc_atom(atom);
             match encoded {
                 Ok(encoded) => exprs.push(encoded),
-                Err(err) => return Some(Err(err))
+                Err(err) => return Some(Err(err)),
             }
         }
         Some(Ok(self.vcx.mk_conj(&exprs)))
