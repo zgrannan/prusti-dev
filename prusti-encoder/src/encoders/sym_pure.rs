@@ -251,7 +251,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     ) -> Option<PrustiSymValue<'sym, 'tcx>> {
         vir::with_vcx(|vcx| {
             let fn_name = vcx.tcx().def_path_str(def_id);
-            eprintln!("fn_name: {fn_name}");
             if fn_name == "std::boxed::Box::<T>::new" {
                 assert_eq!(args.len(), 1);
                 let output_ty = vcx
