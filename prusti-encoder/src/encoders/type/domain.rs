@@ -803,7 +803,7 @@ impl<'vir> DomainEncSpecifics<'vir> {
     pub fn expect_primitive(self) -> DomainDataPrim<'vir> {
         match self {
             Self::Primitive(data) => data,
-            _ => panic!("expected primitive"),
+            _ => panic!("expected primitive, got {:?}", self),
         }
     }
     pub fn expect_structlike(self) -> DomainDataStruct<'vir> {
