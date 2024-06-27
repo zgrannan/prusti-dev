@@ -332,6 +332,7 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         assertion: &PrustiAssertion<'sym, 'tcx>,
     ) -> Vec<vir::Stmt<'vir>> {
         match assertion {
+            Assertion::False => vec![self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>())],
             Assertion::Precondition(def_id, substs, args) => {
                 let arg_substs = self
                     .arena

@@ -320,6 +320,7 @@ impl SymPureEnc {
                 PureKind::Constant(promoted) => todo!(),
             };
             let body = body.body().as_ref().clone();
+            let arg_count = body.body.arg_count;
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
                 &body.body.clone(),
                 vcx.tcx(),
@@ -339,6 +340,12 @@ impl SymPureEnc {
                 PrustiSemantics(PhantomData),
                 arena,
                 debug_output_dir,
+            );
+            assert_eq!(
+                symbolic_execution.symvars.len(),
+                arg_count,
+                "The symvars for pure {:?} don't correspond to its arguments",
+                def_id
             );
             SymPureEncResult(
                 symbolic_execution
