@@ -25,6 +25,29 @@ pub struct FieldFunctions<'vir> {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct StructConstructor<'vir>(FunctionIdent<'vir, UnknownArity<'vir>>);
+
+impl<'vir> StructConstructor<'vir> {
+    pub fn ident(&self) -> FunctionIdent<'vir, UnknownArity<'vir>> {
+        self.0
+    }
+    pub fn apply<Curr, Next>(
+        &self,
+        vcx: &'vir vir::VirCtxt,
+        ty_params: impl IntoIterator<Item = vir::ExprGen<'vir, Curr, Next>>,
+        args: impl IntoIterator<Item = vir::ExprGen<'vir, Curr, Next>>,
+    ) -> vir::ExprGen<'vir, Curr, Next> {
+        let args = vcx.alloc_slice(
+            &ty_params
+                .into_iter()
+                .chain(args.into_iter())
+                .collect::<Vec<_>>(),
+        );
+        self.0.apply(vcx, args)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct DomainDataPrim<'vir> {
     pub prim_type: vir::Type<'vir>,
     /// Snapshot of self as argument. Returns Viper primitive value.
@@ -36,7 +59,7 @@ pub struct DomainDataPrim<'vir> {
 pub struct DomainDataStruct<'vir> {
     /// Construct domain from snapshots of fields or for primitive types
     /// from the single Viper primitive value.
-    pub field_snaps_to_snap: FunctionIdent<'vir, UnknownArity<'vir>>,
+    pub field_snaps_to_snap: StructConstructor<'vir>,
     /// Functions to access the fields.
     pub field_access: &'vir [FieldFunctions<'vir>],
 }
@@ -102,6 +125,7 @@ use crate::encoders::{generic::GenericEncOutputRef, GenericEnc};
 
 use super::{
     lifted::{
+        generic::{LiftedGeneric, LiftedGenericEnc},
         ty::{EncodeGenericsAsParamTy, LiftedTy, LiftedTyEnc},
         ty_constructor::{TyConstructorEnc, TyConstructorEncOutputRef},
     },
@@ -299,7 +323,11 @@ pub struct VariantData<'vir> {
 struct DomainEncData<'vir, 'enc> {
     vcx: &'vir vir::VirCtxt<'vir>,
     domain: vir::DomainIdent<'vir, NullaryArityAny<'vir, DomainParamData<'vir>>>,
+    /// The type parameters of the domain, and their corresponding accessors.
+    /// These functions should be called on the *type* of the domain (i.e. via
+    /// the `typeof_function`), not its snapshot
     generics: Vec<(ParamTy, vir::FunctionIdent<'vir, UnaryArity<'vir>>)>,
+    /// The function that returns the type of the domain.
     typeof_function: vir::FunctionIdent<'vir, UnaryArity<'vir>>,
     self_ty: vir::Type<'vir>,
     self_ex: vir::Expr<'vir>,
@@ -394,7 +422,7 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
         let specifics = DomainDataPrim {
             prim_type,
             snap_to_prim,
-            prim_to_snap: data.field_snaps_to_snap.to_known(),
+            prim_to_snap: data.field_snaps_to_snap.ident().to_known(),
         };
         specifics.bounds(ty).map(|(lower, upper)| {
             let exp = snap_to_prim.apply(self.vcx, [self.self_ex]);
@@ -478,20 +506,25 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
         let base = discr
             .map(|(_, _, v)| format!("{name}_{v}"))
             .unwrap_or_else(|| name.to_string());
+        let generics = self
+            .generics
+            .iter()
+            .map(|(g, _)| self.deps.require_ref::<LiftedGenericEnc>(*g).unwrap())
+            .collect::<Vec<_>>();
         // Constructor
         let field_snaps_to_snap = {
             let name = vir::vir_format_identifier!(self.vcx, "{base}_cons");
-            let ident = FunctionIdent::new(
-                name,
-                UnknownArity::new(
-                    self.vcx
-                        .alloc_slice(&field_tys.iter().map(|fty| fty.ty).collect::<Vec<_>>()),
-                ),
-                self.self_ty,
-            );
+            let generics = generics.iter().map(|g| g.ty());
+            let fields = field_tys.iter().map(|fty| fty.ty);
+            let args = self
+                .vcx
+                .alloc_slice(&generics.chain(fields).collect::<Vec<_>>());
+            let ident = FunctionIdent::new(name, UnknownArity::new(args), self.self_ty);
             self.push_function(ident, false);
-            ident
+            StructConstructor(ident)
         };
+
+        let generic_local_decls = generics.iter().map(|g| g.decl());
 
         // Variables and definitions useful for axioms
         let fnames = field_tys
@@ -502,23 +535,28 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                     .mk_local(vir::vir_format!(self.vcx, "f{idx}"), ty.ty)
             })
             .collect::<Vec<_>>();
-        let cons_qvars: Vec<_> = field_tys
+        let field_exprs = fnames
             .iter()
-            .enumerate()
-            .map(|(idx, _)| self.vcx.mk_local_decl_local(fnames[idx]))
+            .map(|f| self.vcx.mk_local_ex_local(f))
+            .collect::<Vec<_>>();
+        let cons_qvars: Vec<_> = generic_local_decls
+            .chain(fnames.iter().map(|f| self.vcx.mk_local_decl_local(f)))
             .collect();
         let cons_qvars = self.vcx.alloc_slice(&cons_qvars);
-        let cons_args: Vec<_> = fnames
-            .into_iter()
-            .map(|fname| self.vcx.mk_local_ex_local(fname))
-            .collect();
-        let cons_call_with_qvars = field_snaps_to_snap.apply(self.vcx, &cons_args);
+        let generic_exprs = generics.iter().map(|g| g.expr(self.vcx)).collect::<Vec<_>>();
+        let cons_call_with_qvars = field_snaps_to_snap.apply(
+            self.vcx,
+            generic_exprs.iter().copied(),
+            fnames
+                .into_iter()
+                .map(|fname| self.vcx.mk_local_ex_local(fname)),
+        );
 
         // Discriminant axioms
         if let Some((get_discr, val, _)) = discr {
             let discr = get_discr.apply(self.vcx, [cons_call_with_qvars]);
             let mut expr = self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, discr, val);
-            if !field_tys.is_empty() {
+            if !cons_qvars.is_empty() {
                 expr = self.vcx.mk_forall_expr(
                     cons_qvars,
                     self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[discr])]),
@@ -593,7 +631,7 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                                 self.vcx.mk_bin_op_expr(
                                     vir::BinOpKind::CmpEq,
                                     cons_read,
-                                    cons_args[idx],
+                                    field_exprs[idx],
                                 ),
                             ),
                         ),
@@ -615,13 +653,20 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
             // TODO: this axiom seems useful even when there are no fields, but
             // I can't figure out which triggers it would have. Is it ok to skip
             // it?
-            if !field_access.is_empty() {
+            if !(field_access.is_empty() && self.generics.is_empty()) {
                 // Constructing from reads leads to same result
                 let all_reads: Vec<_> = field_access
                     .iter()
                     .map(|field_access| field_access.read.apply(self.vcx, [self.self_ex]))
                     .collect();
-                let cons_call_with_reads = field_snaps_to_snap.apply(self.vcx, &all_reads);
+                let all_ty_reads = self.generics.iter().map(|(_, ident)| {
+                    ident.apply(
+                        self.vcx,
+                        [self.typeof_function.apply(self.vcx, [self.self_ex])],
+                    )
+                });
+                let cons_call_with_reads =
+                    field_snaps_to_snap.apply(self.vcx, all_ty_reads, all_reads.iter().copied());
                 let trigger = if stronger_cons_axiom {
                     // Integer types require a simpler trigger to be complete
                     // when snapshot equality may be used on them.
@@ -642,6 +687,33 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
                         ),
                     ),
                 ));
+                if !self.generics.is_empty() {
+                    for ((ty, getter), generic_expr) in
+                        self.generics.iter().zip(generic_exprs.iter())
+                    {
+                        self.axioms.push(
+                            self.vcx.mk_domain_axiom(
+                                vir::vir_format_identifier!(self.vcx, "ax_{base}_cons_type_{ty:?}"),
+                                self.vcx.mk_forall_expr(
+                                    self.vcx.alloc_slice(&cons_qvars),
+                                    self.vcx.alloc_slice(&[self
+                                        .vcx
+                                        .mk_trigger(&[cons_call_with_qvars])]),
+                                    self.vcx.mk_bin_op_expr(
+                                        vir::BinOpKind::CmpEq,
+                                        getter.apply(
+                                            self.vcx,
+                                            [self
+                                                .typeof_function
+                                                .apply(self.vcx, [cons_call_with_qvars])],
+                                        ),
+                                        generic_expr,
+                                    ),
+                                ),
+                            ),
+                        );
+                    }
+                }
             };
 
             // Write and read to different fields change nothing, write and read to

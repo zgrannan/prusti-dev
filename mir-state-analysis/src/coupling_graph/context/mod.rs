@@ -28,7 +28,7 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::{
         mir::{Body, Local, Location, Promoted, RETURN_PLACE},
-        ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt},
+        ty::{self, GenericArgsRef, ParamEnv, RegionVid, TyCtxt, GenericArgs},
     },
 };
 
@@ -54,7 +54,6 @@ impl<'tcx> BodyWithBorrowckFacts<'tcx> {
         substs: GenericArgsRef<'tcx>,
         param_env: ParamEnv<'tcx>,
     ) -> Self {
-        eprintln!("Subst {:?} with args {:?}", self.body, substs);
         let body = tcx.erase_regions(self.body.clone());
         let monomorphized_body =
             tcx.subst_and_normalize_erasing_regions(substs, param_env, ty::EarlyBinder::bind(body));

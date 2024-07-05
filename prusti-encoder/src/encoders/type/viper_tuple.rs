@@ -1,10 +1,9 @@
-use task_encoder::{
-    TaskEncoder,
-    TaskEncoderDependencies,
-    EncodeFullResult,
-};
+use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 
-use super::{domain::{DomainDataStruct, DomainEnc}, most_generic_ty::MostGenericTy};
+use super::{
+    domain::{DomainDataStruct, DomainEnc},
+    most_generic_ty::MostGenericTy,
+};
 
 pub struct ViperTupleEnc;
 
@@ -17,11 +16,14 @@ impl<'vir> ViperTupleEncOutput<'vir> {
     pub fn mk_cons<'tcx, Curr, Next>(
         &self,
         vcx: &'vir vir::VirCtxt<'tcx>,
-        elems: &[vir::ExprGen<'vir, Curr, Next>]
+        tys: impl IntoIterator<Item = vir::ExprGen<'vir, Curr, Next>>,
+        elems: impl IntoIterator<Item = vir::ExprGen<'vir, Curr, Next>>,
     ) -> vir::ExprGen<'vir, Curr, Next> {
-        self.tuple
-            .map(|t| t.field_snaps_to_snap.apply(vcx, elems))
-            .unwrap_or_else(|| elems[0])
+        if let Some(t) = self.tuple {
+            t.field_snaps_to_snap.apply(vcx, tys, elems)
+        } else {
+            elems.into_iter().next().unwrap()
+        }
     }
 
     pub fn mk_elem<'tcx, Curr, Next>(
@@ -57,7 +59,12 @@ impl TaskEncoder for ViperTupleEnc {
             Ok((ViperTupleEncOutput { tuple: None }, ()))
         } else {
             let ret = deps.require_dep::<DomainEnc>(MostGenericTy::tuple(*task_key))?;
-            Ok((ViperTupleEncOutput { tuple: Some(ret.expect_structlike()) }, ()))
+            Ok((
+                ViperTupleEncOutput {
+                    tuple: Some(ret.expect_structlike()),
+                },
+                (),
+            ))
         }
     }
 }

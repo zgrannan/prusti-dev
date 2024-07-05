@@ -164,7 +164,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                 if let ty::TyKind::Adt(def, substs) = ty.kind() {
                                     AggregateType::Adt {
                                         def_id: def.did(),
-                                        variant_index: variant_idx.unwrap_or(FIRST_VARIANT)
+                                        variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
                                     }
                                 } else {
                                     todo!()
@@ -175,9 +175,11 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     })
                     .unwrap();
                 let casted_args = ty_caster.apply_casts(self.vcx, vir_exprs.into_iter());
-                Ok(sl
-                    .field_snaps_to_snap
-                    .apply(self.vcx, self.vcx.alloc_slice(&casted_args)))
+                Ok(sl.field_snaps_to_snap.apply(
+                    self.vcx,
+                    ty.ty_args.iter().map(|a| a.expr(self.vcx)),
+                    casted_args,
+                ))
             }
             SymValueKind::Projection(elem, base) => {
                 let expr = self.encode_sym_value(base)?;
@@ -229,7 +231,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         };
                         let proj_app = proj_fn.apply(self.vcx, [expr]);
                         match ty.rust_ty().kind() {
-                            ty::TyKind::Adt(def, _) => {
+                            ty::TyKind::Adt(def, substs) => {
                                 // The ADT type for the field might be generic, concretize if necessary
                                 let variant =
                                     def.variant(ty.variant_index().unwrap_or(abi::FIRST_VARIANT));

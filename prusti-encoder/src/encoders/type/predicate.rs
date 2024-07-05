@@ -273,7 +273,7 @@ impl TaskEncoder for PredicateEnc {
                     .collect();
                 let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
                 let fn_snap_body =
-                    enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap);
+                    enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap.ident());
                 Ok((enc.mk_struct(fn_snap_body), ()))
             }
             TyKind::Adt(adt, args) => match adt.adt_kind() {
@@ -302,7 +302,7 @@ impl TaskEncoder for PredicateEnc {
                     };
                     let fields = enc.mk_field_apps(specifics.ref_to_field_refs, fields);
                     let fn_snap_body =
-                        enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap);
+                        enc.mk_struct_ref_to_snap_body(None, fields, snap_data.field_snaps_to_snap.ident());
                     Ok((enc.mk_struct(fn_snap_body), ()))
                 }
                 ty::AdtKind::Enum => {
@@ -691,11 +691,11 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
             // `Ref` is only part of snapshots for mutable references.
             data.snap_data
                 .field_snaps_to_snap
-                .apply(self.vcx, &[inner_snap, self_ref])
+                .apply(self.vcx, &[], vec![inner_snap, self_ref])
         } else {
             data.snap_data
                 .field_snaps_to_snap
-                .apply(self.vcx, &[inner_snap])
+                .apply(self.vcx, &[], vec![inner_snap])
         };
         let fn_snap_body = self.vcx.mk_unfolding_expr(self.self_pred_read, snap);
         self.finalize(Some(fn_snap_body))
@@ -726,7 +726,7 @@ impl<'vir, 'tcx> PredicateEncValues<'vir, 'tcx> {
                     let body = self.mk_struct_ref_to_snap_body(
                         Some(variant.predicate),
                         fields,
-                        variant.fields.snap_data.field_snaps_to_snap,
+                        variant.fields.snap_data.field_snaps_to_snap.ident(),
                     );
                     let cond = self.vcx.mk_eq_expr(discr, variant.discr);
                     let pred = self.vcx.mk_predicate_app_expr(variant.predicate.apply(

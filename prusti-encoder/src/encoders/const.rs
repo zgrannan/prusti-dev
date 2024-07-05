@@ -2,13 +2,9 @@ use prusti_rustc_interface::{
     middle::{mir, ty},
     span::def_id::DefId,
 };
-use rustc_middle::mir::interpret::{ConstValue, Scalar, GlobalAlloc};
-use task_encoder::{
-    TaskEncoder,
-    TaskEncoderDependencies,
-    EncodeFullResult,
-};
-use vir::{CallableIdent, Arity};
+use rustc_middle::mir::interpret::{ConstValue, GlobalAlloc, Scalar};
+use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
+use vir::{Arity, CallableIdent};
 
 pub struct ConstEnc;
 
@@ -19,9 +15,12 @@ pub struct ConstEncOutputRef<'vir> {
 }
 impl<'vir> task_encoder::OutputRefAny for ConstEncOutputRef<'vir> {}
 
-use crate::encoders::{MirPureEnc, mir_pure::PureKind, MirPureEncTask};
+use crate::encoders::{mir_pure::PureKind, MirPureEnc, MirPureEncTask};
 
-use super::{lifted::{casters::CastTypePure, rust_ty_cast::RustTyCastersEnc}, rust_ty_snapshots::RustTySnapshotsEnc};
+use super::{
+    lifted::{casters::CastTypePure, rust_ty_cast::RustTyCastersEnc},
+    rust_ty_snapshots::RustTySnapshotsEnc,
+};
 
 impl TaskEncoder for ConstEnc {
     task_encoder::encoder_cache!(ConstEnc);
@@ -46,7 +45,8 @@ impl TaskEncoder for ConstEnc {
         let (const_, encoding_depth, def_id) = *task_key;
         let res = match const_ {
             mir::ConstantKind::Val(val, ty) => {
-                let kind = deps.require_local::<RustTySnapshotsEnc>(ty)?.generic_snapshot.specifics;
+                let snapshot = deps.require_local::<RustTySnapshotsEnc>(ty)?;
+                let kind = snapshot.generic_snapshot.specifics;
                 match val {
                     ConstValue::Scalar(Scalar::Int(int)) => {
                         let prim = kind.expect_primitive();
@@ -69,8 +69,10 @@ impl TaskEncoder for ConstEnc {
                     }),
                     ConstValue::ZeroSized => {
                         let s = kind.expect_structlike();
-                        assert_eq!(s.field_snaps_to_snap.arity().args().len(), 0);
-                        vir::with_vcx(|vcx| s.field_snaps_to_snap.apply(vcx, &[]))
+                        vir::with_vcx(|vcx| {
+                            s.field_snaps_to_snap
+                                .apply(vcx, snapshot.ty_arg_exprs(vcx), &[])
+                        })
                     }
                     // Encode `&str` constants to an opaque domain. If we ever want to perform string reasoning
                     // we will need to revisit this encoding, but for the moment this allows assertions to avoid
@@ -86,11 +88,15 @@ impl TaskEncoder for ConstEnc {
                         let cast = deps.require_local::<RustTyCastersEnc<CastTypePure>>(str_ty)?;
                         vir::with_vcx(|vcx| {
                             // first, we create a string snapshot
-                            let snap = str_snap.field_snaps_to_snap.apply(vcx, &[]);
+                            let snap = str_snap.field_snaps_to_snap.apply(vcx, &[], &[]);
                             // upcast it to a param
                             let snap = cast.cast_to_generic_if_necessary(vcx, snap);
                             // wrap it in a ref
-                            ref_ty.field_snaps_to_snap.apply(vcx, &[snap])
+                            ref_ty.field_snaps_to_snap.apply(
+                                vcx,
+                                snapshot.ty_arg_exprs(vcx),
+                                vec![snap],
+                            )
                         })
                     }
                     ConstValue::Slice { .. } => todo!("ConstValue::Slice : {:?}", const_.ty()),
@@ -104,7 +110,7 @@ impl TaskEncoder for ConstEnc {
                     param_env: vcx.tcx().param_env(uneval.def),
                     substs: ty::List::identity_for_item(vcx.tcx(), uneval.def),
                     kind: PureKind::Constant(uneval.promoted.unwrap()),
-                    caller_def_id: Some(def_id)
+                    caller_def_id: Some(def_id),
                 };
                 let expr = deps.require_local::<MirPureEnc>(task)?.expr;
                 use vir::Reify;

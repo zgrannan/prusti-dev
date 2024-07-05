@@ -31,8 +31,11 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         let base = cast.cast_to_generic_if_necessary(self.vcx, base);
         let ty = self.deps.require_local::<RustTySnapshotsEnc>(ty).unwrap();
         if let domain::DomainEncSpecifics::StructLike(s) = ty.generic_snapshot.specifics {
-            Ok(s.field_snaps_to_snap
-                .apply(self.vcx, self.vcx.alloc(&vec![base])))
+            Ok(s.field_snaps_to_snap.apply(
+                self.vcx,
+                ty.ty_arg_exprs(self.vcx),
+                vec![base],
+            ))
         } else {
             unreachable!()
         }

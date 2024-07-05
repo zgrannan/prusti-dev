@@ -156,6 +156,7 @@ impl SymSpecEnc {
                     post
                 })
                 .collect::<BTreeSet<_>>();
+
             SymSpecEncOutput {
                 pres: SymSpec(pres),
                 posts: SymSpec(posts),
