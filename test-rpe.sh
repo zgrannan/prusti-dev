@@ -31,12 +31,12 @@ parallel_check_fail() {
 export -f parallel_check_pass
 export -f parallel_check_fail
 
-find "$directory_pass" -type f -name "*.rs" | parallel -j 8 --halt now,fail=1 parallel_check_pass
+find "$directory_pass" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 parallel_check_pass
 if [[ $? -ne 0 ]]; then
    exit 1
 fi
 
-find "$directory_fail" -type f -name "*.rs" | parallel -j 8 --halt now,fail=1 parallel_check_fail
+find "$directory_fail" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 parallel_check_fail
 
 if [[ $? -ne 0 ]]; then
    exit 1

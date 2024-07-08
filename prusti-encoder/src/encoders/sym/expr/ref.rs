@@ -1,8 +1,9 @@
 use prusti_rustc_interface::{
     abi,
+    ast::Mutability,
     middle::{
         mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
-        ty::{self, GenericArgs},
+        ty::{self, GenericArgs, TyKind},
     },
     span::def_id::{DefId, LocalDefId},
 };
@@ -18,24 +19,26 @@ use crate::encoders::{
 use super::{EncodeSymValueResult, SymExprEncoder};
 
 impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 'tcx, T> {
-    pub fn encode_ref(
-        &mut self,
-        ty: ty::Ty<'tcx>,
-        e: PrustiSymValue<'sym, 'tcx>,
-    ) -> EncodeSymValueResult<'vir> {
-        let base = self.encode_sym_value(e).unwrap();
+    pub fn encode_ref(&mut self, e: PrustiSymValue<'sym, 'tcx>, mutability: Mutability) -> EncodeSymValueResult<'vir> {
+        let base = self.encode_sym_value(e)?;
+        let inner_ty = e.ty(self.vcx.tcx()).rust_ty();
         let cast = self
             .deps
-            .require_local::<RustTyCastersEnc<CastTypePure>>(e.ty(self.vcx.tcx()).rust_ty())
+            .require_local::<RustTyCastersEnc<CastTypePure>>(inner_ty)
             .unwrap();
         let base = cast.cast_to_generic_if_necessary(self.vcx, base);
-        let ty = self.deps.require_local::<RustTySnapshotsEnc>(ty).unwrap();
+        let ref_ty = self.vcx.tcx().mk_ty_from_kind(TyKind::Ref(
+            self.vcx.tcx().lifetimes.re_erased,
+            inner_ty,
+            mutability,
+        ));
+        let ty = self
+            .deps
+            .require_local::<RustTySnapshotsEnc>(ref_ty)
+            .unwrap();
         if let domain::DomainEncSpecifics::StructLike(s) = ty.generic_snapshot.specifics {
-            Ok(s.field_snaps_to_snap.apply(
-                self.vcx,
-                ty.ty_arg_exprs(self.vcx),
-                vec![base],
-            ))
+            Ok(s.field_snaps_to_snap
+                .apply(self.vcx, ty.ty_arg_exprs(self.vcx), vec![base]))
         } else {
             unreachable!()
         }

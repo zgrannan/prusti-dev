@@ -225,8 +225,15 @@ impl TaskEncoder for SymImpureEnc {
             }
 
             for pre in spec.pres.into_iter() {
-                let pre = visitor.encoder.encode_pure_spec(&pre, None).unwrap();
-                stmts.push(vcx.mk_inhale_stmt(pre));
+                match visitor.encoder.encode_pure_spec(&pre, None) {
+                    Ok(pre) => {
+                        stmts.push(vcx.mk_inhale_stmt(pre));
+                    }
+                    Err(err) => {
+                        stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                    }
+                }
             }
 
             for (path, pcs, assertion) in symbolic_execution.assertions.iter() {

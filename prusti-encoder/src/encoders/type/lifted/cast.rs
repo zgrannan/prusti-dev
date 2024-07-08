@@ -1,11 +1,9 @@
 use prusti_rustc_interface::middle::ty;
-use task_encoder::{TaskEncoder, TaskEncoderDependencies, TaskEncoderError, EncodeFullResult};
+use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
 use vir::{FunctionIdent, MethodIdent, StmtGen, UnknownArity, VirCtxt};
 
 use super::{
-    casters::{
-        CastType, CastTypeImpure, CastTypePure, Casters, CastersEncOutputRef,
-    },
+    casters::{CastType, CastTypeImpure, CastTypePure, Casters, CastersEncOutputRef},
     generic::LiftedGeneric,
     rust_ty_cast::{RustTyCastersEnc, RustTyGenericCastEncOutput},
     ty::LiftedTy,
@@ -156,6 +154,15 @@ impl<'vir, T> task_encoder::OutputRefAny for GenericCastOutputRef<'vir, T> {}
 /// [`CastTypeImpure`].
 pub struct CastToEnc<T>(std::marker::PhantomData<T>);
 
+fn sanity_check<'tcx>(lhs: ty::Ty<'tcx>, rhs: ty::Ty<'tcx>) {
+    // eprintln!("Checking sanity of {lhs:?} and {rhs:?}");
+    // match (lhs.kind(), rhs.kind()) {
+    //     (TyKind::Param(_), TyKind::Param(_)) | (TyKind::Param(_), TyKind::Ref(_, inner, _)) | (TyKind::Ref(_, inner, _), TyKind::Param(_)) => {
+    //         Self::sanity_check(lhs, *inner)
+    //     }
+    // }
+}
+
 impl<T: CastType + 'static> CastToEnc<T>
 where
     Self: TaskEncoder,
@@ -169,6 +176,7 @@ where
         task_key: CastArgs<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> GenericCastOutputRef<'vir, T::CastApplicator<'vir>> {
+        sanity_check(task_key.expected, task_key.actual);
         let expected_is_param = matches!(task_key.expected.kind(), ty::Param(_));
         let actual_is_param = matches!(task_key.actual.kind(), ty::Param(_));
         if expected_is_param == actual_is_param {

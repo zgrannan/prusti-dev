@@ -4,4 +4,6 @@ fn main() {
     let mut x = 1;
     let rx = &mut x;
     let ry = &mut (*rx);
+    *ry = 2;
+    assert!(x == 2);
 }

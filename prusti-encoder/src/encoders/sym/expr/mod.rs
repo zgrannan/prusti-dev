@@ -3,7 +3,7 @@ use prusti_rustc_interface::{
     abi,
     middle::{
         mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
-        ty::{self, GenericArgs},
+        ty::{self, GenericArgs, TyKind},
     },
     span::def_id::{DefId, LocalDefId},
 };
@@ -120,7 +120,11 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             }
             SymValueKind::Aggregate(kind, exprs) => {
                 if let AggregateKind::PCS(ty, _) = kind && ty.is_ref() {
-                    return self.encode_ref(*ty, exprs[0]);
+                    let mutability = match ty.kind() {
+                        TyKind::Ref(_, _, mutability) => *mutability,
+                        _ => unreachable!("AggregateKind::PCS with non-reference type: {:?}", ty),
+                    };
+                    return self.encode_ref(exprs[0], mutability);
                 }
                 let vir_exprs = exprs
                     .iter()
@@ -206,6 +210,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     }
                     ProjectionElem::Downcast(..) => Ok(expr),
                     ProjectionElem::Field(field_idx, field_ty) => {
+                        eprintln!("ProjectionElem::Field({field_idx:?}, {field_ty:? }) on {:?}", ty);
                         let ty_out = self
                             .deps
                             .require_local::<RustTySnapshotsEnc>(ty.rust_ty())
@@ -275,7 +280,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     other => panic!("discriminant of {:?}", other),
                 }
             }
-            SymValueKind::Ref(ty, e) => self.encode_ref(*ty, e),
+            SymValueKind::Ref(e, mutability) => self.encode_ref(e, *mutability),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
                 fn_def_id,
                 substs,

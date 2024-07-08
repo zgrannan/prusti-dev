@@ -1,4 +1,3 @@
-// PCS
 use prusti_contracts::*;
 
 #[derive(Clone,PartialEq,Eq)]
