@@ -128,8 +128,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
                 let vir_exprs = exprs
                     .iter()
-                    .map(|e| self.encode_sym_value(e).unwrap())
-                    .collect::<Vec<_>>();
+                    .map(|e| self.encode_sym_value(e))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let ty = self
                     .deps
                     .require_local::<RustTySnapshotsEnc>(kind.ty().rust_ty())
@@ -210,7 +210,6 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     }
                     ProjectionElem::Downcast(..) => Ok(expr),
                     ProjectionElem::Field(field_idx, field_ty) => {
-                        eprintln!("ProjectionElem::Field({field_idx:?}, {field_ty:? }) on {:?}", ty);
                         let ty_out = self
                             .deps
                             .require_local::<RustTySnapshotsEnc>(ty.rust_ty())
