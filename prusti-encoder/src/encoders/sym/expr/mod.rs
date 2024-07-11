@@ -299,7 +299,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                     .into_iter()
                     .zip(args.iter())
                     .map(|(expected_ty, arg)| {
-                        let base = self.encode_sym_value(deps, arg).unwrap();
+                        let base = self
+                            .encode_sym_value(deps, arg)
+                            .map_err(|e| EncodeFullError::EncodingError(e, None))?;
                         let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
                         let caster = deps
                             .require_ref::<CastToEnc<CastTypePure>>(CastArgs {
@@ -311,7 +313,8 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             Ok(caster.apply_cast_if_necessary(self.vcx, base));
                         result
                     })
-                    .collect::<Result<Vec<_>, EncodeFullError<'vir, T>>>().unwrap();
+                    .collect::<Result<Vec<_>, EncodeFullError<'vir, T>>>()
+                    .map_err(|e| format!("{:?}", e))?;
                 let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
                 let function_ref = deps
                     .require_ref::<SymFunctionEnc>(FunctionCallTaskDescription {
@@ -388,7 +391,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
-        let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr).unwrap();
+        let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr)?;
         Ok(snap_to_prim.apply(self.vcx, [expr]))
     }
 
