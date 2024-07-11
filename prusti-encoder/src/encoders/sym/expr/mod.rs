@@ -12,7 +12,7 @@ use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate},
     value::{AggregateKind, Substs, SymValueKind},
 };
-use task_encoder::{TaskEncoder, TaskEncoderDependencies};
+use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 
 use crate::encoders::{
     domain,
@@ -34,41 +34,42 @@ use crate::encoders::{
 
 mod r#ref;
 
-type EncodePCResult<'vir> = Result<vir::Expr<'vir>, String>;
-type EncodePureSpecResult<'vir> = Result<vir::Expr<'vir>, String>;
-pub type EncodePCAtomResult<'vir> = Result<vir::Expr<'vir>, String>;
-pub type EncodeSymValueResult<'vir> = Result<vir::Expr<'vir>, String>;
+type EncodePCResult<'vir, T> = Result<vir::Expr<'vir>, T>;
+type EncodePureSpecResult<'vir, T> = Result<vir::Expr<'vir>, T>;
+pub type EncodePCAtomResult<'vir, T> = Result<vir::Expr<'vir>, T>;
+pub type EncodeSymValueResult<'vir, T> = Result<vir::Expr<'vir>, T>;
 type PrustiPathConditionAtom<'sym, 'tcx> =
     PathConditionAtom<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
-pub struct SymExprEncoder<'enc, 'vir: 'tcx, 'sym, 'tcx, T: TaskEncoder> {
+pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
-    pub deps: &'enc mut TaskEncoderDependencies<'vir, T>,
     arena: &'sym SymExContext<'tcx>,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
 }
 
-impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 'tcx, T> {
+impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     pub fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
-        deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         arena: &'sym SymExContext<'tcx>,
         symvars: Vec<vir::Expr<'vir>>,
         def_id: DefId,
     ) -> Self {
         Self {
             vcx,
-            deps,
             arena,
             symvars,
             def_id,
         }
     }
-    pub fn encode_sym_value(
-        &mut self,
+    pub fn encode_sym_value<'slf, 'enc, T: TaskEncoder<EncodingError = String>>(
+        &'slf self,
+        deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         sym_value: PrustiSymValue<'sym, 'tcx>,
-    ) -> EncodeSymValueResult<'vir> {
+    ) -> EncodeSymValueResult<'vir, String>
+    where
+        T: 'vir,
+    {
         let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
             SymValueKind::Var(idx, ..) => self
@@ -77,17 +78,15 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 .cloned()
                 .ok_or_else(|| format!("No symvar at idx {}.", *idx)),
 
-            SymValueKind::Constant(c) => Ok(self
-                .deps
+            SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),
             SymValueKind::CheckedBinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                let lhs = self.encode_sym_value(lhs)?;
-                let rhs = self.encode_sym_value(rhs)?;
-                let viper_fn = self
-                    .deps
+                let lhs = self.encode_sym_value(deps, lhs)?;
+                let rhs = self.encode_sym_value(deps, rhs)?;
+                let viper_fn = deps
                     .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::CheckedBinOp(
                         *res_ty, *op, l_ty, r_ty,
                     ))
@@ -98,10 +97,9 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             SymValueKind::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                let lhs = self.encode_sym_value(lhs)?;
-                let rhs = self.encode_sym_value(rhs)?;
-                let viper_fn = self
-                    .deps
+                let lhs = self.encode_sym_value(deps, lhs)?;
+                let rhs = self.encode_sym_value(deps, rhs)?;
+                let viper_fn = deps
                     .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::BinOp(
                         *res_ty, *op, l_ty, r_ty,
                     ))
@@ -110,9 +108,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
             }
             SymValueKind::UnaryOp(ty, op, expr) => {
-                let expr = self.encode_sym_value(expr)?;
-                let viper_fn = self
-                    .deps
+                let expr = self.encode_sym_value(deps, expr)?;
+                let viper_fn = deps
                     .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::UnOp(*ty, *op, *ty))
                     .unwrap()
                     .function;
@@ -124,14 +121,13 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         TyKind::Ref(_, _, mutability) => *mutability,
                         _ => unreachable!("AggregateKind::PCS with non-reference type: {:?}", ty),
                     };
-                    return self.encode_ref(exprs[0], mutability);
+                    return self.encode_ref(deps, exprs[0], mutability);
                 }
                 let vir_exprs = exprs
                     .iter()
-                    .map(|e| self.encode_sym_value(e))
+                    .map(|e| self.encode_sym_value(deps, e))
                     .collect::<Result<Vec<_>, _>>()?;
-                let ty = self
-                    .deps
+                let ty = deps
                     .require_local::<RustTySnapshotsEnc>(kind.ty().rust_ty())
                     .unwrap();
                 let sl = match kind.variant_idx() {
@@ -149,8 +145,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .iter()
                     .map(|e| e.ty(self.vcx.tcx()).rust_ty())
                     .collect::<Vec<_>>();
-                let ty_caster = self
-                    .deps
+                let ty_caster = deps
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
                         tys: field_tys,
                         aggregate_type: match kind {
@@ -186,12 +181,11 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 ))
             }
             SymValueKind::Projection(elem, base) => {
-                let expr = self.encode_sym_value(base)?;
+                let expr = self.encode_sym_value(deps, base)?;
                 let ty = base.ty(self.vcx.tcx());
                 match elem {
                     ProjectionElem::Deref => {
-                        let e_ty = self
-                            .deps
+                        let e_ty = deps
                             .require_local::<RustTySnapshotsEnc>(ty.rust_ty())
                             .unwrap()
                             .generic_snapshot
@@ -201,8 +195,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                         // Since the `expr` is the target of a reference, it is encoded as a `Param`.
                         // If it is not a type parameter, we cast it to its concrete Snapshot.
                         let rust_ty = sym_value.ty(self.vcx.tcx()).rust_ty();
-                        let cast = self
-                            .deps
+                        let cast = deps
                             .require_local::<RustTyCastersEnc<CastTypePure>>(rust_ty)
                             .unwrap();
                         let casted = cast.cast_to_concrete_if_possible(self.vcx, expr);
@@ -210,8 +203,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     }
                     ProjectionElem::Downcast(..) => Ok(expr),
                     ProjectionElem::Field(field_idx, field_ty) => {
-                        let ty_out = self
-                            .deps
+                        let ty_out = deps
                             .require_local::<RustTySnapshotsEnc>(ty.rust_ty())
                             .unwrap();
                         let proj_fn = match ty_out.generic_snapshot.specifics {
@@ -247,15 +239,13 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                                     expected: *field_ty,      //  S<i32>
                                     actual: generic_field_ty, // T
                                 };
-                                Ok(self
-                                    .deps
+                                Ok(deps
                                     .require_ref::<CastToEnc<CastTypePure>>(cast_args)
                                     .unwrap()
                                     .apply_cast_if_necessary(self.vcx, proj_app))
                             }
                             ty::TyKind::Tuple(_) => {
-                                let generic_cast = self
-                                    .deps
+                                let generic_cast = deps
                                     .require_local::<RustTyCastersEnc<CastTypePure>>(*field_ty)
                                     .unwrap();
                                 Ok(generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app))
@@ -267,9 +257,8 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
             }
             SymValueKind::Discriminant(expr) => {
-                let base = self.encode_sym_value(expr)?;
-                let ty = self
-                    .deps
+                let base = self.encode_sym_value(deps, expr)?;
+                let ty = deps
                     .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
                     .unwrap();
                 match ty.generic_snapshot.specifics {
@@ -279,7 +268,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     other => panic!("discriminant of {:?}", other),
                 }
             }
-            SymValueKind::Ref(e, mutability) => self.encode_ref(e, *mutability),
+            SymValueKind::Ref(e, mutability) => self.encode_ref(deps, e, *mutability),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
                 fn_def_id,
                 substs,
@@ -302,8 +291,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .map(|i| i.skip_binder())
                     .copied()
                     .collect::<Vec<_>>();
-                let encoded_ty_args = self
-                    .deps
+                let encoded_ty_args = deps
                     .require_local::<LiftedFuncAppTyParamsEnc>((mono, substs))
                     .unwrap();
                 let encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx));
@@ -311,23 +299,21 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                     .into_iter()
                     .zip(args.iter())
                     .map(|(expected_ty, arg)| {
-                        let base = self.encode_sym_value(arg)?;
+                        let base = self.encode_sym_value(deps, arg).unwrap();
                         let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
-                        let caster = self
-                            .deps
+                        let caster = deps
                             .require_ref::<CastToEnc<CastTypePure>>(CastArgs {
                                 expected: expected_ty,
                                 actual: arg_ty,
                             })
                             .unwrap();
-                        let result: EncodeSymValueResult<'vir> =
+                        let result: EncodeSymValueResult<'vir, EncodeFullError<'vir, T>> =
                             Ok(caster.apply_cast_if_necessary(self.vcx, base));
                         result
                     })
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect::<Result<Vec<_>, EncodeFullError<'vir, T>>>().unwrap();
                 let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
-                let function_ref = self
-                    .deps
+                let function_ref = deps
                     .require_ref::<SymFunctionEnc>(FunctionCallTaskDescription {
                         def_id: *fn_def_id,
                         substs: if mono {
@@ -336,17 +322,15 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id)
                         },
                         caller_def_id: self.def_id,
-                    })
-                    .unwrap()
+                    }).unwrap()
                     .function_ident;
                 Ok(function_ref.apply(self.vcx, &args))
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::And(lhs, rhs)) => {
-                let lhs = self.encode_sym_value_as_prim(lhs)?;
-                let rhs = self.encode_sym_value_as_prim(rhs)?;
+                let lhs = self.encode_sym_value_as_prim(deps, lhs)?;
+                let rhs = self.encode_sym_value_as_prim(deps, rhs)?;
                 let raw = self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs);
-                if let domain::DomainEncSpecifics::Primitive(dd) = self
-                    .deps
+                if let domain::DomainEncSpecifics::Primitive(dd) = deps
                     .require_local::<RustTySnapshotsEnc>(self.vcx.tcx().types.bool)
                     .unwrap()
                     .generic_snapshot
@@ -358,19 +342,18 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::If(cond, lhs, rhs)) => {
-                let cond = self.encode_sym_value_as_prim(cond)?;
-                let lhs = self.encode_sym_value(lhs)?;
-                let rhs = self.encode_sym_value(rhs)?;
+                let cond: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, cond)?;
+                let lhs: vir::Expr<'vir> = self.encode_sym_value(deps, lhs)?;
+                let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
-                let ty = self.deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
+                let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
             }
             SymValueKind::Cast(_, operand, ty) => {
-                let prim_val = self.encode_sym_value_as_prim(operand)?;
-                if let domain::DomainEncSpecifics::Primitive(dd) = self
-                    .deps
+                let prim_val = self.encode_sym_value_as_prim(deps, operand)?;
+                if let domain::DomainEncSpecifics::Primitive(dd) = deps
                     .require_local::<RustTySnapshotsEnc>(*ty)
                     .unwrap()
                     .generic_snapshot
@@ -382,16 +365,20 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                 }
                 // TODO: Make this more robust
             }
-            SymValueKind::InternalError(err, _) => Err(format!("Encountered internal err {}", err)),
+            SymValueKind::InternalError(err, _) => Err(todo!("Encountered internal err {}", err)),
         }
     }
 
-    pub fn encode_sym_value_as_prim(
-        &mut self,
-        expr: &PrustiSymValue<'sym, 'tcx>,
-    ) -> Result<vir::Expr<'vir>, String> {
-        let snap_to_prim = match self
-            .deps
+    pub fn encode_sym_value_as_prim<'slf, 'enc, T: TaskEncoder<EncodingError = String>>(
+        &'slf self,
+        deps: &'enc mut TaskEncoderDependencies<'vir, T>,
+        expr: PrustiSymValue<'sym, 'tcx>,
+    ) -> EncodeSymValueResult<'vir, String>
+    where
+        T: 'vir,
+        EncodeFullError<'vir, T>: 'vir,
+    {
+        let snap_to_prim = match deps
             .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
             .unwrap()
             .generic_snapshot
@@ -400,33 +387,35 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
-        Ok(snap_to_prim.apply(self.vcx, [self.encode_sym_value(expr)?]))
+        let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr).unwrap();
+        Ok(snap_to_prim.apply(self.vcx, [expr]))
     }
 
-    fn encode_pc_atom(
-        &mut self,
+    fn encode_pc_atom<T: TaskEncoder<EncodingError = String>>(
+        &self,
+        deps: &mut TaskEncoderDependencies<'vir, T>,
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
-    ) -> EncodePCAtomResult<'vir> {
+    ) -> EncodePCAtomResult<'vir, String> {
         let result = match &pc.predicate {
             PathConditionPredicate::Postcondition(def_id, substs, args) => {
                 let args = args.iter().copied().chain(std::iter::once(pc.expr));
                 let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
-                let encoded_posts =
-                    SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
-                        .posts
-                        .into_iter()
-                        .map(|p| self.encode_pure_spec(&p, Some(arg_substs)))
-                        .collect::<Result<Vec<_>, _>>()?;
+                let encoded_posts = SymSpecEnc::encode(self.arena, deps, (*def_id, substs, None))
+                    .posts
+                    .into_iter()
+                    .map(|p| self.encode_pure_spec(deps, p, Some(arg_substs)))
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
                 Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
             }
             PathConditionPredicate::Eq(target, ty) => {
-                let expr = self.encode_sym_value(&pc.expr)?;
+                let expr = self.encode_sym_value(deps, &pc.expr)?;
                 Ok(self
                     .vcx
-                    .mk_eq_expr(expr, self.encode_target_literal(*target, *ty)))
+                    .mk_eq_expr(expr, self.encode_target_literal(deps, *target, *ty)))
             }
             PathConditionPredicate::Ne(targets, ty) => {
-                let expr = self.encode_sym_value(&pc.expr)?;
+                let expr = self.encode_sym_value(deps, &pc.expr)?;
                 Ok(self.vcx.mk_conj(
                     &targets
                         .iter()
@@ -434,7 +423,7 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
                             self.vcx.mk_unary_op_expr(
                                 vir::UnOpKind::Not,
                                 self.vcx
-                                    .mk_eq_expr(expr, self.encode_target_literal(*t, *ty)),
+                                    .mk_eq_expr(expr, self.encode_target_literal(deps, *t, *ty)),
                             )
                         })
                         .collect::<Vec<_>>(),
@@ -442,47 +431,53 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
             }
         }?;
         assert_eq!(result.ty(), &vir::TypeData::Bool);
-        Ok::<vir::Expr<'vir>, String>(result)
+        Ok::<vir::Expr<'vir>, _>(result)
     }
 
-    fn encode_target_literal(&mut self, target: u128, ty: ty::Ty<'tcx>) -> vir::Expr<'vir> {
-        self.deps
-            .require_local::<ConstEnc>((
-                ConstantKind::from_scalar(self.vcx.tcx(), Scalar::from_u128(target), ty),
-                0,
-                self.def_id,
-            ))
-            .unwrap()
+    fn encode_target_literal<T: TaskEncoder>(
+        &self,
+        deps: &mut TaskEncoderDependencies<'vir, T>,
+        target: u128,
+        ty: ty::Ty<'tcx>,
+    ) -> vir::Expr<'vir> {
+        deps.require_local::<ConstEnc>((
+            ConstantKind::from_scalar(self.vcx.tcx(), Scalar::from_u128(target), ty),
+            0,
+            self.def_id,
+        ))
+        .unwrap()
     }
-    pub fn encode_pure_body(
-        &mut self,
+    pub fn encode_pure_body<T: TaskEncoder<EncodingError = String>>(
+        &self,
+        deps: &mut TaskEncoderDependencies<'vir, T>,
         spec: &SymPureEncResult<'sym, 'tcx>,
-    ) -> EncodePureSpecResult<'vir> {
+    ) -> EncodePureSpecResult<'vir, String> {
         let mut iter = spec.iter();
-        let mut expr = self.encode_sym_value(&iter.next().unwrap().1).unwrap();
+        let mut expr = self.encode_sym_value(deps, &iter.next().unwrap().1)?;
         while let Some((pc, value)) = iter.next() {
-            let encoded_value = self.encode_sym_value(&value).unwrap();
-            let pc = self.encode_path_condition(pc).unwrap().unwrap();
+            let encoded_value = self.encode_sym_value(deps, &value).unwrap();
+            let pc = self.encode_path_condition(deps, pc).unwrap().unwrap();
             expr = self.vcx.mk_ternary_expr(pc, encoded_value, expr);
         }
         Ok(expr)
     }
 
-    pub fn encode_pure_spec(
-        &mut self,
-        spec: &SymPureEncResult<'sym, 'tcx>,
+    pub fn encode_pure_spec<'slf, 'enc, T: TaskEncoder<EncodingError = String>>(
+        &'slf self,
+        deps: &'enc mut TaskEncoderDependencies<'vir, T>,
+        spec: SymPureEncResult<'sym, 'tcx>,
         substs: Option<&'sym PrustiSubsts<'sym, 'tcx>>,
-    ) -> EncodePureSpecResult<'vir> {
+    ) -> EncodePureSpecResult<'vir, String> {
         let spec = if let Some(substs) = substs {
             spec.clone().subst(self.arena, self.vcx.tcx(), substs)
         } else {
             spec.clone()
         };
         let clauses = spec
-            .iter()
+            .into_iter()
             .map(|(pc, value)| {
-                let encoded_value = self.encode_sym_value_as_prim(&value)?;
-                if let Some(pc) = self.encode_path_condition(pc) {
+                let encoded_value: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, value)?;
+                if let Some(pc) = self.encode_path_condition(deps, &pc) {
                     let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
                     Ok::<vir::Expr<'vir>, String>(impl_expr)
                 } else {
@@ -493,16 +488,17 @@ impl<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder> SymExprEncoder<'enc, 'vir, 'sym, 't
         Ok(self.vcx.mk_conj(&clauses))
     }
 
-    pub fn encode_path_condition(
-        &mut self,
+    pub fn encode_path_condition<T: TaskEncoder<EncodingError = String>>(
+        &self,
+        deps: &mut TaskEncoderDependencies<'vir, T>,
         pc: &PrustiPathConditions<'sym, 'tcx>,
-    ) -> Option<EncodePCResult<'vir>> {
+    ) -> Option<EncodePCResult<'vir, String>> {
         if pc.atoms.is_empty() {
             return None;
         }
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            let encoded = self.encode_pc_atom(atom);
+            let encoded = self.encode_pc_atom(deps, atom);
             match encoded {
                 Ok(encoded) => exprs.push(encoded),
                 Err(err) => return Some(Err(err)),

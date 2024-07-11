@@ -79,7 +79,7 @@ impl TaskEncoder for SymImpureEnc {
     type OutputRef<'vir> = MirImpureEncOutputRef<'vir>;
     type OutputFullLocal<'vir> = MirImpureEncOutput<'vir>;
 
-    type EncodingError = MirImpureEncError;
+    type EncodingError = String;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
         *task
@@ -187,11 +187,11 @@ impl TaskEncoder for SymImpureEnc {
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut stmts = Vec::new();
             let mut visitor = EncVisitor {
+                deps,
                 vcx,
                 local_decls: &local_decls,
                 encoder: SymExprEncoder::new(
                     vcx,
-                    deps,
                     &arena,
                     symvar_locals
                         .iter()
@@ -216,7 +216,7 @@ impl TaskEncoder for SymImpureEnc {
             for (local, symvar) in symvar_locals.iter().zip(symbolic_execution.symvars.iter()) {
                 if let Some(expr) = mk_type_assertion(
                     vcx,
-                    visitor.encoder.deps,
+                    visitor.deps,
                     vcx.mk_local_ex(local.name, local.ty),
                     *symvar,
                 ) {
@@ -225,12 +225,13 @@ impl TaskEncoder for SymImpureEnc {
             }
 
             for pre in spec.pres.into_iter() {
-                match visitor.encoder.encode_pure_spec(&pre, None) {
+                match visitor.encoder.encode_pure_spec(visitor.deps, pre, None) {
                     Ok(pre) => {
                         stmts.push(vcx.mk_inhale_stmt(pre));
                     }
                     Err(err) => {
-                        stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                        stmts
+                            .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
                         stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
                     }
                 }
@@ -243,7 +244,8 @@ impl TaskEncoder for SymImpureEnc {
                         stmts.extend(assertion);
                     }
                     Err(err) => {
-                        stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                        stmts
+                            .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
                         stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
                     }
                 }
@@ -264,27 +266,33 @@ impl TaskEncoder for SymImpureEnc {
                         // Therefore, the symbolic value at argument `body.arg_count`
                         // corresponds to the spec's symbolic input argument.
                         visitor.encoder.encode_pure_spec(
-                            p,
+                            visitor.deps,
+                            p.clone(),
                             Some(arena.alloc(Substs::singleton(arg_count, expr))),
                         )
                         .map(|expr| vec![vcx.mk_exhale_stmt(expr)])
                         .unwrap_or_else(|err| {
                             vec![
                             vcx.mk_comment_stmt(
-                                vir_format!(vcx, "Error when encoding the postcondition {:?} of {:?} for path {:?}: {}", p, def_id, path, err)
+                                vir_format!(
+                                    vcx,
+                                    "Error when encoding the postcondition {:?} of {:?} for path {:?}: {:?}",
+                                    p, def_id, path, err
+                                )
                             ),
                             vcx.mk_exhale_stmt(vcx.mk_bool::<false>())
                             ]
                         })
                     })
                     .collect();
-                match visitor.encoder.encode_path_condition(pcs) {
+                match visitor.encoder.encode_path_condition(visitor.deps, pcs) {
                     Some(Ok(pc)) => {
                         let if_stmt = vcx.mk_if_stmt(pc, vcx.alloc_slice(&assertions), &[]);
                         stmts.push(if_stmt);
                     }
                     Some(Err(err)) => {
-                        stmts.push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err}"))));
+                        stmts
+                            .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
                         stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
                     }
                     None => stmts.extend(assertions),
@@ -318,7 +326,8 @@ where
     'vir: 'enc,
 {
     vcx: &'vir vir::VirCtxt<'tcx>,
-    encoder: SymExprEncoder<'enc, 'vir, 'sym, 'tcx, SymImpureEnc>,
+    deps: &'enc mut TaskEncoderDependencies<'vir, SymImpureEnc>,
+    encoder: SymExprEncoder<'vir, 'sym, 'tcx>,
     local_decls: &'enc mir::LocalDecls<'tcx>,
     arena: &'sym SymExContext<'tcx>,
 }
@@ -329,13 +338,13 @@ impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'_, 'vir, 'vir, 'enc> {
     }
 
     fn deps(&mut self) -> &mut TaskEncoderDependencies<'vir, SymImpureEnc> {
-        self.encoder.deps
+        self.deps
     }
 }
 
-impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
+impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
     fn encode_assertion(
-        &mut self,
+        &'slf mut self,
         assertion: &PrustiAssertion<'sym, 'tcx>,
     ) -> Vec<vir::Stmt<'vir>> {
         match assertion {
@@ -345,33 +354,38 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .arena
                     .alloc(Substs::from_iter(args.iter().copied().enumerate()));
                 let encoded_pres =
-                    SymSpecEnc::encode(self.arena, self.deps(), (*def_id, substs, None))
+                    SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
                         .pres
                         .into_iter()
-                        .map(|p| self.encoder.encode_pure_spec(&p, Some(arg_substs)))
+                        .map(|p| {
+                            self.encoder
+                                .encode_pure_spec(self.deps, p, Some(arg_substs))
+                        })
                         .collect::<Result<Vec<_>, _>>()
                         .unwrap();
                 vec![self.vcx.mk_exhale_stmt(self.vcx.mk_conj(&encoded_pres))]
             }
-            Assertion::Eq(expr, val) => match self.encoder.encode_sym_value_as_prim(expr) {
-                Ok(expr) => {
-                    let expr = if *val {
-                        self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<true>())
-                    } else {
-                        self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<false>())
-                    };
-                    vec![self.vcx.mk_exhale_stmt(expr)]
+            Assertion::Eq(expr, val) => {
+                match self.encoder.encode_sym_value_as_prim(self.deps, expr) {
+                    Ok(expr) => {
+                        let expr: vir::Expr<'vir> = if *val {
+                            self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<true>())
+                        } else {
+                            self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<false>())
+                        };
+                        vec![self.vcx.mk_exhale_stmt(expr)]
+                    }
+                    Err(err) => {
+                        vec![
+                            self.vcx.mk_comment_stmt(
+                                self.vcx
+                                    .alloc(format!("Error when encoding the assertion: {err:?}")),
+                            ),
+                            self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>()),
+                        ]
+                    }
                 }
-                Err(err) => {
-                    vec![
-                        self.vcx.mk_comment_stmt(
-                            self.vcx
-                                .alloc(format!("Error when encoding the assertion: {err}")),
-                        ),
-                        self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>()),
-                    ]
-                }
-            },
+            }
         }
     }
 
@@ -379,14 +393,10 @@ impl<'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         &mut self,
         pc: &PrustiPathConditions<'sym, 'tcx>,
         assertion: &PrustiAssertion<'sym, 'tcx>,
-    ) -> Result<Vec<vir::Stmt<'vir>>, String> {
-        if let Some(pc_expr) = self.encoder.encode_path_condition(pc) {
-            let pc_expr = match pc_expr {
-                Ok(expr) => expr,
-                Err(err) => return Err(err),
-            };
+    ) -> Result<Vec<vir::Stmt<'vir>>, EncodeFullError<'vir, SymImpureEnc>> {
+        if let Some(pc_expr) = self.encoder.encode_path_condition(self.deps, pc) {
             Ok(vec![self.vcx.mk_if_stmt(
-                pc_expr,
+                pc_expr.unwrap(),
                 self.vcx.alloc_slice(&self.encode_assertion(assertion)),
                 &[],
             )])

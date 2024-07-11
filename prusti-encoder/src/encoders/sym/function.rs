@@ -8,13 +8,12 @@ use prusti_rustc_interface::{
     },
     span::def_id::DefId,
 };
+use std::hash::{Hash, Hasher};
 use symbolic_execution::context::SymExContext;
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
 };
-use std::hash::Hasher;
-use std::hash::Hash;
 
 use crate::{
     encoder_traits::pure_function_enc::{mk_type_assertion, PureFunctionEnc},
@@ -57,7 +56,7 @@ impl TaskEncoder for SymFunctionEnc {
 
     type EnqueueingError = ();
 
-    type EncodingError = ();
+    type EncodingError = String;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
         #[cfg(feature = "mono_function_encoding")]
@@ -140,7 +139,6 @@ impl TaskEncoder for SymFunctionEnc {
                 return_type,
             );
             deps.emit_output_ref(*task_key, SymFunctionEncOutputRef { function_ident })?;
-
             let arena = SymExContext::new(vcx.tcx());
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, None));
             let symvars: Vec<_> = decls
@@ -196,7 +194,7 @@ impl TaskEncoder for SymFunctionEnc {
             } else {
                 None
             };
-            let mut encoder = SymExprEncoder::new(vcx, deps, &arena, symvars, def_id);
+            let mut encoder = SymExprEncoder::new(vcx, &arena, symvars, def_id);
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result
@@ -204,6 +202,12 @@ impl TaskEncoder for SymFunctionEnc {
                 inputs.len(),
                 arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Result(output))),
             );
+
+            let body = if let Some(body) = body {
+                Some(encoder.encode_pure_body(deps, &body).unwrap())
+            } else {
+                None
+            };
 
             let function = vcx.mk_function(
                 function_ident.name().to_str(),
@@ -214,23 +218,23 @@ impl TaskEncoder for SymFunctionEnc {
                         .into_iter()
                         .chain(
                             spec.pres
-                                .iter()
-                                .map(|s| encoder.encode_pure_spec(s, None).unwrap()),
+                                .into_iter()
+                                .map(|s| encoder.encode_pure_spec(deps, s, None).unwrap()),
                         )
                         .collect::<Vec<_>>(),
                 ),
                 vcx.alloc_slice(
                     &spec
                         .posts
-                        .iter()
+                        .into_iter()
                         .map(|s| {
                             encoder
-                                .encode_pure_spec(s, Some(&postcondition_substs))
+                                .encode_pure_spec(deps, s, Some(&postcondition_substs))
                                 .unwrap()
                         })
                         .collect::<Vec<_>>(),
                 ),
-                body.map(|b| encoder.encode_pure_body(&b).unwrap()),
+                body,
             );
             Ok(((function, debug_fn_name), ()))
         })

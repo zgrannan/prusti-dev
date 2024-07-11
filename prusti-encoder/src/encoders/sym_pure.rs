@@ -66,6 +66,12 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         Self(vec![(PathConditions::new(), value)].into_iter().collect())
     }
 
+    pub fn into_iter(
+        self,
+    ) -> impl Iterator<Item = (PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
+        self.0.into_iter()
+    }
+
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = &(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
@@ -267,21 +273,19 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 } else {
                     unreachable!()
                 };
-                return Some(
-                    arena.mk_aggregate(
-                        AggregateKind::Rust(
-                            mir::AggregateKind::Adt(
-                                vcx.tcx().lang_items().owned_box().unwrap(),
-                                FIRST_VARIANT,
-                                substs,
-                                None,
-                                None,
-                            ),
-                            output_ty
+                return Some(arena.mk_aggregate(
+                    AggregateKind::Rust(
+                        mir::AggregateKind::Adt(
+                            vcx.tcx().lang_items().owned_box().unwrap(),
+                            FIRST_VARIANT,
+                            substs,
+                            None,
+                            None,
                         ),
-                        args,
+                        output_ty,
                     ),
-                );
+                    args,
+                ));
             }
 
             let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
