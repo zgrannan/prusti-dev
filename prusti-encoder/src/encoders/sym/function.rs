@@ -194,7 +194,7 @@ impl TaskEncoder for SymFunctionEnc {
             } else {
                 None
             };
-            let mut encoder = SymExprEncoder::new(vcx, &arena, symvars, def_id);
+            let encoder = SymExprEncoder::new(vcx, &arena, symvars, def_id);
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result
@@ -204,7 +204,11 @@ impl TaskEncoder for SymFunctionEnc {
             );
 
             let body = if let Some(body) = body {
-                Some(encoder.encode_pure_body(deps, &body).unwrap())
+                Some(
+                    encoder
+                        .encode_pure_body(deps, &body)
+                        .map_err(|e| task_encoder::EncodeFullError::EncodingError(e, None))?,
+                )
             } else {
                 None
             };

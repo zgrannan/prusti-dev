@@ -322,7 +322,8 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             GenericArgs::identity_for_item(self.vcx.tcx(), *fn_def_id)
                         },
                         caller_def_id: self.def_id,
-                    }).unwrap()
+                    })
+                    .map_err(|e| format!("{:?}", e))?
                     .function_ident;
                 Ok(function_ref.apply(self.vcx, &args))
             }
@@ -365,7 +366,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 }
                 // TODO: Make this more robust
             }
-            SymValueKind::InternalError(err, _) => Err(todo!("Encountered internal err {}", err)),
+            SymValueKind::InternalError(err, _) => Err(format!("Encountered internal err {}", err)),
         }
     }
 

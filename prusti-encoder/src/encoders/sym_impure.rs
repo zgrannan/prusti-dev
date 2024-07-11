@@ -396,7 +396,7 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
     ) -> Result<Vec<vir::Stmt<'vir>>, EncodeFullError<'vir, SymImpureEnc>> {
         if let Some(pc_expr) = self.encoder.encode_path_condition(self.deps, pc) {
             Ok(vec![self.vcx.mk_if_stmt(
-                pc_expr.unwrap(),
+                pc_expr.map_err(|e| EncodeFullError::EncodingError(e, None))?,
                 self.vcx.alloc_slice(&self.encode_assertion(assertion)),
                 &[],
             )])
