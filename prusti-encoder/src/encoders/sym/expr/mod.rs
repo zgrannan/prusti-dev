@@ -460,7 +460,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let mut expr = self.encode_sym_value(deps, &iter.next().unwrap().1)?;
         while let Some((pc, value)) = iter.next() {
             let encoded_value = self.encode_sym_value(deps, &value).unwrap();
-            let pc = self.encode_path_condition(deps, pc).unwrap().unwrap();
+            let pc = self.encode_path_condition(deps, pc).unwrap()?;
             expr = self.vcx.mk_ternary_expr(pc, encoded_value, expr);
         }
         Ok(expr)
