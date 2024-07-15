@@ -141,6 +141,7 @@ impl TaskEncoder for SymImpureEnc {
             });
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
+                def_id.as_local().unwrap(),
                 &body.body.clone(),
                 vcx.tcx(),
                 pcs::run_free_pcs(

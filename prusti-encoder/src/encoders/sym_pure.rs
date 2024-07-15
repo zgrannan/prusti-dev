@@ -329,6 +329,7 @@ impl SymPureEnc {
             let body = body.body().as_ref().clone();
             let arg_count = body.body.arg_count;
             let symbolic_execution = symbolic_execution::run_symbolic_execution(
+                def_id.as_local().unwrap(),
                 &body.body.clone(),
                 vcx.tcx(),
                 pcs::run_free_pcs(
