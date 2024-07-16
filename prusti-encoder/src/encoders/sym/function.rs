@@ -95,10 +95,6 @@ impl TaskEncoder for SymFunctionEnc {
                     let caller_def_id = None;
                 }
             }
-            eprintln!("IDENT: {:?}", function_ident);
-            eprintln!("Substs: {:?}", substs);
-            eprintln!("Def ID: {:?}", def_id);
-            eprintln!("Caller Def ID: {:?}", caller_def_id);
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
             let sig = vcx.tcx().subst_and_normalize_erasing_regions(

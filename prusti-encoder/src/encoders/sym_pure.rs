@@ -181,7 +181,6 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                         &(args
                             .iter()
                             .map(|arg| {
-                                eprintln!("subst arg: {} {:?}", arg, substs);
                                 arg.subst(arena, tcx, substs)
                             })
                             .collect::<Vec<_>>()),
