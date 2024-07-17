@@ -6,7 +6,7 @@ unset PCS_VIS_DATA_DIR
 directory_pass="local-testing/rpe/pass"
 directory_fail="local-testing/rpe/fail"
 
-./x.py build
+./x.py build || exit 1
 
 parallel_check_pass() {
     local file=$1
