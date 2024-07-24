@@ -370,6 +370,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 // TODO: Make this more robust
             }
             SymValueKind::InternalError(err, _) => Err(format!("Encountered internal err {}", err)),
+            SymValueKind::BackwardsFn(_) => todo!(),
         }
     }
 
