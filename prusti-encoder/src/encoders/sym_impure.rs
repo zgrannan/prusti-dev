@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
+    results::ResultPath,
     value::{Substs, SymValueData, SymValueKind},
     Assertion,
 };
@@ -251,7 +252,10 @@ impl TaskEncoder for SymImpureEnc {
                     }
                 }
             }
-            for (path, pcs, expr) in symbolic_execution.paths.iter() {
+            for ResultPath {
+                path, pcs, result, ..
+            } in symbolic_execution.paths.iter()
+            {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
 
                 // Generate assertions ensuring that `expr` satisfies each
@@ -269,7 +273,7 @@ impl TaskEncoder for SymImpureEnc {
                         visitor.encoder.encode_pure_spec(
                             visitor.deps,
                             p.clone(),
-                            Some(arena.alloc(Substs::singleton(arg_count, expr))),
+                            Some(arena.alloc(Substs::singleton(arg_count, result))),
                         )
                         .map(|expr| vec![vcx.mk_exhale_stmt(expr)])
                         .unwrap_or_else(|err| {

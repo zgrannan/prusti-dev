@@ -358,7 +358,7 @@ impl SymPureEnc {
                 symbolic_execution
                     .paths
                     .into_iter()
-                    .map(|(_, path_conditions, value)| (path_conditions, value))
+                    .map(|path| (path.pcs, path.result))
                     .collect(),
             )
         })
