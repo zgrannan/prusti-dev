@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate},
-    value::{AggregateKind, Substs, SymValueKind},
+    value::{AggregateKind, Substs, SymValueKind, SymVar},
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 
@@ -72,12 +72,12 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     {
         let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
-            SymValueKind::Var(idx, ..) => self
+            SymValueKind::Var(SymVar::Normal(idx), ..) => self
                 .symvars
                 .get(*idx)
                 .cloned()
                 .ok_or_else(|| format!("No symvar at idx {}.", *idx)),
-
+            SymValueKind::Var(SymVar::ReservedBackwardsFnResult, ..) => todo!(),
             SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),

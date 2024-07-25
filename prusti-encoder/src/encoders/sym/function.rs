@@ -9,7 +9,7 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
 };
 use std::hash::{Hash, Hasher};
-use symbolic_execution::context::SymExContext;
+use symbolic_execution::{context::SymExContext, value::SymVar};
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
@@ -176,8 +176,8 @@ impl TaskEncoder for SymFunctionEnc {
                 let expr = partial_eq_expr(
                     &arena,
                     vcx.tcx(),
-                    arena.mk_var(0, inputs[0]),
-                    arena.mk_var(1, inputs[1]),
+                    arena.mk_var(SymVar::Normal(0), inputs[0]),
+                    arena.mk_var(SymVar::Normal(1), inputs[1]),
                 );
                 expr.map(|expr| {
                     let expr = if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne" {
