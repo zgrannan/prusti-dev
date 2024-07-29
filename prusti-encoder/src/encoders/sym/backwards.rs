@@ -3,24 +3,18 @@ use symbolic_execution::results::SymbolicExecutionResult;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{Method, UnknownArity, ViperIdent};
 
-use crate::encoders::sym_pure::PrustiSymValSynthetic;
+use crate::encoders::{sym_impure::ForwardBackwardsShared, sym_pure::PrustiSymValSynthetic};
 
 use super::expr::SymExprEncoder;
 
 pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError = String>>(
     base_method_name: ViperIdent<'vir>,
-    args: Vec<vir::Local<'vir>>,
+    mut fb_shared: ForwardBackwardsShared<'vir>,
     deps: &'enc mut TaskEncoderDependencies<'vir, T>,
     encoder: SymExprEncoder<'vir, 'sym, 'tcx>,
     sym_ex_results: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
 ) -> vir::Method<'vir> {
     vir::with_vcx(|vcx| {
-        // Var declarations for inputs, backwards results
-        let mut decl_stmts: Vec<_> = args
-            .iter()
-            .map(|arg| vcx.mk_local_decl_stmt(vcx.mk_local_decl(arg.name, arg.ty), None))
-            .collect();
-
         // The map from an index in `BackwardsFact` to the backwards result local
         let mut back_result_vars: BTreeMap<usize, vir::Expr<'vir>> = BTreeMap::default();
 
@@ -28,8 +22,10 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
         let mut get_back_result = |idx| {
             if !back_result_vars.contains_key(&idx) {
                 let name = vir::vir_format!(vcx, "backwards_{}", idx);
-                let ty = args[idx].ty;
-                decl_stmts.push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(name, ty), None));
+                let ty = fb_shared.symvar_locals[idx].ty;
+                fb_shared
+                    .decl_stmts
+                    .push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(name, ty), None));
                 back_result_vars.insert(idx, vcx.mk_local_ex(name, ty));
             }
             back_result_vars.get(&idx).unwrap().clone()
@@ -58,7 +54,8 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
         }
         let method_name = vir::vir_format_identifier!(vcx, "{}_backwards", base_method_name);
         let method_ident = vir::MethodIdent::new(method_name, UnknownArity::new(&[]));
-        let mut stmts = decl_stmts;
+        let mut stmts = fb_shared.decl_stmts;
+        stmts.extend(fb_shared.type_assertion_stmts);
         stmts.extend(body_stmts);
         vcx.mk_method(
             method_ident,

@@ -85,7 +85,9 @@ pub fn test_entrypoint<'tcx>(
     header(&mut viper_code, "methods");
     for output in crate::encoders::SymImpureEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.method));
+        viper_code.push_str(&format!("{:?}\n", output.backwards_method));
         program_methods.push(output.method);
+        program_methods.push(output.backwards_method);
         function_names.push(output.fn_debug_name);
     }
 

@@ -3,8 +3,9 @@ use std::{collections::hash_map::DefaultHasher, marker::PhantomData};
 use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
     abi,
+    index::IndexVec,
     middle::{
-        mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
+        mir::{self, interpret::Scalar, ConstantKind, Local, LocalDecl, ProjectionElem},
         ty::{self, GenericArgs},
     },
     span::def_id::{DefId, LocalDefId},
@@ -13,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
-    results::ResultPath,
+    results::{ResultPath, SymbolicExecutionResult},
     value::{Substs, SymValueData, SymValueKind},
     Assertion,
 };
@@ -37,6 +38,7 @@ impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 pub struct MirImpureEncOutput<'vir> {
     pub fn_debug_name: String,
     pub method: vir::Method<'vir>,
+    pub backwards_method: vir::Method<'vir>,
 }
 
 use crate::{
@@ -50,7 +52,8 @@ use crate::{
 use super::{
     lifted::{
         cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
-        func_def_ty_params::LiftedTyParamsEnc, rust_ty_cast::RustTyCastersEnc,
+        func_def_ty_params::LiftedTyParamsEnc, generic::LiftedGeneric,
+        rust_ty_cast::RustTyCastersEnc,
     },
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
@@ -66,6 +69,80 @@ use super::{
 };
 
 type PrustiAssertion<'sym, 'tcx> = Assertion<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
+
+pub struct ForwardBackwardsShared<'vir> {
+    ty_arg_decls: &'vir [LiftedGeneric<'vir>],
+    pub symvar_locals: Vec<vir::Local<'vir>>,
+    result_local: vir::Local<'vir>,
+    pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
+    pub decl_stmts: Vec<vir::Stmt<'vir>>,
+}
+
+impl<'vir> ForwardBackwardsShared<'vir> {
+    fn new<'sym, 'tcx, 'deps>(
+        symex_result: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
+        substs: ty::GenericArgsRef<'tcx>,
+        local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
+        deps: &'deps mut TaskEncoderDependencies<'vir, SymImpureEnc>,
+    ) -> ForwardBackwardsShared<'vir>
+    where
+        'vir: 'tcx,
+        'tcx: 'vir,
+    {
+        vir::with_vcx(|vcx| {
+            let symvar_locals = symex_result
+                .symvars
+                .iter()
+                .enumerate()
+                .map(|(idx, ty)| {
+                    vcx.mk_local(
+                        vir_format!(vcx, "s{}", idx),
+                        deps.require_ref::<RustTySnapshotsEnc>(*ty)
+                            .unwrap()
+                            .generic_snapshot
+                            .snapshot,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
+            let mut type_assertion_stmts = vec![];
+            for (local, symvar) in symvar_locals.iter().zip(symex_result.symvars.iter()) {
+                if let Some(expr) =
+                    mk_type_assertion(vcx, deps, vcx.mk_local_ex(local.name, local.ty), *symvar)
+                {
+                    type_assertion_stmts.push(vcx.mk_inhale_stmt(expr));
+                }
+            }
+            let result_local = vcx.mk_local(
+                "res",
+                deps.require_ref::<RustTySnapshotsEnc>(local_decls.iter().next().unwrap().ty)
+                    .unwrap()
+                    .generic_snapshot
+                    .snapshot,
+            );
+            let mut decl_stmts = vec![];
+            for arg in ty_arg_decls {
+                decl_stmts.push(vcx.mk_local_decl_stmt(arg.decl(), None));
+            }
+
+            decl_stmts.push(
+                vcx.mk_local_decl_stmt(vcx.mk_local_decl(result_local.name, result_local.ty), None),
+            );
+
+            for local in symvar_locals.iter() {
+                decl_stmts
+                    .push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
+            }
+            Self {
+                ty_arg_decls,
+                symvar_locals,
+                type_assertion_stmts,
+                decl_stmts,
+                result_local,
+            }
+        })
+    }
+}
 
 impl TaskEncoder for SymImpureEnc {
     task_encoder::encoder_cache!(SymImpureEnc);
@@ -163,30 +240,11 @@ impl TaskEncoder for SymImpureEnc {
                 debug_dir.ok().as_deref(),
             );
 
-            let symvar_locals = symbolic_execution
-                .symvars
-                .iter()
-                .enumerate()
-                .map(|(idx, ty)| {
-                    vcx.mk_local(
-                        vir_format!(vcx, "s{}", idx),
-                        deps.require_ref::<RustTySnapshotsEnc>(*ty)
-                            .unwrap()
-                            .generic_snapshot
-                            .snapshot,
-                    )
-                })
-                .collect::<Vec<_>>();
-            let result_local = vcx.mk_local(
-                "res",
-                deps.require_ref::<RustTySnapshotsEnc>(local_decls.iter().next().unwrap().ty)
-                    .unwrap()
-                    .generic_snapshot
-                    .snapshot,
-            );
+            let fb_shared =
+                ForwardBackwardsShared::new(&symbolic_execution, substs, &local_decls, deps);
+
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
-            let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut stmts = Vec::new();
             let mut visitor = EncVisitor {
                 deps,
@@ -195,7 +253,8 @@ impl TaskEncoder for SymImpureEnc {
                 encoder: SymExprEncoder::new(
                     vcx,
                     &arena,
-                    symvar_locals
+                    fb_shared
+                        .symvar_locals
                         .iter()
                         .map(|local| vcx.mk_local_ex(local.name, local.ty))
                         .collect::<Vec<_>>(),
@@ -204,27 +263,8 @@ impl TaskEncoder for SymImpureEnc {
                 arena: &arena,
             };
 
-            for arg in ty_arg_decls {
-                stmts.push(vcx.mk_local_decl_stmt(arg.decl(), None));
-            }
-
-            for local in symvar_locals.iter() {
-                stmts.push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
-            }
-            stmts.push(
-                vcx.mk_local_decl_stmt(vcx.mk_local_decl(result_local.name, result_local.ty), None),
-            );
-
-            for (local, symvar) in symvar_locals.iter().zip(symbolic_execution.symvars.iter()) {
-                if let Some(expr) = mk_type_assertion(
-                    vcx,
-                    visitor.deps,
-                    vcx.mk_local_ex(local.name, local.ty),
-                    *symvar,
-                ) {
-                    stmts.push(vcx.mk_inhale_stmt(expr));
-                }
-            }
+            stmts.extend(fb_shared.decl_stmts.clone());
+            stmts.extend(fb_shared.type_assertion_stmts.clone());
 
             for pre in spec.pres.into_iter() {
                 match visitor.encoder.encode_pure_spec(visitor.deps, pre, None) {
@@ -304,12 +344,9 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
 
-            let mut backwards_methods_locals = symvar_locals.clone();
-            backwards_methods_locals.push(result_local);
-
             let backwards_method = mk_backwards_method(
                 method_name,
-                backwards_methods_locals,
+                fb_shared,
                 visitor.deps,
                 visitor.encoder,
                 &symbolic_execution,
@@ -330,6 +367,7 @@ impl TaskEncoder for SymImpureEnc {
                             &vir::TerminatorStmtGenData::Exit,
                         )])),
                     ),
+                    backwards_method,
                 },
                 (),
             ))
