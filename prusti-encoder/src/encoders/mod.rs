@@ -1,7 +1,6 @@
 mod generic;
 mod mir_base;
 mod mir_builtin;
-mod sym_impure;
 mod mir_pure;
 mod mir_poly_impure;
 mod mir_impure;
@@ -34,7 +33,7 @@ pub use mir_builtin::{
     MirBuiltinEnc,
     MirBuiltinEncTask,
 };
-pub use sym_impure::SymImpureEnc;
+pub use sym::impure::SymImpureEnc;
 pub use mir_poly_impure::MirPolyImpureEnc;
 pub use mono::mir_impure::MirMonoImpureEnc;
 pub use mir_pure::{

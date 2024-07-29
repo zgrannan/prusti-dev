@@ -3,7 +3,7 @@ use symbolic_execution::results::SymbolicExecutionResult;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use vir::{CallableIdent, Method, UnknownArity, ViperIdent};
 
-use crate::encoders::{sym_impure::ForwardBackwardsShared, sym_pure::PrustiSymValSynthetic};
+use crate::encoders::{sym::impure::forward_backwards_shared::ForwardBackwardsShared, sym_pure::PrustiSymValSynthetic};
 
 use super::expr::SymExprEncoder;
 
