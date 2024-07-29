@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use symbolic_execution::results::SymbolicExecutionResult;
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{Method, UnknownArity, ViperIdent};
+use vir::{CallableIdent, Method, UnknownArity, ViperIdent};
 
 use crate::encoders::{sym_impure::ForwardBackwardsShared, sym_pure::PrustiSymValSynthetic};
 
@@ -40,12 +40,12 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(result_local, expr)));
             }
             match encoder.encode_path_condition(deps, &path.pcs) {
-                Some(condition) => {
-                    body_stmts.push(vcx.mk_if_stmt(
-                        condition.unwrap(),
-                        vcx.alloc_slice(&path_stmts),
-                        &[],
-                    ));
+                Some(Err(err)) => {
+                    body_stmts.push(vcx.mk_comment_stmt(vir::vir_format!(vcx, "Error: {}", err)));
+                    body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                }
+                Some(Ok(condition)) => {
+                    body_stmts.push(vcx.mk_if_stmt(condition, vcx.alloc_slice(&path_stmts), &[]));
                 }
                 None => {
                     body_stmts.extend(path_stmts);
@@ -57,7 +57,7 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
         let mut stmts = fb_shared.decl_stmts;
         stmts.extend(fb_shared.type_assertion_stmts);
         stmts.extend(body_stmts);
-        vcx.mk_method(
+        let method = vcx.mk_method(
             method_ident,
             &[],
             &[],
@@ -68,6 +68,7 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 vcx.alloc_slice(&stmts),
                 &vir::TerminatorStmtGenData::Exit,
             )])),
-        )
+        );
+        method
     })
 }

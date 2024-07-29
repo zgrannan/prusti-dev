@@ -1,8 +1,12 @@
-use std::{collections::hash_map::DefaultHasher, marker::PhantomData};
+use std::{
+    collections::{hash_map::DefaultHasher, BTreeMap},
+    marker::PhantomData,
+};
 
 use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
     abi,
+    hir::Mutability,
     index::IndexVec,
     middle::{
         mir::{self, interpret::Scalar, ConstantKind, Local, LocalDecl, ProjectionElem},
@@ -19,7 +23,7 @@ use symbolic_execution::{
     Assertion,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
-use vir::{vir_format, MethodIdent, UnknownArity};
+use vir::{vir_format, CallableIdent, MethodIdent, UnknownArity};
 
 pub struct SymImpureEnc;
 
@@ -31,6 +35,7 @@ pub enum MirImpureEncError {
 #[derive(Clone, Debug)]
 pub struct MirImpureEncOutputRef<'vir> {
     pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
+    pub backwards_fns: BTreeMap<usize, vir::FunctionIdent<'vir, UnknownArity<'vir>>>,
 }
 impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 
@@ -39,6 +44,7 @@ pub struct MirImpureEncOutput<'vir> {
     pub fn_debug_name: String,
     pub method: vir::Method<'vir>,
     pub backwards_method: vir::Method<'vir>,
+    pub backwards_fns_domain: vir::Domain<'vir>,
 }
 
 use crate::{
@@ -73,7 +79,7 @@ type PrustiAssertion<'sym, 'tcx> = Assertion<'sym, 'tcx, PrustiSymValSynthetic<'
 pub struct ForwardBackwardsShared<'vir> {
     ty_arg_decls: &'vir [LiftedGeneric<'vir>],
     pub symvar_locals: Vec<vir::Local<'vir>>,
-    result_local: vir::Local<'vir>,
+    pub result_local: vir::Local<'vir>,
     pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
     pub decl_stmts: Vec<vir::Stmt<'vir>>,
 }
@@ -191,13 +197,6 @@ impl TaskEncoder for SymImpureEnc {
 
             let method_ident = vir::MethodIdent::new(method_name, UnknownArity::new(&[]));
 
-            deps.emit_output_ref(
-                *task_key,
-                MirImpureEncOutputRef {
-                    method_ref: method_ident,
-                },
-            )?;
-
             let body = vcx
                 .body_mut()
                 .get_impure_fn_body_identity(local_def_id)
@@ -242,6 +241,44 @@ impl TaskEncoder for SymImpureEnc {
 
             let fb_shared =
                 ForwardBackwardsShared::new(&symbolic_execution, substs, &local_decls, deps);
+
+            let backwards_fn_arity = UnknownArity::new(
+                vcx.alloc_slice(
+                    &fb_shared.symvar_locals[0..arg_count]
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(fb_shared.result_local))
+                        .map(|l| l.ty)
+                        .collect::<Vec<_>>(),
+                ),
+            );
+
+            let backwards_fn_idents = (0..arg_count)
+                .flat_map(|idx| {
+                    if symbolic_execution.symvars[idx].ref_mutability() == Some(Mutability::Mut) {
+                        let ident =
+                            vir::vir_format_identifier!(vcx, "backwards_{}_{}", method_name, idx);
+                        Some((
+                            idx,
+                            vir::FunctionIdent::new(
+                                ident,
+                                backwards_fn_arity,
+                                fb_shared.symvar_locals[idx].ty,
+                            ),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<BTreeMap<usize, _>>();
+
+            deps.emit_output_ref(
+                *task_key,
+                MirImpureEncOutputRef {
+                    method_ref: method_ident,
+                    backwards_fns: backwards_fn_idents.clone(),
+                },
+            )?;
 
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
@@ -351,6 +388,17 @@ impl TaskEncoder for SymImpureEnc {
                 visitor.encoder,
                 &symbolic_execution,
             );
+            let backwards_fns_domain = vcx.mk_domain(
+                vir::vir_format_identifier!(vcx, "Backwards_{}", method_ident.name()),
+                &[],
+                &[],
+                vcx.alloc_slice(
+                    &backwards_fn_idents
+                        .iter()
+                        .map(|(_, f)| vcx.mk_domain_function(*f, false))
+                        .collect::<Vec<_>>(),
+                ),
+            );
 
             Ok((
                 MirImpureEncOutput {
@@ -368,6 +416,7 @@ impl TaskEncoder for SymImpureEnc {
                         )])),
                     ),
                     backwards_method,
+                    backwards_fns_domain,
                 },
                 (),
             ))
