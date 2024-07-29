@@ -55,7 +55,7 @@ use super::{
     mir_base::MirBaseEnc,
     mir_pure::PureKind,
     rust_ty_snapshots::RustTySnapshotsEnc,
-    sym::expr::SymExprEncoder,
+    sym::{backwards::mk_backwards_method, expr::SymExprEncoder},
     sym_pure::{
         PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic,
         PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult,
@@ -303,6 +303,17 @@ impl TaskEncoder for SymImpureEnc {
                     None => stmts.extend(assertions),
                 }
             }
+
+            let mut backwards_methods_locals = symvar_locals.clone();
+            backwards_methods_locals.push(result_local);
+
+            let backwards_method = mk_backwards_method(
+                method_name,
+                backwards_methods_locals,
+                visitor.deps,
+                visitor.encoder,
+                &symbolic_execution,
+            );
 
             Ok((
                 MirImpureEncOutput {

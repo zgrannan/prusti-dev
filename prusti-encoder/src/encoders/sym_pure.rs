@@ -180,9 +180,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     arena.alloc_slice(
                         &(args
                             .iter()
-                            .map(|arg| {
-                                arg.subst(arena, tcx, substs)
-                            })
+                            .map(|arg| arg.subst(arena, tcx, substs))
                             .collect::<Vec<_>>()),
                     ),
                 ))
