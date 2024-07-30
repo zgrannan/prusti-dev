@@ -22,7 +22,7 @@ use symbolic_execution::{
     results::ResultPath,
     semantics::VerifierSemantics,
     value::{AggregateKind, Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
-    visualization::VisFormat,
+    visualization::{OutputMode, VisFormat},
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -116,24 +116,29 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
 }
 
 impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
-    fn to_vis_string(&self, tcx: Option<ty::TyCtxt<'_>>, debug_info: &[VarDebugInfo]) -> String {
+    fn to_vis_string(
+        &self,
+        tcx: Option<ty::TyCtxt<'_>>,
+        debug_info: &[VarDebugInfo],
+        mode: OutputMode,
+    ) -> String {
         match self {
             PrustiSymValSyntheticData::And(l, r) => format!(
                 "({} && {})",
-                l.to_vis_string(tcx, debug_info),
-                r.to_vis_string(tcx, debug_info)
+                l.to_vis_string(tcx, debug_info, mode),
+                r.to_vis_string(tcx, debug_info, mode)
             ),
             PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => format!(
                 "({} ? {} : {})",
-                cond.to_vis_string(tcx, debug_info),
-                then_expr.to_vis_string(tcx, debug_info),
-                else_expr.to_vis_string(tcx, debug_info)
+                cond.to_vis_string(tcx, debug_info, mode),
+                then_expr.to_vis_string(tcx, debug_info, mode),
+                else_expr.to_vis_string(tcx, debug_info, mode)
             ),
             PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => vir::with_vcx(|vcx| {
                 let fn_name = vcx.tcx().item_name(*def_id);
                 let args_str = args
                     .iter()
-                    .map(|arg| arg.to_vis_string(tcx, debug_info))
+                    .map(|arg| arg.to_vis_string(tcx, debug_info, mode))
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({})", fn_name, args_str)

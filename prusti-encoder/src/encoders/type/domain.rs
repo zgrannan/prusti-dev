@@ -878,6 +878,12 @@ impl<'vir> DomainEncSpecifics<'vir> {
             _ => panic!("expected primitive, got {:?}", self),
         }
     }
+    pub fn get_structlike(self) -> Option<DomainDataStruct<'vir>> {
+        match self {
+            Self::StructLike(data) => Some(data),
+            _ => None,
+        }
+    }
     pub fn expect_structlike(self) -> DomainDataStruct<'vir> {
         match self {
             Self::StructLike(data) => data,

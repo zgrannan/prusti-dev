@@ -132,6 +132,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let ty = deps
                     .require_local::<RustTySnapshotsEnc>(kind.ty().rust_ty())
                     .unwrap();
+                eprintln!("kind: {:?}", kind);
                 let sl = match kind.variant_idx() {
                     Some(idx) if kind.is_enum(self.vcx.tcx()) => {
                         ty.generic_snapshot
@@ -141,7 +142,11 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             .variants[idx.as_usize()]
                         .fields
                     }
-                    _ => ty.generic_snapshot.specifics.expect_structlike(),
+                    None if kind.is_enum(self.vcx.tcx()) => {
+                        // We don't have any encoding of an unknown enum variant, so return it's concrete downcast
+                        return Ok(vir_exprs[0]);
+                    }
+                    _ => ty.generic_snapshot.specifics.get_structlike().unwrap(),
                 };
                 let field_tys = exprs
                     .iter()
@@ -192,7 +197,8 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             .unwrap()
                             .generic_snapshot
                             .specifics
-                            .expect_structlike();
+                            .get_structlike()
+                            .ok_or(format!("expected struct-like, got {:?}", ty))?;
                         let expr = e_ty.field_access[0].read.apply(self.vcx, [expr]);
                         // Since the `expr` is the target of a reference, it is encoded as a `Param`.
                         // If it is not a type parameter, we cast it to its concrete Snapshot.

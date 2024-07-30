@@ -44,7 +44,7 @@ impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 pub struct MirImpureEncOutput<'vir> {
     pub fn_debug_name: String,
     pub method: vir::Method<'vir>,
-    pub backwards_method: vir::Method<'vir>,
+    pub backwards_method: Option<vir::Method<'vir>>,
     pub backwards_fns_domain: vir::Domain<'vir>,
 }
 use crate::{
@@ -140,7 +140,6 @@ impl TaskEncoder for SymImpureEnc {
                 .clone();
 
             let local_decls = body.body.local_decls.clone();
-            let result_ty = body.body.local_decls[RETURN_PLACE].ty;
             let arg_count = body.body.arg_count;
 
             let arena = SymExContext::new(vcx.tcx());
@@ -318,7 +317,7 @@ impl TaskEncoder for SymImpureEnc {
             }
 
             let backwards_fn_axioms = mk_backwards_fn_axioms(
-                spec.pledges,
+                &spec.pledges,
                 BackwardsFnContext {
                     output_ref,
                     def_id,
@@ -326,7 +325,6 @@ impl TaskEncoder for SymImpureEnc {
                     caller_def_id,
                     symvars: &symbolic_execution.symvars,
                     shared: &fb_shared,
-                    result_ty,
                 },
                 &visitor.encoder,
                 visitor.deps,
@@ -338,9 +336,16 @@ impl TaskEncoder for SymImpureEnc {
                 visitor.deps,
                 &visitor.encoder,
                 &symbolic_execution,
+                &spec.pledges,
             );
 
-            let encoder = &visitor.encoder;
+            let backwards_method = match backwards_method {
+                Ok(method) => Some(method),
+                Err(err) => {
+                    eprintln!("error encoding backwards method {err}");
+                    None
+                }
+            };
 
             let backwards_fns_domain = vcx.mk_domain(
                 vir::vir_format_identifier!(vcx, "Backwards_{}", method_ident.name()),

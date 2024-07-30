@@ -32,8 +32,7 @@ pub struct BackwardsFnContext<'shared, 'vir, 'sym, 'tcx> {
     pub substs: GenericArgsRef<'tcx>,
     pub caller_def_id: Option<DefId>,
     pub symvars: &'sym [ty::Ty<'tcx>],
-    pub shared: &'shared ForwardBackwardsShared<'vir>,
-    pub result_ty: ty::Ty<'tcx>,
+    pub shared: &'shared ForwardBackwardsShared<'vir, 'tcx>,
 }
 
 pub fn mk_backwards_fn_axioms<
@@ -44,7 +43,7 @@ pub fn mk_backwards_fn_axioms<
     'enc,
     T: TaskEncoder<EncodingError = String>,
 >(
-    pledges: SymSpec<'sym, 'tcx>,
+    pledges: &SymSpec<'sym, 'tcx>,
     ctxt: BackwardsFnContext<'shared, 'vir, 'sym, 'tcx>,
     encoder: &SymExprEncoder<'vir, 'sym, 'tcx>,
     deps: &'enc mut TaskEncoderDependencies<'vir, T>,
@@ -55,7 +54,7 @@ pub fn mk_backwards_fn_axioms<
                 .arena
                 .mk_synthetic(encoder.arena.alloc(PrustiSymValSyntheticData::VirLocal(
                     ctxt.shared.result_local.name,
-                    ctxt.result_ty,
+                    ctxt.shared.result_ty,
                 )));
 
         let arg_snapshots = encoder.arena.alloc_slice(
@@ -111,10 +110,12 @@ pub fn mk_backwards_fn_axioms<
             .collect::<Vec<_>>();
 
         let pledge_axioms = pledges
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, pledge)| {
-                let pledge = pledge.subst(encoder.arena, vcx.tcx(), &pledge_axiom_substs);
+                let pledge = pledge
+                    .clone()
+                    .subst(encoder.arena, vcx.tcx(), &pledge_axiom_substs);
                 vcx.mk_domain_axiom(
                     vir::vir_format_identifier!(
                         vcx,
@@ -124,10 +125,12 @@ pub fn mk_backwards_fn_axioms<
                     ),
                     vcx.mk_forall_expr(
                         backward_axiom_qvars,
-                        vcx.alloc_slice(&backward_fn_calls
-                            .iter()
-                            .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
-                            .collect::<Vec<_>>()), // TODO, maybe too imprecise?
+                        vcx.alloc_slice(
+                            &backward_fn_calls
+                                .iter()
+                                .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
+                                .collect::<Vec<_>>(),
+                        ), // TODO, maybe too imprecise?
                         encoder.encode_pure_spec(deps, pledge, None).unwrap(),
                     ),
                 )
@@ -173,35 +176,84 @@ pub fn mk_backwards_fn_axioms<
 
 pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError = String>>(
     base_method_name: ViperIdent<'vir>,
-    mut fb_shared: ForwardBackwardsShared<'vir>,
+    fb_shared: ForwardBackwardsShared<'vir, 'tcx>,
     deps: &'enc mut TaskEncoderDependencies<'vir, T>,
     encoder: &SymExprEncoder<'vir, 'sym, 'tcx>,
     sym_ex_results: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
-) -> vir::Method<'vir> {
+    pledges: &SymSpec<'sym, 'tcx>,
+) -> Result<vir::Method<'vir>, String> {
     vir::with_vcx(|vcx| {
         // The map from an index in `BackwardsFact` to the backwards result local
-        let mut back_result_vars: BTreeMap<usize, vir::Expr<'vir>> = BTreeMap::default();
-
-        // Get the local for the back result for a given index in `BackwardsFact`
-        let mut get_back_result = |idx| {
-            if !back_result_vars.contains_key(&idx) {
+        let back_result_vars: BTreeMap<usize, vir::Local<'vir>> = (0..fb_shared.arg_count)
+            .map(|idx| {
                 let name = vir::vir_format!(vcx, "backwards_{}", idx);
                 let ty = fb_shared.symvar_locals[idx].ty;
-                fb_shared
-                    .decl_stmts
-                    .push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(name, ty), None));
-                back_result_vars.insert(idx, vcx.mk_local_ex(name, ty));
-            }
-            back_result_vars.get(&idx).unwrap().clone()
+                (idx, vcx.mk_local(name, ty))
+            })
+            .collect();
+
+        let get_back_result = |idx| {
+            let local = back_result_vars.get(&idx).unwrap();
+            vcx.mk_local_ex(local.name, local.ty)
         };
 
         let mut body_stmts = vec![];
+
+        let result_local =
+            encoder
+                .arena
+                .mk_synthetic(encoder.arena.alloc(PrustiSymValSyntheticData::VirLocal(
+                    fb_shared.result_local.name,
+                    fb_shared.result_ty,
+                )));
+
+        let pledge_substs = Substs::from_iter(
+            back_result_vars
+                .iter()
+                .map(|(idx, local)| {
+                    (
+                        *idx,
+                        encoder.arena.mk_synthetic(encoder.arena.alloc(
+                            PrustiSymValSyntheticData::VirLocal(
+                                local.name,
+                                fb_shared.symvars[*idx],
+                            ),
+                        )),
+                    )
+                })
+                .chain(std::iter::once((fb_shared.arg_count, result_local)))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        );
+
+        let backwards_substs = Substs::singleton(
+            SymVar::ReservedBackwardsFnResult,
+            encoder
+                .arena
+                .mk_projection(ProjectionElem::Deref, result_local),
+        );
+
         for path in sym_ex_results.paths.iter() {
             let mut path_stmts = vec![];
             for (idx, expr) in path.backwards_facts.0.iter() {
+                eprintln!("backwards_fact: {}", expr);
+                let expr = expr.subst(encoder.arena, vcx.tcx(), &backwards_substs);
+                let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
                 let expr = encoder.encode_sym_value(deps, expr).unwrap();
-                let result_local = get_back_result(*idx);
-                path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(result_local, expr)));
+                let back_local = get_back_result(*idx);
+                path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
+                for pledge in pledges.iter() {
+                    let pledge = pledge
+                        .clone()
+                        .subst(encoder.arena, vcx.tcx(), &pledge_substs);
+                    path_stmts.push(
+                        vcx.mk_exhale_stmt(
+                            encoder
+                                .encode_pure_spec(deps, pledge.clone(), None)
+                                .unwrap(),
+                        ),
+                    );
+                }
             }
             match encoder.encode_path_condition(deps, &path.pcs) {
                 Some(Err(err)) => {
@@ -219,6 +271,9 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
         let method_name = vir::vir_format_identifier!(vcx, "{}_backwards", base_method_name);
         let method_ident = vir::MethodIdent::new(method_name, UnknownArity::new(&[]));
         let mut stmts = fb_shared.decl_stmts;
+        for (_, local) in back_result_vars.iter() {
+            stmts.push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
+        }
         stmts.extend(fb_shared.type_assertion_stmts);
         stmts.extend(body_stmts);
         let method = vcx.mk_method(
@@ -233,6 +288,6 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 &vir::TerminatorStmtGenData::Exit,
             )])),
         );
-        method
+        Ok(method)
     })
 }

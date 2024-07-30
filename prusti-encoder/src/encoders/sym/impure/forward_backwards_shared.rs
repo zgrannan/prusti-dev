@@ -73,26 +73,28 @@ use crate::encoders::{
 };
 
 use super::SymImpureEnc;
-pub struct ForwardBackwardsShared<'vir> {
-    ty_arg_decls: &'vir [LiftedGeneric<'vir>],
+pub struct ForwardBackwardsShared<'vir, 'tcx> {
     pub symvar_locals: Vec<vir::Local<'vir>>,
     pub result_local: vir::Local<'vir>,
     pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
     pub decl_stmts: Vec<vir::Stmt<'vir>>,
     pub arg_count: usize,
+    pub symvars: Vec<ty::Ty<'tcx>>,
+    /// The result type of the *forwards* function
+    pub result_ty: ty::Ty<'tcx>,
 }
 
-impl<'vir> ForwardBackwardsShared<'vir> {
+impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
     pub fn arg_locals(&self) -> &[vir::Local<'vir>] {
         &self.symvar_locals[..self.arg_count]
     }
 
-    pub fn new<'sym, 'tcx, 'deps>(
+    pub fn new<'sym, 'deps>(
         symex_result: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
         substs: ty::GenericArgsRef<'tcx>,
         body: &mir::Body<'tcx>,
         deps: &'deps mut TaskEncoderDependencies<'vir, SymImpureEnc>,
-    ) -> ForwardBackwardsShared<'vir>
+    ) -> ForwardBackwardsShared<'vir, 'tcx>
     where
         'vir: 'tcx,
         'tcx: 'vir,
@@ -143,11 +145,12 @@ impl<'vir> ForwardBackwardsShared<'vir> {
             }
             Self {
                 arg_count: body.arg_count,
-                ty_arg_decls,
                 symvar_locals,
                 type_assertion_stmts,
                 decl_stmts,
                 result_local,
+                result_ty: body.local_decls.iter().next().unwrap().ty,
+                symvars: symex_result.symvars.clone(),
             }
         })
     }
