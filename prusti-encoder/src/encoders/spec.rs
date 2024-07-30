@@ -2,7 +2,7 @@ use prusti_rustc_interface::{
     //middle::{mir, ty},
     span::def_id::DefId,
 };
-use prusti_interface::specs::typed::{DefSpecificationMap, ProcedureSpecification};
+use prusti_interface::specs::typed::{DefSpecificationMap, Pledge, ProcedureSpecification};
 use task_encoder::{
     TaskEncoder,
     TaskEncoderDependencies,
@@ -18,6 +18,7 @@ pub struct SpecEncOutput<'vir> {
     //pub expr: vir::Expr<'vir>,
     pub pres: &'vir [DefId],
     pub posts: &'vir [DefId],
+    pub pledges: &'vir [Pledge],
     pub pure: bool
 }
 
@@ -94,10 +95,14 @@ impl TaskEncoder for SpecEnc {
                     .and_then(|specs| specs.base_spec.posts.expect_empty_or_inherent())
                     .map(|specs| vcx.alloc_slice(specs))
                     .unwrap_or_default();
+                let pledges = specs
+                    .and_then(|specs| specs.base_spec.pledges.expect_empty_or_inherent())
+                    .map(|specs| vcx.alloc_slice(specs))
+                    .unwrap_or_default();
                 let pure = specs.map_or(false,
                     |specs| specs.base_spec.kind.is_pure().unwrap(),
                 );
-                Ok((SpecEncOutput { pres, posts, pure }, () ))
+                Ok((SpecEncOutput { pres, posts, pledges, pure }, () ))
             })
         })
     }

@@ -1,17 +1,181 @@
 use std::collections::BTreeMap;
-use symbolic_execution::results::SymbolicExecutionResult;
+use symbolic_execution::{
+    results::SymbolicExecutionResult,
+    value::{BackwardsFn, Substs, SymVar},
+};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
-use vir::{CallableIdent, Method, UnknownArity, ViperIdent};
+use vir::{CallableIdent, DomainAxiom, Method, UnknownArity, ViperIdent};
 
-use crate::encoders::{sym::impure::forward_backwards_shared::ForwardBackwardsShared, sym_pure::PrustiSymValSynthetic};
+use crate::encoders::{
+    domain::DomainEnc,
+    most_generic_ty::extract_type_params,
+    sym::impure::forward_backwards_shared::ForwardBackwardsShared,
+    sym_pure::{PrustiSymValSynthetic, PrustiSymValSyntheticData},
+    sym_spec::SymSpec,
+};
+use prusti_rustc_interface::{
+    abi,
+    hir::Mutability,
+    index::IndexVec,
+    middle::{
+        mir::{self, interpret::Scalar, ConstantKind, Local, LocalDecl, ProjectionElem},
+        ty::{self, GenericArgsRef},
+    },
+    span::def_id::{DefId, LocalDefId},
+};
 
-use super::expr::SymExprEncoder;
+use super::{expr::SymExprEncoder, impure::MirImpureEncOutputRef};
+
+pub struct BackwardsFnContext<'shared, 'vir, 'sym, 'tcx> {
+    pub output_ref: MirImpureEncOutputRef<'vir>,
+    pub def_id: DefId,
+    pub substs: GenericArgsRef<'tcx>,
+    pub caller_def_id: Option<DefId>,
+    pub symvars: &'sym [ty::Ty<'tcx>],
+    pub shared: &'shared ForwardBackwardsShared<'vir>,
+    pub result_ty: ty::Ty<'tcx>,
+}
+
+pub fn mk_backwards_fn_axioms<
+    'shared,
+    'vir,
+    'sym,
+    'tcx,
+    'enc,
+    T: TaskEncoder<EncodingError = String>,
+>(
+    pledges: SymSpec<'sym, 'tcx>,
+    ctxt: BackwardsFnContext<'shared, 'vir, 'sym, 'tcx>,
+    encoder: &SymExprEncoder<'vir, 'sym, 'tcx>,
+    deps: &'enc mut TaskEncoderDependencies<'vir, T>,
+) -> &'vir [DomainAxiom<'vir>] {
+    vir::with_vcx(|vcx| {
+        let back_return_snapshot =
+            encoder
+                .arena
+                .mk_synthetic(encoder.arena.alloc(PrustiSymValSyntheticData::VirLocal(
+                    ctxt.shared.result_local.name,
+                    ctxt.result_ty,
+                )));
+
+        let arg_snapshots = encoder.arena.alloc_slice(
+            &(0..ctxt.shared.arg_count)
+                .map(|i| encoder.arena.mk_var(SymVar::Normal(i), ctxt.symvars[i]))
+                .collect::<Vec<_>>(),
+        );
+
+        let backward_axiom_qvars = vcx.alloc_slice(
+            &ctxt
+                .shared
+                .arg_locals()
+                .into_iter()
+                .copied()
+                .chain(std::iter::once(ctxt.shared.result_local))
+                .map(|l| vcx.mk_local_decl(l.name, l.ty))
+                .collect::<Vec<_>>(),
+        );
+
+        let backward_axiom_args = vcx.alloc_slice(
+            &backward_axiom_qvars
+                .iter()
+                .map(|qvar| vcx.mk_local_ex(qvar.name, qvar.ty))
+                .collect::<Vec<_>>(),
+        );
+
+        let pledge_axiom_substs = Substs::from_iter(
+            (0..ctxt.shared.arg_count)
+                .map(|i| {
+                    (
+                        i,
+                        encoder.arena.mk_backwards_fn(BackwardsFn {
+                            def_id: ctxt.def_id,
+                            substs: ctxt.substs,
+                            caller_def_id: ctxt.caller_def_id,
+                            arg_snapshots: arg_snapshots,
+                            return_snapshot: back_return_snapshot,
+                            arg_index: i,
+                        }),
+                    )
+                })
+                .chain(std::iter::once((
+                    ctxt.shared.arg_count,
+                    back_return_snapshot,
+                ))),
+        );
+
+        let backward_fn_calls = ctxt
+            .output_ref
+            .backwards_fns
+            .iter()
+            .map(|(i, f)| f.apply(vcx, backward_axiom_args))
+            .collect::<Vec<_>>();
+
+        let pledge_axioms = pledges
+            .into_iter()
+            .enumerate()
+            .map(|(i, pledge)| {
+                let pledge = pledge.subst(encoder.arena, vcx.tcx(), &pledge_axiom_substs);
+                vcx.mk_domain_axiom(
+                    vir::vir_format_identifier!(
+                        vcx,
+                        "pledge_{}_{}_axiom",
+                        ctxt.output_ref.method_ref.name(),
+                        i
+                    ),
+                    vcx.mk_forall_expr(
+                        backward_axiom_qvars,
+                        vcx.alloc_slice(&backward_fn_calls
+                            .iter()
+                            .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
+                            .collect::<Vec<_>>()), // TODO, maybe too imprecise?
+                        encoder.encode_pure_spec(deps, pledge, None).unwrap(),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let ty_axioms = ctxt
+            .output_ref
+            .backwards_fns
+            .iter()
+            .map(|(i, f)| {
+                let call = f.apply(vcx, backward_axiom_args);
+                let typeof_function_arg = deps
+                    .require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), ctxt.symvars[*i]).0)
+                    .unwrap()
+                    .typeof_function;
+                vcx.mk_domain_axiom(
+                    vir::vir_format_identifier!(
+                        vcx,
+                        "backwards_{}_{}_axiom",
+                        ctxt.output_ref.method_ref.name(),
+                        i
+                    ),
+                    vcx.mk_forall_expr(
+                        backward_axiom_qvars,
+                        vcx.alloc_slice(&[vcx.mk_trigger(vcx.alloc_slice(&[call]))]),
+                        vcx.mk_eq_expr(
+                            typeof_function_arg.apply(vcx, [backward_axiom_args[*i]]),
+                            typeof_function_arg.apply(vcx, [call]),
+                        ),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        vcx.alloc_slice(
+            &pledge_axioms
+                .into_iter()
+                .chain(ty_axioms)
+                .collect::<Vec<_>>(),
+        )
+    })
+}
 
 pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError = String>>(
     base_method_name: ViperIdent<'vir>,
     mut fb_shared: ForwardBackwardsShared<'vir>,
     deps: &'enc mut TaskEncoderDependencies<'vir, T>,
-    encoder: SymExprEncoder<'vir, 'sym, 'tcx>,
+    encoder: &SymExprEncoder<'vir, 'sym, 'tcx>,
     sym_ex_results: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
 ) -> vir::Method<'vir> {
     vir::with_vcx(|vcx| {

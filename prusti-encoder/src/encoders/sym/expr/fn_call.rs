@@ -34,7 +34,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .require_ref::<SymImpureEnc>((
                 backwards_fn.def_id.as_local().unwrap(),
                 backwards_fn.substs,
-                Some(backwards_fn.caller_def_id),
+                backwards_fn.caller_def_id,
             ))
             .unwrap();
         let back_fn = output_ref.backwards_fns[&backwards_fn.arg_index];

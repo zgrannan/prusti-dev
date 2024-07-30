@@ -530,7 +530,7 @@ impl SpecGraph<ProcedureSpecification> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, TyEncodable, TyDecodable)]
+#[derive(Copy, Debug, Clone, PartialEq, Eq, TyEncodable, TyDecodable)]
 pub struct Pledge {
     pub reference: Option<()>, // TODO: pledge references
     pub lhs: Option<DefId>,

@@ -14,12 +14,13 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
+use rustc_middle::mir::RETURN_PLACE;
 use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     results::{ResultPath, SymbolicExecutionResult},
-    value::{Substs, SymValueData, SymValueKind},
+    value::{BackwardsFn, Substs, SymValueData, SymValueKind, SymVar},
     Assertion,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
@@ -58,23 +59,26 @@ use crate::{
 
 use self::forward_backwards_shared::ForwardBackwardsShared;
 
-use super::super::{
-    lifted::{
-        cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
-        func_def_ty_params::LiftedTyParamsEnc, generic::LiftedGeneric,
-        rust_ty_cast::RustTyCastersEnc,
+use super::{
+    super::{
+        lifted::{
+            cast::CastArgs, func_app_ty_params::LiftedFuncAppTyParamsEnc,
+            func_def_ty_params::LiftedTyParamsEnc, generic::LiftedGeneric,
+            rust_ty_cast::RustTyCastersEnc,
+        },
+        mir_base::MirBaseEnc,
+        mir_pure::PureKind,
+        rust_ty_snapshots::RustTySnapshotsEnc,
+        sym::{backwards::mk_backwards_method, expr::SymExprEncoder},
+        sym_pure::{
+            PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic,
+            PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult,
+        },
+        sym_spec::SymSpecEnc,
+        FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc, SpecEncTask,
+        SymFunctionEnc, SymPureEnc, SymPureEncTask,
     },
-    mir_base::MirBaseEnc,
-    mir_pure::PureKind,
-    rust_ty_snapshots::RustTySnapshotsEnc,
-    sym::{backwards::mk_backwards_method, expr::SymExprEncoder},
-    sym_pure::{
-        PrustiPathConditions, PrustiSemantics, PrustiSubsts, PrustiSymValSynthetic,
-        PrustiSymValSyntheticData, PrustiSymValue, SymPureEncResult,
-    },
-    sym_spec::SymSpecEnc,
-    FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc, SpecEncTask,
-    SymFunctionEnc, SymPureEnc, SymPureEncTask,
+    backwards::{mk_backwards_fn_axioms, BackwardsFnContext},
 };
 
 pub mod forward_backwards_shared;
@@ -136,6 +140,7 @@ impl TaskEncoder for SymImpureEnc {
                 .clone();
 
             let local_decls = body.body.local_decls.clone();
+            let result_ty = body.body.local_decls[RETURN_PLACE].ty;
             let arg_count = body.body.arg_count;
 
             let arena = SymExContext::new(vcx.tcx());
@@ -154,7 +159,7 @@ impl TaskEncoder for SymImpureEnc {
                 vcx.tcx(),
                 pcs::run_free_pcs(
                     &BodyWithBorrowckFacts {
-                        body: body.body,
+                        body: body.body.clone(),
                         promoted: body.promoted,
                         borrow_set: body.borrow_set,
                         region_inference_context: body.region_inference_context,
@@ -171,7 +176,7 @@ impl TaskEncoder for SymImpureEnc {
             );
 
             let fb_shared =
-                ForwardBackwardsShared::new(&symbolic_execution, substs, &local_decls, deps);
+                ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
 
             let arg_locals = &fb_shared.symvar_locals[0..arg_count];
 
@@ -205,13 +210,11 @@ impl TaskEncoder for SymImpureEnc {
                 })
                 .collect::<BTreeMap<usize, _>>();
 
-            deps.emit_output_ref(
-                *task_key,
-                MirImpureEncOutputRef {
-                    method_ref: method_ident,
-                    backwards_fns: backwards_fn_idents.clone(),
-                },
-            )?;
+            let output_ref = MirImpureEncOutputRef {
+                method_ref: method_ident,
+                backwards_fns: backwards_fn_idents.clone(),
+            };
+            deps.emit_output_ref(*task_key, output_ref.clone())?;
 
             let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
 
@@ -314,64 +317,35 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
 
-            let backward_axiom_qvars = vcx.alloc_slice(
-                &arg_locals
-                    .into_iter()
-                    .copied()
-                    .chain(std::iter::once(fb_shared.result_local))
-                    .map(|l| vcx.mk_local_decl(l.name, l.ty))
-                    .collect::<Vec<_>>(),
-            );
-
-            let backward_axiom_args = vcx.alloc_slice(
-                &backward_axiom_qvars
-                    .iter()
-                    .map(|l| vcx.mk_local_ex(l.name, l.ty))
-                    .collect::<Vec<_>>(),
+            let backwards_fn_axioms = mk_backwards_fn_axioms(
+                spec.pledges,
+                BackwardsFnContext {
+                    output_ref,
+                    def_id,
+                    substs,
+                    caller_def_id,
+                    symvars: &symbolic_execution.symvars,
+                    shared: &fb_shared,
+                    result_ty,
+                },
+                &visitor.encoder,
+                visitor.deps,
             );
 
             let backwards_method = mk_backwards_method(
                 method_name,
                 fb_shared,
                 visitor.deps,
-                visitor.encoder,
+                &visitor.encoder,
                 &symbolic_execution,
             );
+
+            let encoder = &visitor.encoder;
 
             let backwards_fns_domain = vcx.mk_domain(
                 vir::vir_format_identifier!(vcx, "Backwards_{}", method_ident.name()),
                 &[],
-                vcx.alloc_slice(
-                    &backwards_fn_idents
-                        .iter()
-                        .map(|(i, f)| {
-                            let call = f.apply(vcx, backward_axiom_args);
-                            let typeof_function_arg = deps
-                                .require_ref::<DomainEnc>(
-                                    extract_type_params(vcx.tcx(), symbolic_execution.symvars[*i])
-                                        .0,
-                                )
-                                .unwrap()
-                                .typeof_function;
-                            vcx.mk_domain_axiom(
-                                vir::vir_format_identifier!(
-                                    vcx,
-                                    "backwards_{}_{}_axiom",
-                                    method_name,
-                                    i
-                                ),
-                                vcx.mk_forall_expr(
-                                    backward_axiom_qvars,
-                                    vcx.alloc_slice(&[vcx.mk_trigger(vcx.alloc_slice(&[call]))]),
-                                    vcx.mk_eq_expr(
-                                        typeof_function_arg.apply(vcx, [backward_axiom_args[*i]]),
-                                        typeof_function_arg.apply(vcx, [call]),
-                                    ),
-                                ),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                ),
+                backwards_fn_axioms,
                 vcx.alloc_slice(
                     &backwards_fn_idents
                         .iter()

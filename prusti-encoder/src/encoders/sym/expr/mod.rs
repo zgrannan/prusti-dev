@@ -44,7 +44,7 @@ type PrustiPathConditionAtom<'sym, 'tcx> =
 
 pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
-    arena: &'sym SymExContext<'tcx>,
+    pub arena: &'sym SymExContext<'tcx>,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
 }
@@ -271,6 +271,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 }
             }
             SymValueKind::Ref(e, mutability) => self.encode_ref(deps, e, *mutability),
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::VirLocal(name, ty)) => {
+                let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
+                Ok(self.vcx.mk_local_ex(
+                    vir::vir_format!(self.vcx, "{}", name),
+                    ty.generic_snapshot.snapshot,
+                ))
+            }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::PureFnCall(
                 fn_def_id,
                 substs,
@@ -316,7 +323,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 // TODO: Make this more robust
             }
             SymValueKind::InternalError(err, _) => Err(format!("Encountered internal err {}", err)),
-            SymValueKind::BackwardsFn(backwards_fn) => self.encode_backwards_fn_call(deps, backwards_fn),
+            SymValueKind::BackwardsFn(backwards_fn) => {
+                self.encode_backwards_fn_call(deps, backwards_fn)
+            }
         }
     }
 
@@ -427,7 +436,11 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let clauses = spec
             .into_iter()
             .map(|(pc, value)| {
-                let encoded_value: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, value)?;
+                let encoded_value: vir::Expr<'vir> = self
+                    .encode_sym_value_as_prim(deps, value)
+                    .unwrap_or_else(|err| {
+                        panic!("{:?} in {}", err, value);
+                    });
                 if let Some(pc) = self.encode_path_condition(deps, &pc) {
                     let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
                     Ok::<vir::Expr<'vir>, String>(impl_expr)

@@ -25,7 +25,6 @@ use symbolic_execution::{
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, CallableIdent, MethodIdent, UnknownArity};
 
-
 #[derive(Clone, Debug)]
 pub enum MirImpureEncError {
     Unsupported,
@@ -80,13 +79,18 @@ pub struct ForwardBackwardsShared<'vir> {
     pub result_local: vir::Local<'vir>,
     pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
     pub decl_stmts: Vec<vir::Stmt<'vir>>,
+    pub arg_count: usize,
 }
 
 impl<'vir> ForwardBackwardsShared<'vir> {
+    pub fn arg_locals(&self) -> &[vir::Local<'vir>] {
+        &self.symvar_locals[..self.arg_count]
+    }
+
     pub fn new<'sym, 'tcx, 'deps>(
         symex_result: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
         substs: ty::GenericArgsRef<'tcx>,
-        local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
+        body: &mir::Body<'tcx>,
         deps: &'deps mut TaskEncoderDependencies<'vir, SymImpureEnc>,
     ) -> ForwardBackwardsShared<'vir>
     where
@@ -119,7 +123,7 @@ impl<'vir> ForwardBackwardsShared<'vir> {
             }
             let result_local = vcx.mk_local(
                 "res",
-                deps.require_ref::<RustTySnapshotsEnc>(local_decls.iter().next().unwrap().ty)
+                deps.require_ref::<RustTySnapshotsEnc>(body.local_decls.iter().next().unwrap().ty)
                     .unwrap()
                     .generic_snapshot
                     .snapshot,
@@ -138,6 +142,7 @@ impl<'vir> ForwardBackwardsShared<'vir> {
                     .push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
             }
             Self {
+                arg_count: body.arg_count,
                 ty_arg_decls,
                 symvar_locals,
                 type_assertion_stmts,

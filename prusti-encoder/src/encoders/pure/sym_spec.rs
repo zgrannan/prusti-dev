@@ -2,11 +2,6 @@ use middle::{
     mir::interpret::{ConstValue, Scalar},
     ty::VariantDiscr,
 };
-use symbolic_execution::{
-    path_conditions::PathConditions,
-    value::{Constant, SymValueData, Ty},
-    results::ResultPath, context::SymExContext,
-};
 use prusti_rustc_interface::{
     hir::lang_items,
     middle::{
@@ -15,6 +10,12 @@ use prusti_rustc_interface::{
         ty::{self, VariantDef},
     },
     span::{def_id::DefId, DUMMY_SP},
+};
+use symbolic_execution::{
+    context::SymExContext,
+    path_conditions::PathConditions,
+    results::ResultPath,
+    value::{Constant, SymValueData, Ty},
 };
 
 use std::{collections::BTreeSet, rc::Rc};
@@ -52,6 +53,7 @@ impl<'sym, 'tcx> SymSpec<'sym, 'tcx> {
 pub struct SymSpecEncOutput<'sym, 'tcx> {
     pub pres: SymSpec<'sym, 'tcx>,
     pub posts: SymSpec<'sym, 'tcx>,
+    pub pledges: SymSpec<'sym, 'tcx>,
 }
 type SymSpecEncTask<'tcx> = (
     DefId,                    // The function annotated with specs
@@ -101,6 +103,7 @@ impl SymSpecEnc {
                 return SymSpecEncOutput {
                     pres: Self::spec_bool(arena, vcx.tcx(), false),
                     posts: SymSpec::new(),
+                    pledges: SymSpec::new(),
                 };
             }
 
@@ -111,6 +114,7 @@ impl SymSpecEnc {
                 return SymSpecEncOutput {
                     pres: SymSpec::new(),
                     posts: SymSpec::new(),
+                    pledges: SymSpec::new(),
                 };
             }
 
@@ -132,7 +136,7 @@ impl SymSpecEnc {
                             // TODO: should this be `def_id` or `caller_def_id`
                             caller_def_id: Some(def_id),
                         },
-                        None
+                        None,
                     )
                 })
                 .collect::<BTreeSet<_>>();
@@ -151,7 +155,27 @@ impl SymSpecEnc {
                             // TODO: should this be `def_id` or `caller_def_id`
                             caller_def_id: Some(def_id),
                         },
-                        None
+                        None,
+                    );
+                    post
+                })
+                .collect::<BTreeSet<_>>();
+
+            let pledges = specs
+                .pledges
+                .iter()
+                .map(|pledge| {
+                    let post = SymPureEnc::encode(
+                        arena,
+                        crate::encoders::SymPureEncTask {
+                            kind: PureKind::Spec,
+                            parent_def_id: pledge.rhs,
+                            param_env: vcx.tcx().param_env(pledge.rhs),
+                            substs,
+                            // TODO: should this be `def_id` or `caller_def_id`
+                            caller_def_id: Some(def_id),
+                        },
+                        None,
                     );
                     post
                 })
@@ -160,6 +184,7 @@ impl SymSpecEnc {
             SymSpecEncOutput {
                 pres: SymSpec(pres),
                 posts: SymSpec(posts),
+                pledges: SymSpec(pledges),
             }
         })
     }

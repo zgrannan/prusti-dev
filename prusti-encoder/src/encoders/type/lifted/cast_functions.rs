@@ -213,7 +213,8 @@ impl TaskEncoder for CastFunctionsEnc {
                 make_concrete_ident.name().to_str(),
                 make_concrete_arg_decls,
                 self_ty,
-                vcx.alloc_slice(&[make_concrete_pre]),
+                // vcx.alloc_slice(&[make_concrete_pre]),
+                vcx.alloc_slice(&[]), // Preconditions not allowed for functions used in axioms
                 vcx.alloc_slice(&[make_concrete_post]),
                 None,
             );

@@ -112,6 +112,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
         &'sym [PrustiSymValue<'sym, 'tcx>],
     ),
     Result(ty::Ty<'tcx>),
+    VirLocal(&'sym str, ty::Ty<'tcx>),
 }
 
 impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -138,6 +139,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                 format!("{}({})", fn_name, args_str)
             }),
             PrustiSymValSyntheticData::Result(ty) => "result".to_string(),
+            PrustiSymValSyntheticData::VirLocal(name, _) => name.to_string(),
         }
     }
 }
@@ -157,6 +159,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
                 write!(f, "{}({})", fn_name, args_str)
             }
             PrustiSymValSyntheticData::Result(_) => todo!(),
+            PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
         }
     }
 }
@@ -193,6 +196,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                 ))
             }
             PrustiSymValSyntheticData::Result(_) => todo!(),
+            PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
         }
     }
 
@@ -208,6 +212,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                 None,
             ),
             PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None),
+            PrustiSymValSyntheticData::VirLocal(_, ty) => Ty::new(*ty, None),
         }
     }
 
@@ -236,6 +241,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                 ))
             }
             PrustiSymValSyntheticData::Result(_) => self,
+            PrustiSymValSyntheticData::VirLocal(_, _) => self,
         }
     }
 }
