@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 
 use cfg_if::cfg_if;
 use prusti_rustc_interface::{
+    index::IndexVec,
     middle::{
         mir,
         ty::{self, GenericArgs},
@@ -11,6 +12,7 @@ use prusti_rustc_interface::{
 use std::hash::{Hash, Hasher};
 use symbolic_execution::{context::SymExContext, value::SymVar};
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
+use std::collections::BTreeMap;
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
 };
@@ -168,7 +170,7 @@ impl TaskEncoder for SymFunctionEnc {
                         substs,
                         caller_def_id,
                     },
-                    debug_output_dir.ok().as_deref(),
+                    debug_output_dir.ok(),
                 ))
             } else if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::eq"
                 || vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne"
@@ -190,7 +192,8 @@ impl TaskEncoder for SymFunctionEnc {
             } else {
                 None
             };
-            let encoder = SymExprEncoder::new(vcx, &arena, symvars, def_id);
+            let encoder =
+                SymExprEncoder::new(vcx, &arena, BTreeMap::default(), symvars, def_id);
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result

@@ -1,28 +1,30 @@
-use pcs::combined_pcs::BodyWithBorrowckFacts;
+use pcs::{combined_pcs::BodyWithBorrowckFacts, utils::Place};
 use prusti_rustc_interface::{
     abi::FIRST_VARIANT,
     ast,
     ast::Local,
     index::IndexVec,
     middle::{
-        mir::VarDebugInfo,
+        mir::{self, PlaceElem, VarDebugInfo},
         ty::{self, GenericArgsRef},
     },
     span::def_id::DefId,
     type_ir::sty::TyKind,
 };
-use rustc_middle::mir;
 use std::{
     collections::{BTreeSet, HashMap},
     marker::PhantomData,
 };
 use symbolic_execution::{
     context::SymExContext,
+    heap::HeapData,
     path_conditions::PathConditions,
     results::ResultPath,
     semantics::VerifierSemantics,
+    terminator::{FunctionCallEffects, FunctionCallResult},
     value::{AggregateKind, Substs, SymValue, SymValueData, SyntheticSymValue, Ty},
     visualization::{OutputMode, VisFormat},
+    SymExParams, SymbolicExecution,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -113,6 +115,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx> {
     ),
     Result(ty::Ty<'tcx>),
     VirLocal(&'sym str, ty::Ty<'tcx>),
+    Old(mir::Local, Vec<PlaceElem<'tcx>>, ty::Ty<'tcx>),
 }
 
 impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -145,6 +148,9 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
             }),
             PrustiSymValSyntheticData::Result(ty) => "result".to_string(),
             PrustiSymValSyntheticData::VirLocal(name, _) => name.to_string(),
+            PrustiSymValSyntheticData::Old(local, projection, _) => {
+                format!("old({:?}{:?})", local, projection)
+            }
         }
     }
 }
@@ -165,6 +171,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
             }
             PrustiSymValSyntheticData::Result(_) => todo!(),
             PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
+            PrustiSymValSyntheticData::Old(_, _, _) => todo!(),
         }
     }
 }
@@ -202,6 +209,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
             }
             PrustiSymValSyntheticData::Result(_) => todo!(),
             PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
+            PrustiSymValSyntheticData::Old(_, _, _) => self,
         }
     }
 
@@ -218,6 +226,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
             ),
             PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None),
             PrustiSymValSyntheticData::VirLocal(_, ty) => Ty::new(*ty, None),
+            PrustiSymValSyntheticData::Old(local, projection, ty) => Ty::new(*ty, None),
         }
     }
 
@@ -247,6 +256,7 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
             }
             PrustiSymValSyntheticData::Result(_) => self,
             PrustiSymValSyntheticData::VirLocal(_, _) => self,
+            PrustiSymValSyntheticData::Old(_, _, _) => self,
         }
     }
 }
@@ -259,41 +269,100 @@ pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sy
 impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx>;
 
-    fn encode_fn_call(
-        &self,
-        arena: &'sym SymExContext<'tcx>,
+    fn encode_fn_call<'mir>(
+        location: mir::Location,
+        sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
-        args: &'sym [PrustiSymValue<'sym, 'tcx>],
-    ) -> Option<PrustiSymValue<'sym, 'tcx>> {
+        heap: &HeapData<'sym, 'tcx, Self::SymValSynthetic>,
+        args: &Vec<mir::Operand<'tcx>>,
+    ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic>> {
         vir::with_vcx(|vcx| {
             let fn_name = vcx.tcx().def_path_str(def_id);
-            if fn_name == "std::boxed::Box::<T>::new" {
-                assert_eq!(args.len(), 1);
-                let output_ty = vcx
-                    .tcx()
-                    .fn_sig(def_id)
-                    .instantiate(vcx.tcx(), substs)
-                    .output()
-                    .skip_binder();
-                let substs = if let ty::TyKind::Adt(_, substs) = output_ty.kind() {
-                    substs
-                } else {
-                    unreachable!()
-                };
-                return Some(arena.mk_aggregate(
-                    AggregateKind::Rust(
-                        mir::AggregateKind::Adt(
-                            vcx.tcx().lang_items().owned_box().unwrap(),
-                            FIRST_VARIANT,
-                            substs,
-                            None,
-                            None,
-                        ),
-                        output_ty,
-                    ),
-                    args,
-                ));
+            if fn_name == "prusti_contracts::old" {
+                match args[0] {
+                    mir::Operand::Move(place) => {
+                        match sym_ex.body.basic_blocks[location.block].statements
+                            [location.statement_index - 1]
+                            .kind
+                        {
+                            mir::StatementKind::Assign(box (
+                                left,
+                                mir::Rvalue::Use(mir::Operand::Copy(place)),
+                            )) => {
+                                return Some(FunctionCallEffects {
+                                    result: FunctionCallResult::Value {
+                                        value: sym_ex.arena.mk_synthetic(sym_ex.arena.alloc(
+                                            PrustiSymValSyntheticData::Old(
+                                                place.local,
+                                                place.projection.to_vec(),
+                                                place.ty(sym_ex.body, vcx.tcx()).ty,
+                                            ),
+                                        )),
+                                        postcondition: None,
+                                    },
+                                    precondition_assertion: None,
+                                    snapshot: None,
+                                })
+                            }
+                            _ => todo!(),
+                        }
+                    }
+                    // mir::Operand::Constant(c) => sym_ex.arena.mk_constant(c.into()),
+                    _ => todo!(),
+                }
+            }
+            let args: Vec<_> = args
+                .iter()
+                .map(|arg| sym_ex.encode_operand(heap, arg))
+                .collect();
+            let args = sym_ex.arena.alloc_slice(&args);
+            match fn_name.as_str() {
+                "prusti_contracts::before_expiry" => {
+                    return Some(FunctionCallEffects {
+                        precondition_assertion: None,
+                        result: FunctionCallResult::Value {
+                            value: args[0],
+                            postcondition: None,
+                        },
+                        snapshot: None,
+                    });
+                }
+                "std::boxed::Box::<T>::new" => {
+                    assert_eq!(args.len(), 1);
+                    let output_ty = vcx
+                        .tcx()
+                        .fn_sig(def_id)
+                        .instantiate(vcx.tcx(), substs)
+                        .output()
+                        .skip_binder();
+                    let substs = if let ty::TyKind::Adt(_, substs) = output_ty.kind() {
+                        substs
+                    } else {
+                        unreachable!()
+                    };
+                    return Some(FunctionCallEffects {
+                        precondition_assertion: None,
+                        result: FunctionCallResult::Value {
+                            value: sym_ex.arena.mk_aggregate(
+                                AggregateKind::Rust(
+                                    mir::AggregateKind::Adt(
+                                        vcx.tcx().lang_items().owned_box().unwrap(),
+                                        FIRST_VARIANT,
+                                        substs,
+                                        None,
+                                        None,
+                                    ),
+                                    output_ty,
+                                ),
+                                args,
+                            ),
+                            postcondition: None,
+                        },
+                        snapshot: None,
+                    });
+                }
+                _ => {}
             }
 
             let is_pure = crate::encoders::with_proc_spec(def_id, |proc_spec| {
@@ -303,11 +372,20 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 fn_name == "std::cmp::PartialEq::eq" || fn_name == "std::cmp::PartialEq::ne",
             );
             if is_pure {
-                Some(arena.mk_synthetic(
-                    arena.alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
-                ))
+                return Some(FunctionCallEffects {
+                    precondition_assertion: None,
+                    result: FunctionCallResult::Value {
+                        value: sym_ex.arena.mk_synthetic(
+                            sym_ex
+                                .arena
+                                .alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
+                        ),
+                        postcondition: None,
+                    },
+                    snapshot: None,
+                });
             } else {
-                None
+                return None;
             }
         })
     }
@@ -317,7 +395,7 @@ impl SymPureEnc {
     pub fn encode<'sym, 'tcx>(
         arena: &'sym SymExContext<'tcx>,
         task: SymPureEncTask<'tcx>,
-        debug_output_dir: Option<&str>,
+        debug_output_dir: Option<String>,
     ) -> SymPureEncResult<'sym, 'tcx> {
         let kind = task.kind;
         let def_id = task.parent_def_id;
@@ -336,13 +414,13 @@ impl SymPureEnc {
             };
             let body = body.body().as_ref().clone();
             let arg_count = body.body.arg_count;
-            let symbolic_execution = symbolic_execution::run_symbolic_execution(
-                def_id.as_local().unwrap(),
-                &body.body.clone(),
-                vcx.tcx(),
-                pcs::run_free_pcs(
+            let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
+                def_id: def_id.as_local().unwrap(),
+                body: &body.body,
+                tcx: vcx.tcx(),
+                fpcs_analysis: pcs::run_free_pcs(
                     &BodyWithBorrowckFacts {
-                        body: body.body,
+                        body: body.body.clone(),
                         promoted: body.promoted,
                         borrow_set: body.borrow_set,
                         region_inference_context: body.region_inference_context,
@@ -351,12 +429,13 @@ impl SymPureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    debug_output_dir,
+                    debug_output_dir.clone(),
                 ),
-                PrustiSemantics(PhantomData),
-                arena,
+                verifier_semantics: PrustiSemantics(PhantomData),
+                arena: &arena,
                 debug_output_dir,
-            );
+                new_symvars_allowed: false,
+            });
             assert_eq!(
                 symbolic_execution.symvars.len(),
                 arg_count,

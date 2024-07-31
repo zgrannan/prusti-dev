@@ -3,7 +3,9 @@ use std::{
     marker::PhantomData,
 };
 
-use pcs::combined_pcs::BodyWithBorrowckFacts;
+use pcs::{
+    borrows::domain::MaybeOldPlace, combined_pcs::BodyWithBorrowckFacts, utils::PlaceRepacker,
+};
 use prusti_rustc_interface::{
     abi,
     hir::Mutability,
@@ -21,7 +23,7 @@ use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     results::{ResultPath, SymbolicExecutionResult},
     value::{BackwardsFn, Substs, SymValueData, SymValueKind, SymVar},
-    Assertion,
+    Assertion, SymExParams,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, CallableIdent, MethodIdent, UnknownArity};
@@ -152,11 +154,11 @@ impl TaskEncoder for SymImpureEnc {
                 format!("{}/{}", dir, hash)
             });
 
-            let symbolic_execution = symbolic_execution::run_symbolic_execution(
-                def_id.as_local().unwrap(),
-                &body.body.clone(),
-                vcx.tcx(),
-                pcs::run_free_pcs(
+            let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
+                def_id: def_id.as_local().unwrap(),
+                body: &body.body,
+                tcx: vcx.tcx(),
+                fpcs_analysis: pcs::run_free_pcs(
                     &BodyWithBorrowckFacts {
                         body: body.body.clone(),
                         promoted: body.promoted,
@@ -167,12 +169,13 @@ impl TaskEncoder for SymImpureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    debug_dir.clone().ok().as_deref(),
+                    debug_dir.clone().ok(),
                 ),
-                PrustiSemantics(PhantomData),
-                &arena,
-                debug_dir.ok().as_deref(),
-            );
+                verifier_semantics: PrustiSemantics(PhantomData),
+                arena: &arena,
+                debug_output_dir: debug_dir.ok(),
+                new_symvars_allowed: true,
+            });
 
             let fb_shared =
                 ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
@@ -225,6 +228,19 @@ impl TaskEncoder for SymImpureEnc {
                 encoder: SymExprEncoder::new(
                     vcx,
                     &arena,
+                    BTreeMap::from_iter(
+                        (0..arg_count)
+                            .map(|idx| {
+                                (
+                                    Local::from_usize(idx + 1),
+                                    arena.mk_var(
+                                        SymVar::Normal(idx),
+                                        symbolic_execution.symvars[idx],
+                                    ),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
                     fb_shared
                         .symvar_locals
                         .iter()
@@ -265,10 +281,41 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
             for ResultPath {
-                path, pcs, result, ..
+                path,
+                pcs,
+                result,
+                heap,
+                ..
             } in symbolic_execution.paths.iter()
             {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
+
+                // The postcondition may refer to `result`; in this case
+                // `expr` should be considered as the result. The
+                // postcondition is encoded as a fn taking all arguments
+                // of this function plus an extra argument corresponding
+                // Therefore, the symbolic value at argument `body.arg_count`
+                // corresponds to the spec's symbolic input argument.
+                let substs = arena.alloc(Substs::from_iter(
+                    (0..arg_count)
+                        .flat_map(|idx| {
+                            if symbolic_execution.symvars[idx].ref_mutability()
+                                == Some(Mutability::Mut)
+                            {
+                                // TODO: Should this always be gettable?
+                                heap.get(
+                                    &MaybeOldPlace::Current {
+                                        place: Local::from_usize(idx + 1).into(),
+                                    }
+                                    .project_deref(PlaceRepacker::new(&body.body, vcx.tcx())),
+                                )
+                                .map(|expr| (idx, arena.mk_ref(expr, Mutability::Mut)))
+                            } else {
+                                None
+                            }
+                        })
+                        .chain(std::iter::once((arg_count, *result))),
+                ));
 
                 // Generate assertions ensuring that `expr` satisfies each
                 // postcondition attached to the function definition
@@ -276,16 +323,10 @@ impl TaskEncoder for SymImpureEnc {
                     .posts
                     .iter()
                     .flat_map(|p| {
-                        // The postcondition may refer to `result`; in this case
-                        // `expr` should be considered as the result. The
-                        // postcondition is encoded as a fn taking all arguments
-                        // of this function plus an extra argument corresponding
-                        // Therefore, the symbolic value at argument `body.arg_count`
-                        // corresponds to the spec's symbolic input argument.
                         visitor.encoder.encode_pure_spec(
                             visitor.deps,
                             p.clone(),
-                            Some(arena.alloc(Substs::singleton(arg_count, result))),
+                            Some(substs),
                         )
                         .map(|expr| vec![vcx.mk_exhale_stmt(expr)])
                         .unwrap_or_else(|err| {

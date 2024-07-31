@@ -1,6 +1,7 @@
 use abi::FIRST_VARIANT;
 use prusti_rustc_interface::{
     abi,
+    index::IndexVec,
     middle::{
         mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
         ty::{self, GenericArgs, TyKind},
@@ -31,6 +32,7 @@ use crate::encoders::{
     sym_spec::SymSpecEnc,
     ConstEnc, FunctionCallTaskDescription, MirBuiltinEnc, MirBuiltinEncTask, SymFunctionEnc,
 };
+use std::collections::BTreeMap;
 
 mod r#ref;
 mod fn_call;
@@ -45,6 +47,7 @@ type PrustiPathConditionAtom<'sym, 'tcx> =
 pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     pub arena: &'sym SymExContext<'tcx>,
+    old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
 }
@@ -53,12 +56,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     pub fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
         arena: &'sym SymExContext<'tcx>,
+        old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
         symvars: Vec<vir::Expr<'vir>>,
         def_id: DefId,
     ) -> Self {
         Self {
             vcx,
             arena,
+            old_values,
             symvars,
             def_id,
         }
@@ -310,6 +315,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(local, projection, ty)) => {
+                // TODO: Do the right thing here, were currently assuming projection is just deref
+                let sym_var = self.old_values[local];
+                let sym_value = self.arena.mk_projection(ProjectionElem::Deref, sym_var);
+                assert_eq!(sym_value.ty(self.vcx.tcx()).rust_ty(), *ty);
+                self.encode_sym_value(deps, sym_value)
+            }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
@@ -442,11 +454,10 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let clauses = spec
             .into_iter()
             .map(|(pc, value)| {
-                let encoded_value: vir::Expr<'vir> = self
-                    .encode_sym_value_as_prim(deps, value)
-                    .unwrap_or_else(|err| {
-                        panic!("{:?} in {}", err, value);
-                    });
+                let encoded_value: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, value)?;
+                // .unwrap_or_else(|err| {
+                //     panic!("{:?} in {}", err, value);
+                // });
                 if let Some(pc) = self.encode_path_condition(deps, &pc) {
                     let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
                     Ok::<vir::Expr<'vir>, String>(impl_expr)
