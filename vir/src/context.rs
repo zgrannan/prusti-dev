@@ -1,10 +1,8 @@
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
-use std::cell::RefCell;
-use std::fmt::Debug;
+use std::{cell::RefCell, fmt::Debug};
 
 use crate::{data::*, refs::*};
-
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {
@@ -19,7 +17,6 @@ pub struct VirCtxt<'tcx> {
     pub span_stack: Vec<i32>,
     // TODO: span stack
     // TODO: error positions?
-
     /// The compiler's typing context. This allows convenient access to most
     /// of the compiler's APIs. Is only present when running through `rustc`,
     /// but not when running on the server or in tests.
@@ -76,14 +73,21 @@ impl<'tcx> VirCtxt<'tcx> {
         self.arena.reset();
     }
 
-    pub fn apply_ty_substs<'vir>(&'vir self, ty: Type<'vir>, substs: &TySubsts<'vir>) -> Type<'vir> {
+    pub fn apply_ty_substs<'vir>(
+        &'vir self,
+        ty: Type<'vir>,
+        substs: &TySubsts<'vir>,
+    ) -> Type<'vir> {
         match ty {
             TypeData::DomainTypeParam(p) => substs.get(p.name).unwrap_or(&ty),
             TypeData::Domain(name, args) => {
-                let args = args.iter().map(|t| self.apply_ty_substs(t, substs)).collect::<Vec<_>>();
+                let args = args
+                    .iter()
+                    .map(|t| self.apply_ty_substs(t, substs))
+                    .collect::<Vec<_>>();
                 self.alloc(TypeData::Domain(name, &self.alloc(args)))
             }
-            other => other
+            other => other,
         }
     }
 
@@ -107,16 +111,25 @@ impl ProgramRef {
         self.hash
     }
 
-    pub fn get_name(&self) -> &str { "program" }
-    pub fn get_rust_name(&self) -> &str { "rustprogram" }
-    pub fn get_check_mode(&self) -> &str { "check" }
-    pub fn get_name_with_check_mode(&self) -> &str { "program-check" }
+    pub fn get_name(&self) -> &str {
+        "program"
+    }
+    pub fn get_rust_name(&self) -> &str {
+        "rustprogram"
+    }
+    pub fn get_check_mode(&self) -> &str {
+        "check"
+    }
+    pub fn get_name_with_check_mode(&self) -> &str {
+        "program-check"
+    }
     pub fn set_name(&mut self, _name: &str) {}
 }
 
 impl serde::Serialize for ProgramRef {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         with_vcx(|vcx| {
             let program = vcx.get_program(*self);
@@ -126,7 +139,8 @@ impl serde::Serialize for ProgramRef {
 }
 impl<'de> serde::Deserialize<'de> for ProgramRef {
     fn deserialize<D>(d: D) -> Result<Self, D::Error>
-    where D: serde::Deserializer<'de>
+    where
+        D: serde::Deserializer<'de>,
     {
         let program = Program::deserialize(d)?;
         Ok(program.to_ref())

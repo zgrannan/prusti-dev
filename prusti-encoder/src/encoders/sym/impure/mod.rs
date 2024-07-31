@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap},
+    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
     marker::PhantomData,
 };
 
@@ -44,12 +44,13 @@ impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
 pub struct MirImpureEncOutput<'vir> {
-    pub fn_debug_name: String,
+    pub debug_ids: BTreeSet<String>,
     pub method: vir::Method<'vir>,
     pub backwards_method: Option<vir::Method<'vir>>,
     pub backwards_fns_domain: vir::Domain<'vir>,
 }
 use crate::{
+    debug::{fn_debug_name, visualization_data_dir},
     encoder_traits::pure_function_enc::mk_type_assertion,
     encoders::{
         domain::DomainEnc,
@@ -146,13 +147,7 @@ impl TaskEncoder for SymImpureEnc {
 
             let arena = SymExContext::new(vcx.tcx());
 
-            let fn_debug_name = vcx.tcx().def_path_str_with_args(def_id, substs);
-            let debug_dir = std::env::var("PCS_VIS_DATA_DIR").map(|dir| {
-                let mut hasher = DefaultHasher::new();
-                fn_debug_name.hash(&mut hasher);
-                let hash = format!("{:x}", hasher.finish());
-                format!("{}/{}", dir, hash)
-            });
+            let debug_dir = visualization_data_dir(def_id, substs);
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
                 def_id: def_id.as_local().unwrap(),
@@ -169,11 +164,11 @@ impl TaskEncoder for SymImpureEnc {
                         output_facts: body.output_facts,
                     },
                     vcx.tcx(),
-                    debug_dir.clone().ok(),
+                    debug_dir.clone(),
                 ),
                 verifier_semantics: PrustiSemantics(PhantomData),
                 arena: &arena,
-                debug_output_dir: debug_dir.ok(),
+                debug_output_dir: debug_dir,
                 new_symvars_allowed: true,
             });
 
@@ -218,7 +213,10 @@ impl TaskEncoder for SymImpureEnc {
             };
             deps.emit_output_ref(*task_key, output_ref.clone())?;
 
-            let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, caller_def_id));
+            let spec = deps
+                .require_local::<SymSpecEnc>((def_id, substs, caller_def_id))
+                .unwrap();
+            let mut debug_ids = spec.debug_ids();
 
             let mut stmts = Vec::new();
             let mut visitor = EncVisitor {
@@ -400,9 +398,11 @@ impl TaskEncoder for SymImpureEnc {
                 ),
             );
 
+            debug_ids.insert(fn_debug_name(def_id, substs));
+
             Ok((
                 MirImpureEncOutput {
-                    fn_debug_name,
+                    debug_ids,
                     method: vcx.mk_method(
                         method_ident,
                         &[],
@@ -456,16 +456,18 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                 let arg_substs = self
                     .arena
                     .alloc(Substs::from_iter(args.iter().copied().enumerate()));
-                let encoded_pres =
-                    SymSpecEnc::encode(self.arena, self.deps, (*def_id, substs, None))
-                        .pres
-                        .into_iter()
-                        .map(|p| {
-                            self.encoder
-                                .encode_pure_spec(self.deps, p, Some(arg_substs))
-                        })
-                        .collect::<Result<Vec<_>, _>>()
-                        .unwrap();
+                let encoded_pres = self
+                    .deps
+                    .require_local::<SymSpecEnc>((*def_id, substs, None))
+                    .unwrap()
+                    .pres
+                    .into_iter()
+                    .map(|p| {
+                        self.encoder
+                            .encode_pure_spec(self.deps, p, Some(arg_substs))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
                 vec![self.vcx.mk_exhale_stmt(self.vcx.mk_conj(&encoded_pres))]
             }
             Assertion::Eq(expr, val) => {

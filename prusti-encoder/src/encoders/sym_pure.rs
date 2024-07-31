@@ -3,6 +3,7 @@ use prusti_rustc_interface::{
     abi::FIRST_VARIANT,
     ast,
     ast::Local,
+    hir::Mutability,
     index::IndexVec,
     middle::{
         mir::{self, PlaceElem, VarDebugInfo},
@@ -28,7 +29,10 @@ use symbolic_execution::{
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
-use crate::encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc};
+use crate::{
+    debug::fn_debug_name,
+    encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc},
+};
 
 use super::{mir_base::MirBaseEnc, mir_pure::PureKind};
 
@@ -59,25 +63,29 @@ pub struct SymPureEncTask<'tcx> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SymPureEncResult<'sym, 'tcx>(
-    BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
-);
+pub struct SymPureEncResult<'sym, 'tcx> {
+    paths: BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
+    pub debug_id: Option<String>,
+}
 
 impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
     pub fn from_sym_value(value: PrustiSymValue<'sym, 'tcx>) -> Self {
-        Self(vec![(PathConditions::new(), value)].into_iter().collect())
+        Self {
+            paths: vec![(PathConditions::new(), value)].into_iter().collect(),
+            debug_id: None,
+        }
     }
 
     pub fn into_iter(
         self,
     ) -> impl Iterator<Item = (PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
-        self.0.into_iter()
+        self.paths.into_iter()
     }
 
     pub fn iter(
         &self,
     ) -> impl Iterator<Item = &(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
-        self.0.iter()
+        self.paths.iter()
     }
 
     pub fn subst(
@@ -87,12 +95,15 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         substs: &'sym PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
         let mut result = BTreeSet::new();
-        for (path_conditions, value) in self.0 {
+        for (path_conditions, value) in self.paths {
             let path_conditions = path_conditions.subst(arena, tcx, substs);
             let value = value.subst(arena, tcx, substs);
             result.insert((path_conditions, value));
         }
-        Self(result)
+        Self {
+            paths: result,
+            debug_id: self.debug_id,
+        }
     }
 }
 
@@ -280,15 +291,30 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         vir::with_vcx(|vcx| {
             let fn_name = vcx.tcx().def_path_str(def_id);
             if fn_name == "prusti_contracts::old" {
+                // if !matches!(
+                //     args[0].ty(sym_ex.body, vcx.tcx()).ref_mutability(),
+                //     Some(Mutability::Mut)
+                // ) {
+                //     return Some(FunctionCallEffects {
+                //         precondition_assertion: None,
+                //         result: FunctionCallResult::Value {
+                //             value: sym_ex.encode_operand(heap, &args[0]),
+                //             postcondition: None,
+                //         },
+                //         snapshot: None,
+                //     });
+                // }
                 match args[0] {
                     mir::Operand::Move(place) => {
-                        match sym_ex.body.basic_blocks[location.block].statements
+                        match &sym_ex.body.basic_blocks[location.block].statements
                             [location.statement_index - 1]
                             .kind
                         {
                             mir::StatementKind::Assign(box (
                                 left,
-                                mir::Rvalue::Use(mir::Operand::Copy(place)),
+                                mir::Rvalue::Use(
+                                    mir::Operand::Copy(place) | mir::Operand::Move(place),
+                                ),
                             )) => {
                                 return Some(FunctionCallEffects {
                                     result: FunctionCallResult::Value {
@@ -305,7 +331,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                                     snapshot: None,
                                 })
                             }
-                            _ => todo!(),
+                            kind => todo!("For {place:?} kind {kind:?}"),
                         }
                     }
                     // mir::Operand::Constant(c) => sym_ex.arena.mk_constant(c.into()),
@@ -433,7 +459,7 @@ impl SymPureEnc {
                 ),
                 verifier_semantics: PrustiSemantics(PhantomData),
                 arena: &arena,
-                debug_output_dir,
+                debug_output_dir: debug_output_dir.clone(),
                 new_symvars_allowed: false,
             });
             assert_eq!(
@@ -442,13 +468,15 @@ impl SymPureEnc {
                 "The symvars for pure {:?} don't correspond to its arguments",
                 def_id
             );
-            SymPureEncResult(
-                symbolic_execution
+            eprintln!("{:?}", fn_debug_name(def_id, substs));
+            SymPureEncResult {
+                paths: symbolic_execution
                     .paths
                     .into_iter()
                     .map(|path| (path.pcs, path.result))
                     .collect(),
-            )
+                debug_id: Some(fn_debug_name(def_id, substs)),
+            }
         })
     }
 }

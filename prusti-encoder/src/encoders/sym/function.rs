@@ -1,4 +1,4 @@
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, BTreeSet};
 
 use cfg_if::cfg_if;
 use prusti_rustc_interface::{
@@ -9,10 +9,12 @@ use prusti_rustc_interface::{
     },
     span::def_id::DefId,
 };
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::BTreeMap,
+    hash::{Hash, Hasher},
+};
 use symbolic_execution::{context::SymExContext, value::SymVar};
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
-use std::collections::BTreeMap;
 use vir::{
     vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
 };
@@ -38,6 +40,12 @@ pub struct SymFunctionEncOutputRef<'vir> {
     pub function_ident: FunctionIdent<'vir, UnknownArity<'vir>>,
 }
 
+#[derive(Clone)]
+pub struct SymFunctionEncOutput<'vir> {
+    pub function: Function<'vir>,
+    pub debug_ids: BTreeSet<String>,
+}
+
 impl TaskEncoder for SymFunctionEnc {
     encoder_cache!(SymFunctionEnc);
     type TaskDescription<'vir> = FunctionCallTaskDescription<'vir>;
@@ -51,7 +59,7 @@ impl TaskEncoder for SymFunctionEnc {
     type OutputRef<'vir> = SymFunctionEncOutputRef<'vir>
         where Self: 'vir;
 
-    type OutputFullLocal<'vir> = (Function<'vir>, String);
+    type OutputFullLocal<'vir> = SymFunctionEncOutput<'vir>;
 
     type OutputFullDependency<'vir> = ()
         where Self: 'vir;
@@ -138,7 +146,10 @@ impl TaskEncoder for SymFunctionEnc {
             );
             deps.emit_output_ref(*task_key, SymFunctionEncOutputRef { function_ident })?;
             let arena = SymExContext::new(vcx.tcx());
-            let spec = SymSpecEnc::encode(&arena, deps, (def_id, substs, None));
+            let spec = deps
+                .require_local::<SymSpecEnc>((def_id, substs, None))
+                .unwrap();
+            let mut debug_ids = spec.debug_ids();
             let symvars: Vec<_> = decls
                 .iter()
                 .skip(ty_arg_decls.len())
@@ -192,8 +203,7 @@ impl TaskEncoder for SymFunctionEnc {
             } else {
                 None
             };
-            let encoder =
-                SymExprEncoder::new(vcx, &arena, BTreeMap::default(), symvars, def_id);
+            let encoder = SymExprEncoder::new(vcx, &arena, BTreeMap::default(), symvars, def_id);
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result
@@ -239,7 +249,14 @@ impl TaskEncoder for SymFunctionEnc {
                 ),
                 body,
             );
-            Ok(((function, debug_fn_name), ()))
+            debug_ids.insert(debug_fn_name);
+            Ok((
+                SymFunctionEncOutput {
+                    function,
+                    debug_ids,
+                },
+                (),
+            ))
         })
     }
 }

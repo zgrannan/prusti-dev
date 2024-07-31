@@ -9,14 +9,20 @@ extern crate rustc_middle;
 extern crate rustc_serialize;
 extern crate rustc_type_ir;
 
+mod debug;
 mod encoders;
 mod encoder_traits;
+mod sctx;
 pub mod request;
 
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::BTreeSet,
+    hash::{Hash, Hasher},
+};
 
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::{hir, middle::ty};
+use symbolic_execution::context::SymExContext;
 use task_encoder::TaskEncoder;
 
 use crate::encoders::{
@@ -35,6 +41,7 @@ pub fn test_entrypoint<'tcx>(
 ) -> request::RequestWithContext {
     crate::encoders::init_def_spec(def_spec);
     vir::init_vcx(vir::VirCtxt::new(tcx, body));
+    sctx::init_scx(SymExContext::new(tcx));
 
     // TODO: this should be a "crate" encoder, which will deps.require all the methods in the crate
 
@@ -72,7 +79,7 @@ pub fn test_entrypoint<'tcx>(
         }
     }
 
-    let mut function_names = Vec::new();
+    let mut function_names = BTreeSet::default();
 
     fn header(code: &mut String, title: &str) {
         code.push_str("// -----------------------------\n");
@@ -88,6 +95,9 @@ pub fn test_entrypoint<'tcx>(
     let mut program_methods = vec![];
 
     header(&mut viper_code, "methods");
+    for output in crate::encoders::sym_spec::SymSpecEnc::all_outputs() {
+        function_names.extend(output.debug_ids());
+    }
     for output in crate::encoders::SymImpureEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.method));
         viper_code.push_str(&format!("{:?}\n", output.backwards_fns_domain));
@@ -96,7 +106,7 @@ pub fn test_entrypoint<'tcx>(
             program_methods.push(backwards_method);
             viper_code.push_str(&format!("{:?}\n", backwards_method));
         }
-        function_names.push(output.fn_debug_name);
+        function_names.extend(output.debug_ids);
         program_domains.push(output.backwards_fns_domain);
     }
 
@@ -107,10 +117,10 @@ pub fn test_entrypoint<'tcx>(
     }
 
     header(&mut viper_code, "sym functions");
-    for (function, debug_name) in SymFunctionEnc::all_outputs() {
-        viper_code.push_str(&format!("{:?}\n", function));
-        program_functions.push(function);
-        function_names.push(debug_name);
+    for output in SymFunctionEnc::all_outputs() {
+        viper_code.push_str(&format!("{:?}\n", output.function));
+        program_functions.push(output.function);
+        function_names.extend(output.debug_ids);
     }
 
     header(&mut viper_code, "MIR builtins");
@@ -203,6 +213,7 @@ pub fn test_entrypoint<'tcx>(
         let function_map: std::collections::HashMap<String, String> = function_names
             .into_iter()
             .map(|name| {
+                eprintln!("NAME: {name:?}");
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 name.hash(&mut hasher);
                 let hash = format!("{:x}", hasher.finish());

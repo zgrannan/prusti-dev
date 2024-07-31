@@ -317,7 +317,10 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(local, projection, ty)) => {
                 // TODO: Do the right thing here, were currently assuming projection is just deref
-                let sym_var = self.old_values[local];
+                let sym_var = self
+                    .old_values
+                    .get(local)
+                    .ok_or("Can't find local".to_string())?;
                 let sym_value = self.arena.mk_projection(ProjectionElem::Deref, sym_var);
                 assert_eq!(sym_value.ty(self.vcx.tcx()).rust_ty(), *ty);
                 self.encode_sym_value(deps, sym_value)
@@ -378,12 +381,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             PathConditionPredicate::Postcondition(def_id, substs, args) => {
                 let args = args.iter().copied().chain(std::iter::once(pc.expr));
                 let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
-                let encoded_posts = SymSpecEnc::encode(self.arena, deps, (*def_id, substs, None))
+                let encoded_posts = deps
+                    .require_local::<SymSpecEnc>((*def_id, substs, None))
+                    .unwrap()
                     .posts
                     .into_iter()
                     .map(|p| self.encode_pure_spec(deps, p, Some(arg_substs)))
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
+                    .collect::<Result<Vec<_>, _>>()?;
                 Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
             }
             PathConditionPredicate::Eq(target, ty) => {
