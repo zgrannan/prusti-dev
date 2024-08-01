@@ -113,9 +113,7 @@ pub fn mk_backwards_fn_axioms<
             .iter()
             .enumerate()
             .map(|(i, pledge)| {
-                let pledge = pledge
-                    .clone()
-                    .subst(encoder.arena, vcx.tcx(), &pledge_axiom_substs);
+                let pledge = pledge.clone().subst(&encoder.arena, &pledge_axiom_substs);
                 vcx.mk_domain_axiom(
                     vir::vir_format_identifier!(
                         vcx,
@@ -131,7 +129,7 @@ pub fn mk_backwards_fn_axioms<
                                 .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
                                 .collect::<Vec<_>>(),
                         ), // TODO, maybe too imprecise?
-                        encoder.encode_pure_spec(deps, pledge, None).unwrap(),
+                        encoder.encode_pure_spec(deps, pledge).unwrap(),
                     ),
                 )
             })
@@ -237,22 +235,15 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
             let mut path_stmts = vec![];
             for (idx, expr) in path.backwards_facts.0.iter() {
                 eprintln!("backwards_fact: {}", expr);
-                let expr = expr.subst(encoder.arena, vcx.tcx(), &backwards_substs);
+                let expr = expr.subst(encoder.arena, &backwards_substs);
                 let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
                 let expr = encoder.encode_sym_value(deps, expr).unwrap();
                 let back_local = get_back_result(*idx);
                 path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
                 for pledge in pledges.iter() {
-                    let pledge = pledge
-                        .clone()
-                        .subst(encoder.arena, vcx.tcx(), &pledge_substs);
-                    path_stmts.push(
-                        vcx.mk_exhale_stmt(
-                            encoder
-                                .encode_pure_spec(deps, pledge.clone(), None)
-                                .unwrap(),
-                        ),
-                    );
+                    let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
+                    path_stmts
+                        .push(vcx.mk_exhale_stmt(encoder.encode_pure_spec(deps, pledge).unwrap()));
                 }
             }
             match encoder.encode_path_condition(deps, &path.pcs) {

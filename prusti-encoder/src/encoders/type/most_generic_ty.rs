@@ -31,7 +31,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Uint(kind) => format!("UInt_{}", kind.name_str()),
             TyKind::Float(kind) => format!("Float_{}", kind.name_str()),
             TyKind::Str => String::from("String"),
-            TyKind::Adt(adt, _) => vcx.tcx().item_name(adt.did()).to_ident_string(),
+            TyKind::Adt(adt, _) => vcx.tcx().def_path_str(adt.did()),
             TyKind::Tuple(params) => format!("{}_Tuple", params.len()),
             TyKind::Never => String::from("Never"),
             TyKind::Ref(_, _, m) => {

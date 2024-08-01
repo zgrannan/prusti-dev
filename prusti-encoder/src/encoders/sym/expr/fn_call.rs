@@ -6,7 +6,10 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
-use symbolic_execution::value::BackwardsFn;
+use symbolic_execution::{
+    value::BackwardsFn,
+    visualization::{OutputMode, VisFormat},
+};
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 
 use crate::encoders::{
@@ -78,6 +81,10 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .require_local::<LiftedFuncAppTyParamsEnc>((mono, substs))
             .unwrap();
         let encoded_args = encoded_ty_args.iter().map(|ty| ty.expr(self.vcx));
+        eprintln!(
+            "Encoding {:?}",
+            args.to_vis_string(Some(self.vcx.tcx()), &[], OutputMode::Text)
+        );
         let encoded_fn_args = fn_arg_tys
             .into_iter()
             .zip(args.iter())

@@ -91,13 +91,12 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
     pub fn subst(
         self,
         arena: &'sym SymExContext<'tcx>,
-        tcx: ty::TyCtxt<'tcx>,
         substs: &'sym PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
         let mut result = BTreeSet::new();
         for (path_conditions, value) in self.paths {
-            let path_conditions = path_conditions.subst(arena, tcx, substs);
-            let value = value.subst(arena, tcx, substs);
+            let path_conditions = path_conditions.subst(arena, substs);
+            let value = value.subst(arena, substs);
             result.insert((path_conditions, value));
         }
         Self {
@@ -196,8 +195,8 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
     ) -> Self {
         match self {
             PrustiSymValSyntheticData::And(l, r) => arena.alloc(PrustiSymValSyntheticData::And(
-                l.subst(arena, tcx, substs),
-                r.subst(arena, tcx, substs),
+                l.subst(arena, substs),
+                r.subst(arena, substs),
             )),
             PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
                 arena.alloc(PrustiSymValSyntheticData::PureFnCall(
@@ -206,16 +205,16 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
                     arena.alloc_slice(
                         &(args
                             .iter()
-                            .map(|arg| arg.subst(arena, tcx, substs))
+                            .map(|arg| arg.subst(arena, substs))
                             .collect::<Vec<_>>()),
                     ),
                 ))
             }
             PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
                 arena.alloc(PrustiSymValSyntheticData::If(
-                    cond.subst(arena, tcx, substs),
-                    then_expr.subst(arena, tcx, substs),
-                    else_expr.subst(arena, tcx, substs),
+                    cond.subst(arena, substs),
+                    then_expr.subst(arena, substs),
+                    else_expr.subst(arena, substs),
                 ))
             }
             PrustiSymValSyntheticData::Result(_) => todo!(),
@@ -310,26 +309,39 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             [location.statement_index - 1]
                             .kind
                         {
-                            mir::StatementKind::Assign(box (
-                                left,
-                                mir::Rvalue::Use(
-                                    mir::Operand::Copy(place) | mir::Operand::Move(place),
-                                ),
-                            )) => {
-                                return Some(FunctionCallEffects {
-                                    result: FunctionCallResult::Value {
-                                        value: sym_ex.arena.mk_synthetic(sym_ex.arena.alloc(
+                            mir::StatementKind::Assign(box (left, e)) => {
+                                assert!(left.local == place.local);
+                                assert!(left.projection == place.projection);
+                                let value = match e {
+                                    mir::Rvalue::Use(
+                                        mir::Operand::Copy(place) | mir::Operand::Move(place),
+                                    ) => sym_ex.arena.mk_synthetic(sym_ex.arena.alloc(
+                                        PrustiSymValSyntheticData::Old(
+                                            place.local,
+                                            place.projection.to_vec(),
+                                            place.ty(sym_ex.body, vcx.tcx()).ty,
+                                        ),
+                                    )),
+                                    mir::Rvalue::Ref(_, _, place) => {
+                                        let e = sym_ex.arena.mk_synthetic(sym_ex.arena.alloc(
                                             PrustiSymValSyntheticData::Old(
                                                 place.local,
                                                 place.projection.to_vec(),
                                                 place.ty(sym_ex.body, vcx.tcx()).ty,
                                             ),
-                                        )),
+                                        ));
+                                        sym_ex.arena.mk_ref(e, Mutability::Not)
+                                    }
+                                    _ => todo!(),
+                                };
+                                return Some(FunctionCallEffects {
+                                    result: FunctionCallResult::Value {
+                                        value,
                                         postcondition: None,
                                     },
                                     precondition_assertion: None,
                                     snapshot: None,
-                                })
+                                });
                             }
                             kind => todo!("For {place:?} kind {kind:?}"),
                         }

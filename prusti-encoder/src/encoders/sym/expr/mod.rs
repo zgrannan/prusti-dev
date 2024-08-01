@@ -53,6 +53,18 @@ pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
 }
 
 impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
+    pub fn with_old_values(
+        &self,
+        old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
+    ) -> Self {
+        Self {
+            old_values,
+            arena: self.arena,
+            vcx: self.vcx,
+            symvars: self.symvars.clone(),
+            def_id: self.def_id,
+        }
+    }
     pub fn new(
         vcx: &'vir vir::VirCtxt<'tcx>,
         arena: &'sym SymExContext<'tcx>,
@@ -316,12 +328,21 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(local, projection, ty)) => {
-                // TODO: Do the right thing here, were currently assuming projection is just deref
-                let sym_var = self
-                    .old_values
-                    .get(local)
-                    .ok_or("Can't find local".to_string())?;
-                let sym_value = self.arena.mk_projection(ProjectionElem::Deref, sym_var);
+                let mut sym_value = self.old_values.get(local).cloned().unwrap_or_else(|| {
+                    self.arena.mk_internal_error(
+                        format!(
+                            "{:?} Can't find local {:?} in values {:?}",
+                            self.def_id,
+                            local,
+                            self.old_values.keys()
+                        ),
+                        *ty,
+                        None,
+                    )
+                });
+                for p in projection {
+                    sym_value = self.arena.mk_projection(*p, sym_value);
+                }
                 assert_eq!(sym_value.ty(self.vcx.tcx()).rust_ty(), *ty);
                 self.encode_sym_value(deps, sym_value)
             }
@@ -378,15 +399,28 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir, String> {
         let result = match &pc.predicate {
-            PathConditionPredicate::Postcondition(def_id, substs, args) => {
-                let args = args.iter().copied().chain(std::iter::once(pc.expr));
+            PathConditionPredicate::Postcondition {
+                def_id,
+                substs,
+                pre_values,
+                post_values,
+            } => {
+                let args = post_values.iter().copied().chain(std::iter::once(pc.expr));
                 let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
                 let encoded_posts = deps
                     .require_local::<SymSpecEnc>((*def_id, substs, None))
                     .unwrap()
                     .posts
                     .into_iter()
-                    .map(|p| self.encode_pure_spec(deps, p, Some(arg_substs)))
+                    .map(|p| {
+                        self.with_old_values(BTreeMap::from_iter(
+                            pre_values
+                                .iter()
+                                .enumerate()
+                                .map(|(i, v)| (mir::Local::from_usize(i + 1), *v)),
+                        ))
+                        .encode_pure_spec(deps, p.subst(&self.arena, &arg_substs))
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
             }
@@ -448,13 +482,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         &'slf self,
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         spec: SymPureEncResult<'sym, 'tcx>,
-        substs: Option<&'sym PrustiSubsts<'sym, 'tcx>>,
     ) -> EncodePureSpecResult<'vir, String> {
-        let spec = if let Some(substs) = substs {
-            spec.clone().subst(self.arena, self.vcx.tcx(), substs)
-        } else {
-            spec.clone()
-        };
         let clauses = spec
             .into_iter()
             .map(|(pc, value)| {

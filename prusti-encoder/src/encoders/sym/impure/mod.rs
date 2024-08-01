@@ -253,7 +253,7 @@ impl TaskEncoder for SymImpureEnc {
             stmts.extend(fb_shared.type_assertion_stmts.clone());
 
             for pre in spec.pres.into_iter() {
-                match visitor.encoder.encode_pure_spec(visitor.deps, pre, None) {
+                match visitor.encoder.encode_pure_spec(visitor.deps, pre) {
                     Ok(pre) => {
                         stmts.push(vcx.mk_inhale_stmt(pre));
                     }
@@ -323,8 +323,7 @@ impl TaskEncoder for SymImpureEnc {
                     .flat_map(|p| {
                         visitor.encoder.encode_pure_spec(
                             visitor.deps,
-                            p.clone(),
-                            Some(substs),
+                            p.clone().subst(&arena, substs),
                         )
                         .map(|expr| vec![vcx.mk_exhale_stmt(expr)])
                         .unwrap_or_else(|err| {
@@ -464,7 +463,7 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     .into_iter()
                     .map(|p| {
                         self.encoder
-                            .encode_pure_spec(self.deps, p, Some(arg_substs))
+                            .encode_pure_spec(self.deps, p.subst(self.arena, arg_substs))
                     })
                     .collect::<Result<Vec<_>, _>>()
                     .unwrap();

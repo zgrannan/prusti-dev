@@ -203,7 +203,20 @@ impl TaskEncoder for SymFunctionEnc {
             } else {
                 None
             };
-            let encoder = SymExprEncoder::new(vcx, &arena, BTreeMap::default(), symvars, def_id);
+            let encoder = SymExprEncoder::new(
+                vcx,
+                &arena,
+                (0..inputs.len())
+                    .map(|i| {
+                        (
+                            mir::Local::from_usize(i + 1),
+                            arena.mk_var(SymVar::Normal(i), inputs[i]),
+                        )
+                    })
+                    .collect(),
+                symvars,
+                def_id,
+            );
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result
@@ -232,7 +245,7 @@ impl TaskEncoder for SymFunctionEnc {
                         .chain(
                             spec.pres
                                 .into_iter()
-                                .map(|s| encoder.encode_pure_spec(deps, s, None).unwrap()),
+                                .map(|s| encoder.encode_pure_spec(deps, s).unwrap()),
                         )
                         .collect::<Vec<_>>(),
                 ),
@@ -242,7 +255,7 @@ impl TaskEncoder for SymFunctionEnc {
                         .into_iter()
                         .map(|s| {
                             encoder
-                                .encode_pure_spec(deps, s, Some(&postcondition_substs))
+                                .encode_pure_spec(deps, s.subst(&arena, &postcondition_substs))
                                 .unwrap()
                         })
                         .collect::<Vec<_>>(),
