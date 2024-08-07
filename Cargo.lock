@@ -1656,6 +1656,7 @@ dependencies = [
  "derive_more",
  "dot",
  "itertools 0.12.1",
+ "polonius-engine",
  "regex",
  "serde",
  "serde_derive",
@@ -1791,6 +1792,17 @@ dependencies = [
  "rustix 0.38.25",
  "tracing 0.1.40",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "polonius-engine"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4e8e505342045d397d0b6674dcb82d6faf5cf40484d30eeb88fc82ef14e903f"
+dependencies = [
+ "datafrog",
+ "log",
+ "rustc-hash",
 ]
 
 [[package]]

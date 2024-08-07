@@ -284,7 +284,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
-        heap: &HeapData<'sym, 'tcx, Self::SymValSynthetic>,
+        heap: &mut HeapData<'sym, 'tcx, Self::SymValSynthetic>,
         args: &Vec<mir::Operand<'tcx>>,
     ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic>> {
         vir::with_vcx(|vcx| {
