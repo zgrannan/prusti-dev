@@ -305,15 +305,15 @@ impl TaskEncoder for SymImpureEnc {
                                     &MaybeOldPlace::Current {
                                         place: Local::from_usize(idx + 1).into(),
                                     }
-                                    .project_deref(PlaceRepacker::new(&body.body, vcx.tcx())),
                                 )
-                                .map(|expr| (idx, arena.mk_ref(expr, Mutability::Mut)))
+                                .map(|expr| (idx, expr))
                             } else {
                                 None
                             }
                         })
                         .chain(std::iter::once((arg_count, *result))),
                 ));
+                eprintln!("substs: {substs}");
 
                 // Generate assertions ensuring that `expr` satisfies each
                 // postcondition attached to the function definition
