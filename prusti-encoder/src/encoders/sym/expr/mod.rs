@@ -149,7 +149,6 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let ty = deps
                     .require_local::<RustTySnapshotsEnc>(kind.ty().rust_ty())
                     .unwrap();
-                eprintln!("kind: {:?}", kind);
                 let sl = match kind.variant_idx() {
                     Some(idx) if kind.is_enum(self.vcx.tcx()) => {
                         ty.generic_snapshot

@@ -213,7 +213,6 @@ pub fn test_entrypoint<'tcx>(
         let function_map: std::collections::HashMap<String, String> = function_names
             .into_iter()
             .map(|name| {
-                eprintln!("NAME: {name:?}");
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 name.hash(&mut hasher);
                 let hash = format!("{:x}", hasher.finish());

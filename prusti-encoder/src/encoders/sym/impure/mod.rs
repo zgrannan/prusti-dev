@@ -313,7 +313,6 @@ impl TaskEncoder for SymImpureEnc {
                         })
                         .chain(std::iter::once((arg_count, *result))),
                 ));
-                eprintln!("substs: {substs}");
 
                 // Generate assertions ensuring that `expr` satisfies each
                 // postcondition attached to the function definition

@@ -480,7 +480,6 @@ impl SymPureEnc {
                 "The symvars for pure {:?} don't correspond to its arguments",
                 def_id
             );
-            eprintln!("{:?}", fn_debug_name(def_id, substs));
             SymPureEncResult {
                 paths: symbolic_execution
                     .paths
