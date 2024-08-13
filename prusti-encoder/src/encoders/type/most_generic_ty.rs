@@ -49,6 +49,7 @@ impl<'tcx> MostGenericTy<'tcx> {
                 }
             }
             TyKind::Param(_) => String::from("Param"),
+            TyKind::Array(..) => String::from("Array"),
             other => unimplemented!("get_domain_base_name for {:?}", other),
         }
     }
