@@ -66,11 +66,17 @@ pub fn mk_backwards_fn_axioms<
         let backward_axiom_qvars = vcx.alloc_slice(
             &ctxt
                 .shared
-                .arg_locals()
-                .into_iter()
-                .copied()
-                .chain(std::iter::once(ctxt.shared.result_local))
-                .map(|l| vcx.mk_local_decl(l.name, l.ty))
+                .ty_args
+                .iter()
+                .map(|l| l.decl())
+                .chain(
+                    ctxt.shared
+                        .arg_locals()
+                        .into_iter()
+                        .copied()
+                        .chain(std::iter::once(ctxt.shared.result_local))
+                        .map(|l| vcx.mk_local_decl(l.name, l.ty)),
+                )
                 .collect::<Vec<_>>(),
         );
 
@@ -90,7 +96,7 @@ pub fn mk_backwards_fn_axioms<
                             def_id: ctxt.def_id,
                             substs: ctxt.substs,
                             caller_def_id: ctxt.caller_def_id,
-                            arg_snapshots: arg_snapshots,
+                            arg_snapshots,
                             return_snapshot: back_return_snapshot,
                             arg_index: i,
                         }),
@@ -106,7 +112,7 @@ pub fn mk_backwards_fn_axioms<
             .output_ref
             .backwards_fns
             .iter()
-            .map(|(i, f)| f.apply(vcx, backward_axiom_args))
+            .map(|(_, f)| f.0.apply(vcx, backward_axiom_args))
             .collect::<Vec<_>>();
 
         let pledge_axioms = pledges
@@ -140,7 +146,7 @@ pub fn mk_backwards_fn_axioms<
             .backwards_fns
             .iter()
             .map(|(i, f)| {
-                let call = f.apply(vcx, backward_axiom_args);
+                let call = f.0.apply(vcx, backward_axiom_args);
                 let typeof_function_arg = deps
                     .require_ref::<DomainEnc>(extract_type_params(vcx.tcx(), ctxt.symvars[*i]).0)
                     .unwrap()
@@ -156,7 +162,8 @@ pub fn mk_backwards_fn_axioms<
                         backward_axiom_qvars,
                         vcx.alloc_slice(&[vcx.mk_trigger(vcx.alloc_slice(&[call]))]),
                         vcx.mk_eq_expr(
-                            typeof_function_arg.apply(vcx, [backward_axiom_args[*i]]),
+                            typeof_function_arg
+                                .apply(vcx, [backward_axiom_args[*i + ctxt.shared.ty_args.len()]]), // Skip the type arguments
                             typeof_function_arg.apply(vcx, [call]),
                         ),
                     ),

@@ -36,9 +36,30 @@ pub enum MirImpureEncError {
 }
 
 #[derive(Clone, Debug)]
+pub struct BackwardsFnRef<'vir>(pub vir::FunctionIdent<'vir, UnknownArity<'vir>>);
+
+impl<'vir> BackwardsFnRef<'vir> {
+    pub fn apply(
+        &self,
+        ty_args: Vec<vir::Expr<'vir>>,
+        args: Vec<vir::Expr<'vir>>,
+    ) -> vir::Expr<'vir> {
+        vir::with_vcx(|vcx| {
+            let args = vcx.alloc_slice(
+                &ty_args
+                    .into_iter()
+                    .chain(args.into_iter())
+                    .collect::<Vec<_>>(),
+            );
+            self.0.apply(vcx, args)
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct MirImpureEncOutputRef<'vir> {
     pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
-    pub backwards_fns: BTreeMap<usize, vir::FunctionIdent<'vir, UnknownArity<'vir>>>,
+    pub backwards_fns: BTreeMap<usize, BackwardsFnRef<'vir>>,
 }
 impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 
@@ -175,15 +196,13 @@ impl TaskEncoder for SymImpureEnc {
             let fb_shared =
                 ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
 
-            let arg_locals = &fb_shared.symvar_locals[0..arg_count];
-
             let backwards_fn_arity = UnknownArity::new(
                 vcx.alloc_slice(
-                    &arg_locals
-                        .iter()
-                        .cloned()
-                        .chain(std::iter::once(fb_shared.result_local))
+                    &fb_shared
+                        .ty_and_arg_decls()
+                        .into_iter()
                         .map(|l| l.ty)
+                        .chain(std::iter::once(fb_shared.result_local.ty))
                         .collect::<Vec<_>>(),
                 ),
             );
@@ -195,11 +214,11 @@ impl TaskEncoder for SymImpureEnc {
                             vir::vir_format_identifier!(vcx, "backwards_{}_{}", method_name, idx);
                         Some((
                             idx,
-                            vir::FunctionIdent::new(
+                            BackwardsFnRef(vir::FunctionIdent::new(
                                 ident,
                                 backwards_fn_arity,
                                 fb_shared.symvar_locals[idx].ty,
-                            ),
+                            )),
                         ))
                     } else {
                         None
@@ -301,11 +320,9 @@ impl TaskEncoder for SymImpureEnc {
                                 == Some(Mutability::Mut)
                             {
                                 // TODO: Should this always be gettable?
-                                heap.get(
-                                    &MaybeOldPlace::Current {
-                                        place: Local::from_usize(idx + 1).into(),
-                                    }
-                                )
+                                heap.get(&MaybeOldPlace::Current {
+                                    place: Local::from_usize(idx + 1).into(),
+                                })
                                 .map(|expr| (idx, expr))
                             } else {
                                 None
@@ -391,7 +408,7 @@ impl TaskEncoder for SymImpureEnc {
                 vcx.alloc_slice(
                     &backwards_fn_idents
                         .iter()
-                        .map(|(_, f)| vcx.mk_domain_function(*f, false))
+                        .map(|(_, f)| vcx.mk_domain_function(f.0, false))
                         .collect::<Vec<_>>(),
                 ),
             );

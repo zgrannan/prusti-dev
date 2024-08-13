@@ -75,6 +75,7 @@ use crate::encoders::{
 use super::SymImpureEnc;
 pub struct ForwardBackwardsShared<'vir, 'tcx> {
     pub symvar_locals: Vec<vir::Local<'vir>>,
+    pub ty_args: &'vir [LiftedGeneric<'vir>],
     pub result_local: vir::Local<'vir>,
     pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
     pub decl_stmts: Vec<vir::Stmt<'vir>>,
@@ -87,6 +88,20 @@ pub struct ForwardBackwardsShared<'vir, 'tcx> {
 impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
     pub fn arg_locals(&self) -> &[vir::Local<'vir>] {
         &self.symvar_locals[..self.arg_count]
+    }
+
+    pub fn ty_and_arg_decls(&self) -> Vec<vir::LocalDecl<'vir>> {
+        vir::with_vcx(|vcx| {
+            self.ty_args
+                .iter()
+                .map(|l| l.decl())
+                .chain(
+                    self.arg_locals()
+                        .iter()
+                        .map(|l| vcx.mk_local_decl(l.name, l.ty)),
+                )
+                .collect()
+        })
     }
 
     pub fn new<'sym, 'deps>(
@@ -114,7 +129,7 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
                     )
                 })
                 .collect::<Vec<_>>();
-            let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
+            let ty_args = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut type_assertion_stmts = vec![];
             for (local, symvar) in symvar_locals.iter().zip(symex_result.symvars.iter()) {
                 if let Some(expr) =
@@ -131,7 +146,7 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
                     .snapshot,
             );
             let mut decl_stmts = vec![];
-            for arg in ty_arg_decls {
+            for arg in ty_args {
                 decl_stmts.push(vcx.mk_local_decl_stmt(arg.decl(), None));
             }
 
@@ -145,6 +160,7 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
             }
             Self {
                 arg_count: body.arg_count,
+                ty_args,
                 symvar_locals,
                 type_assertion_stmts,
                 decl_stmts,

@@ -40,7 +40,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 backwards_fn.caller_def_id,
             ))
             .unwrap();
-        let back_fn = output_ref.backwards_fns[&backwards_fn.arg_index];
+        let back_fn = &output_ref.backwards_fns[&backwards_fn.arg_index];
+        let mono = cfg!(feature = "mono_function_encoding");
+        let ty_args = deps
+            .require_local::<LiftedFuncAppTyParamsEnc>((mono, backwards_fn.substs))
+            .unwrap()
+            .into_iter()
+            .map(|ty| ty.expr(self.vcx))
+            .collect::<Vec<_>>();
         let encoded_args = backwards_fn
             .arg_snapshots
             .iter()
@@ -48,7 +55,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .chain(std::iter::once(backwards_fn.return_snapshot))
             .map(|arg| self.encode_sym_value(deps, arg))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(back_fn.apply(self.vcx, &encoded_args))
+        Ok(back_fn.apply(ty_args, encoded_args))
     }
     pub fn encode_fn_call<'enc, T: TaskEncoder<EncodingError = String>>(
         &self,
