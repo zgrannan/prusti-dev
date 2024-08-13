@@ -4,6 +4,7 @@
 #![feature(never_type)]
 #![feature(let_chains)]
 #![allow(unused_imports)]
+#![feature(return_position_impl_trait_in_trait)]
 
 extern crate rustc_middle;
 extern crate rustc_serialize;

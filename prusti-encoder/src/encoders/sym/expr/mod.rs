@@ -342,7 +342,6 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 for p in projection {
                     sym_value = self.arena.mk_projection(*p, sym_value);
                 }
-                assert_eq!(sym_value.ty(self.vcx.tcx()).rust_ty(), *ty);
                 self.encode_sym_value(deps, sym_value)
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {

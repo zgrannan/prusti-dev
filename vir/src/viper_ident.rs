@@ -1,9 +1,9 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::VirCtxt;
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize, Hash, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct ViperIdent<'vir>(&'vir str);
 
@@ -13,18 +13,35 @@ impl Display for ViperIdent<'_> {
     }
 }
 
-impl <'vir> ViperIdent<'vir> {
-
+impl<'vir> ViperIdent<'vir> {
     pub fn new(ident: &'vir str) -> ViperIdent<'vir> {
         assert!(is_valid_identifier(ident));
         ViperIdent(ident)
     }
 
-    pub fn sanitize(vcx: &'vir VirCtxt<'_>,  ident: String) -> ViperIdent<'vir> {
-        let ident = sanitize_str(&ident);
+    pub fn sanitize(vcx: &'vir VirCtxt<'_>, ident: String) -> ViperIdent<'vir> {
+        let ident = Self::sanitize_str(&ident);
         // Just a sanity check, if this fails there is a problem in `sanitize`
         assert!(is_valid_identifier(ident.as_str()));
         ViperIdent(vcx.alloc_str(&ident))
+    }
+
+    pub fn sanitize_str(s: &str) -> String {
+        s.chars()
+            .map(|c| sanitize_char(c).unwrap_or_else(|| c.to_string()))
+            .collect()
+    }
+
+    pub fn sanitize_with_underscores(s: &str) -> String {
+        s.chars()
+            .map(|c| {
+                if sanitize_char(c).is_some() {
+                    "_".to_string()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
     }
 
     pub fn to_str(&self) -> &'vir str {
@@ -53,12 +70,6 @@ fn sanitize_char(c: char) -> Option<String> {
         '}' => Some("$rbrace$".to_string()),
         _ => None,
     }
-}
-
-fn sanitize_str(s: &str) -> String {
-    s.chars()
-        .map(|c| sanitize_char(c).unwrap_or_else(|| c.to_string()))
-        .collect()
 }
 
 fn is_valid_identifier(s: &str) -> bool {

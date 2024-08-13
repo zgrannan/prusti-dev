@@ -16,7 +16,8 @@ use std::{
 use symbolic_execution::{context::SymExContext, value::SymVar};
 use task_encoder::{encoder_cache, OutputRefAny, TaskEncoder};
 use vir::{
-    vir_format, vir_format_identifier, CallableIdent, Function, FunctionIdent, UnknownArity,
+    vir_format, vir_format_identifier, CallableIdent, FullIdent, Function, FunctionIdent,
+    Identifiable, ShortIdent, UnknownArity, ViperIdent,
 };
 
 use crate::{
@@ -44,6 +45,36 @@ pub struct SymFunctionEncOutputRef<'vir> {
 pub struct SymFunctionEncOutput<'vir> {
     pub function: Function<'vir>,
     pub debug_ids: BTreeSet<String>,
+}
+
+struct PureFunctionIdent<'vir>(FunctionCallTaskDescription<'vir>);
+
+#[cfg(feature = "mono_function_encoding")]
+impl<'vir> Identifiable for PureFunctionIdent<'vir> {
+    fn to_full_ident(&self) -> FullIdent {
+        vir::with_vcx(|vcx| {
+            let extra: String = self.0.substs.iter().map(|s| format!("_{s}")).collect();
+            format!(
+                "pure_{}_{}_{:?}",
+                vcx.tcx().def_path_str(self.0.def_id),
+                extra,
+                self.0.caller_def_id
+            )
+        })
+    }
+
+    fn preferred_idents(&self) -> impl Iterator<Item = String> {
+        vir::with_vcx(|vcx| {
+            let base_name = vcx.tcx().item_name(self.0.def_id).to_string();
+            let extra: String = self.0.substs.iter().map(|s| format!("_{s}")).collect();
+            vec![
+                format!("pure_{}", base_name),
+                format!("pure_{}_{}", base_name, extra),
+                ViperIdent::sanitize_with_underscores(&self.to_full_ident()),
+            ]
+            .into_iter()
+        })
+    }
 }
 
 impl TaskEncoder for SymFunctionEnc {
@@ -80,28 +111,28 @@ impl TaskEncoder for SymFunctionEnc {
         task_key: &Self::TaskKey<'vir>,
         deps: &mut task_encoder::TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
+        let function_ident = vir::with_vcx(|vcx| {
+            cfg_if! {
+                if #[cfg(feature="mono_function_encoding")] {
+                    vcx.get_ident(PureFunctionIdent(*task_key))
+                } else {
+                    vir_format_identifier!(
+                        vcx,
+                        "pure_{}",
+                        vcx.tcx().def_path_str(task_key)
+                    )
+                }
+            }
+        });
         vir::with_vcx(|vcx| {
             cfg_if! {
                 if #[cfg(feature="mono_function_encoding")] {
-                    let extra: String = task_key.substs.iter().map(|s| format!("_{s}")).collect();
-                    let function_ident = vir_format_identifier!(
-                        vcx,
-                        "pure_{}_{}_{:?}",
-                        vcx.tcx().def_path_str(task_key.def_id),
-                        extra,
-                        task_key.caller_def_id
-                    );
                     let substs = task_key.substs;
                     let def_id = task_key.def_id;
                     let caller_def_id = Some(task_key.caller_def_id);
                 } else {
                     let def_id = *task_key;
                     let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);
-                    let function_ident = vir_format_identifier!(
-                        vcx,
-                        "pure_{}",
-                        vcx.tcx().def_path_str(task_key)
-                    );
                     let caller_def_id = None;
                 }
             }

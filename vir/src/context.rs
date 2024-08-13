@@ -1,8 +1,12 @@
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
-use std::{cell::RefCell, fmt::Debug};
+use std::{
+    borrow::BorrowMut,
+    cell::{Cell, RefCell},
+    fmt::Debug,
+};
 
-use crate::{data::*, refs::*};
+use crate::{data::*, intern::Interner, refs::*, Identifiable, ViperIdent};
 
 /// The VIR context is a data structure used throughout the encoding process.
 pub struct VirCtxt<'tcx> {
@@ -23,6 +27,8 @@ pub struct VirCtxt<'tcx> {
     pub tcx: Option<ty::TyCtxt<'tcx>>,
 
     pub body: Option<RefCell<EnvBody<'tcx>>>,
+
+    interner: RefCell<Interner>,
 }
 
 impl<'tcx> VirCtxt<'tcx> {
@@ -32,6 +38,7 @@ impl<'tcx> VirCtxt<'tcx> {
             span_stack: vec![],
             tcx: Some(tcx),
             body: Some(RefCell::new(body)),
+            interner: RefCell::new(Interner::new()),
         }
     }
 
@@ -41,7 +48,11 @@ impl<'tcx> VirCtxt<'tcx> {
             span_stack: vec![],
             tcx: None,
             body: None,
+            interner: RefCell::new(Interner::new()),
         }
+    }
+    pub fn get_ident<'vir, T: Identifiable>(&'vir self, identifiable: T) -> ViperIdent<'vir> {
+        self.interner.borrow_mut().get_ident(identifiable)
     }
 
     pub fn tcx(&self) -> ty::TyCtxt<'tcx> {
