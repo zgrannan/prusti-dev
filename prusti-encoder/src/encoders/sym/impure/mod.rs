@@ -170,28 +170,32 @@ impl TaskEncoder for SymImpureEnc {
 
             let debug_dir = visualization_data_dir(def_id, substs);
 
+            let body_with_facts = BodyWithBorrowckFacts {
+                body: body.body.clone(),
+                promoted: body.promoted,
+                borrow_set: body.borrow_set,
+                region_inference_context: body.region_inference_context,
+                location_table: body.location_table,
+                input_facts: body.input_facts,
+                output_facts: body.output_facts,
+            };
+
+            eprintln!("Start PCS for {:?}", def_id);
+            let fpcs_analysis = pcs::run_free_pcs(&body_with_facts, vcx.tcx(), debug_dir.clone());
+            eprintln!("Done PCS for {:?}", def_id);
+
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
                 def_id: def_id.as_local().unwrap(),
                 body: &body.body,
                 tcx: vcx.tcx(),
-                fpcs_analysis: pcs::run_free_pcs(
-                    &BodyWithBorrowckFacts {
-                        body: body.body.clone(),
-                        promoted: body.promoted,
-                        borrow_set: body.borrow_set,
-                        region_inference_context: body.region_inference_context,
-                        location_table: body.location_table,
-                        input_facts: body.input_facts,
-                        output_facts: body.output_facts,
-                    },
-                    vcx.tcx(),
-                    debug_dir.clone(),
-                ),
+                fpcs_analysis,
                 verifier_semantics: PrustiSemantics(PhantomData),
                 arena: &arena,
                 debug_output_dir: debug_dir,
                 new_symvars_allowed: true,
             });
+
+            eprintln!("Done symbolic execution for {:?}", def_id);
 
             let fb_shared =
                 ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
@@ -414,6 +418,8 @@ impl TaskEncoder for SymImpureEnc {
             );
 
             debug_ids.insert(fn_debug_name(def_id, substs));
+
+            eprintln!("encoded method {:?}", method_ident);
 
             Ok((
                 MirImpureEncOutput {

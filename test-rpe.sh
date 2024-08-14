@@ -8,7 +8,7 @@ directory_fail="local-testing/rpe/fail"
 
 ./x.py build || exit 1
 
-parallel_check_pass() {
+check_pass() {
     local file=$1
     echo "Checking $file (expected to pass)"
     ./x.py run --features=vir_debug --bin prusti-rustc -- --edition=2018 "$file"
@@ -18,7 +18,7 @@ parallel_check_pass() {
     fi
 }
 
-parallel_check_fail() {
+check_fail() {
     local file=$1
     echo "Checking $file (expected to fail)"
     ./x.py run --features=vir_debug --bin prusti-rustc -- --edition=2018 "$file"
@@ -28,16 +28,23 @@ parallel_check_fail() {
     fi
 }
 
-export -f parallel_check_pass
-export -f parallel_check_fail
+export -f check_pass
+export -f check_fail
 
-find "$directory_pass" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 parallel_check_pass
+find "$directory_pass" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 check_pass
+# find "$directory_pass" -type f -name "*.rs" | while IFS= read -r FILE
+# do
+#     check_pass "$FILE"
+# done
 if [[ $? -ne 0 ]]; then
    exit 1
 fi
 
-find "$directory_fail" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 parallel_check_fail
-
+find "$directory_fail" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 check_fail
+# find "$directory_fail" -type f -name "*.rs" | while IFS= read -r FILE
+# do
+#     check_fail "$FILE"
+# done
 if [[ $? -ne 0 ]]; then
    exit 1
 fi

@@ -96,7 +96,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 .get(*idx)
                 .cloned()
                 .ok_or_else(|| format!("No symvar at idx {}.", *idx)),
-            SymValueKind::Var(SymVar::ReservedBackwardsFnResult, ..) => todo!(),
+            SymValueKind::Var(SymVar::ReservedBackwardsFnResult, ..) => Err(format!(
+                "Backwards function result is not a valid expression"
+            )),
             SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),

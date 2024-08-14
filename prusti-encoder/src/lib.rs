@@ -47,6 +47,7 @@ pub fn test_entrypoint<'tcx>(
     // TODO: this should be a "crate" encoder, which will deps.require all the methods in the crate
 
     for def_id in tcx.hir().body_owners() {
+        eprintln!("Start encoding method {:?}", def_id);
         tracing::debug!("test_entrypoint item: {def_id:?}");
         let kind = tcx.def_kind(def_id);
         match kind {
@@ -65,6 +66,7 @@ pub fn test_entrypoint<'tcx>(
 
                 if !is_trusted {
                     let substs = ty::GenericArgs::identity_for_item(tcx, def_id);
+                    eprintln!("Start encoding method impure {:?}", def_id);
                     let res = crate::encoders::SymImpureEnc::encode(
                         (def_id.as_local().unwrap(), substs, None),
                         false,
@@ -78,7 +80,10 @@ pub fn test_entrypoint<'tcx>(
                 tracing::debug!("unsupported item: {unsupported_item_kind:?}");
             }
         }
+        eprintln!("Done encoding method {:?}", def_id);
     }
+
+    eprintln!("encoded methods!");
 
     let mut function_names = BTreeSet::default();
 
