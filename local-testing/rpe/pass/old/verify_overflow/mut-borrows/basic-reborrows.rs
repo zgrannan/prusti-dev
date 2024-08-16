@@ -43,16 +43,16 @@ pub fn test2() {
     borrow_u32(&mut a);
 }
 
-// fn test5(x: &mut T, cond: bool) {
-//     let z = reborrow_T(x);
-//     let z2;
-//     if cond {
-//         z2 = reborrow_T(z);
-//     } else {
-//         z2 = reborrow_T(x);
-//     }
-//     z2.f = 4;
-// }
+fn test5(x: &mut T, cond: bool) {
+    let z = reborrow_T(x);
+    let z2;
+    if cond {
+        z2 = reborrow_T(z);
+    } else {
+        z2 = reborrow_T(x);
+    }
+    z2.f = 4;
+}
 
 pub struct ListNode {
     next: Option<Box<ListNode>>,
