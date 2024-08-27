@@ -17,7 +17,21 @@ use std::{
     marker::PhantomData,
 };
 use symbolic_execution::{
-    context::SymExContext, encoder::Encoder, heap::{HeapData, SymbolicHeap}, path::{InputPlace, OldMap, StructureTerm}, path_conditions::PathConditions, results::ResultPath, semantics::VerifierSemantics, terminator::{FunctionCallEffects, FunctionCallResult}, transform::SymValueTransformer, value::{AggregateKind, Substs, SymValue, SymValueData, SymVar, SyntheticSymValue, Ty}, visualization::{OutputMode, VisFormat}, SymExParams, SymbolicExecution
+    context::SymExContext,
+    encoder::Encoder,
+    heap::{HeapData, SymbolicHeap},
+    path::{InputPlace, OldMap, StructureTerm},
+    path_conditions::PathConditions,
+    results::ResultPath,
+    semantics::VerifierSemantics,
+    terminator::{FunctionCallEffects, FunctionCallResult},
+    transform::SymValueTransformer,
+    value::{
+        AggregateKind, CanSubst, Substs, SymValue, SymValueData, SymValueKind, SymVar,
+        SyntheticSymValue, Ty,
+    },
+    visualization::{OutputMode, VisFormat},
+    SymExParams, SymbolicExecution,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -118,8 +132,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx, V = SymVar> {
     ),
     Result(ty::Ty<'tcx>),
     VirLocal(&'sym str, ty::Ty<'tcx>),
-    // TODO: shoud have different type, this relies on hacks
-    Old(PrustiSymValue<'sym, 'tcx, V>),
+    Old(StructureTerm<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>),
 }
 
 impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -153,7 +166,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
             PrustiSymValSyntheticData::Result(ty) => "result".to_string(),
             PrustiSymValSyntheticData::VirLocal(name, _) => name.to_string(),
             PrustiSymValSyntheticData::Old(value) => {
-                format!("old({})", value.to_vis_string(tcx, debug_info, mode))
+                format!("old({:?})", value)
             }
         }
     }
@@ -179,8 +192,7 @@ impl<'sym, 'tcx> std::fmt::Display for PrustiSymValSyntheticData<'sym, 'tcx> {
         }
     }
 }
-
-impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
+impl<'sym, 'tcx> CanSubst<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,
         arena: &'sym SymExContext<'tcx>,
@@ -216,7 +228,9 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
             PrustiSymValSyntheticData::Old(..) => self,
         }
     }
+}
 
+impl<'sym, 'tcx, V> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx, V> {
     fn ty(&self, tcx: ty::TyCtxt<'tcx>) -> Ty<'tcx> {
         match &self {
             PrustiSymValSyntheticData::And(_, _) => Ty::new(tcx.types.bool, None),
@@ -235,93 +249,111 @@ impl<'sym, 'tcx> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym, '
     }
 
     fn optimize(self, arena: &'sym SymExContext<'tcx>, tcx: ty::TyCtxt<'tcx>) -> Self {
-        match &self {
-            PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
-                PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
-            ),
-            PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
-                arena.alloc(PrustiSymValSyntheticData::If(
-                    cond.optimize(arena, tcx),
-                    then_expr.optimize(arena, tcx),
-                    else_expr.optimize(arena, tcx),
-                ))
-            }
-            PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
-                arena.alloc(PrustiSymValSyntheticData::PureFnCall(
-                    *def_id,
-                    ty_substs,
-                    arena.alloc_slice(
-                        &(args
-                            .iter()
-                            .map(|arg| arg.optimize(arena, tcx))
-                            .collect::<Vec<_>>()),
-                    ),
-                ))
-            }
-            PrustiSymValSyntheticData::Result(_) => self,
-            PrustiSymValSyntheticData::VirLocal(_, _) => self,
-            PrustiSymValSyntheticData::Old(_) => self,
-        }
+        // TODO
+        self
+        // match &self {
+        //     PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
+        //         PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
+        //     ),
+        //     PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
+        //         arena.alloc(PrustiSymValSyntheticData::If(
+        //             cond.optimize(arena, tcx),
+        //             then_expr.optimize(arena, tcx),
+        //             else_expr.optimize(arena, tcx),
+        //         ))
+        //     }
+        //     PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
+        //         arena.alloc(PrustiSymValSyntheticData::PureFnCall(
+        //             *def_id,
+        //             ty_substs,
+        //             arena.alloc_slice(
+        //                 &(args
+        //                     .iter()
+        //                     .map(|arg| arg.optimize(arena, tcx))
+        //                     .collect::<Vec<_>>()),
+        //             ),
+        //         ))
+        //     }
+        //     PrustiSymValSyntheticData::Result(_) => self,
+        //     PrustiSymValSyntheticData::VirLocal(_, _) => self,
+        //     PrustiSymValSyntheticData::Old(_) => self,
+        // }
     }
 }
 
 pub type PrustiPathConditions<'sym, 'tcx> =
     PathConditions<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 pub type PrustiSymValue<'sym, 'tcx, V = SymVar> =
-    SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, V>;
+    SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, V>, V>;
 pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
 struct Transformer;
 
 impl<'sym, 'tcx>
-    SymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, InputPlace<'tcx>>
-    for Transformer
+    SymValueTransformer<
+        'sym,
+        'tcx,
+        PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
+        InputPlace<'tcx>,
+        SymVar,
+        PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
+    > for Transformer
 {
-    // TODO: Fix hacks here
     fn transform_var(
         &mut self,
         arena: &'sym SymExContext<'tcx>,
         var: InputPlace<'tcx>,
         ty: ty::Ty<'tcx>,
-    ) -> SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, SymVar> {
-        arena.mk_synthetic(PrustiSymValSyntheticData::Old(arena.mk_var(
-            var, ty
-        ).to_sym_value(body, arena)))
-            to_sym_value(body, arena)))
+    ) -> PrustiSymValue<'sym, 'tcx> {
+        arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Old(
+            arena.mk_sym_value(SymValueKind::Var(var, ty)),
+        )))
     }
 
     fn transform_synthetic(
         &mut self,
         arena: &'sym SymExContext<'tcx>,
-        s: T,
-    ) -> SymValue<'sym, 'tcx, T, SymVar> {
-        todo!()
+        s: PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
+    ) -> SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, SymVar> {
+        match s {
+            PrustiSymValSyntheticData::And(_, _) => todo!(),
+            PrustiSymValSyntheticData::If(_, _, _) => todo!(),
+            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.apply_transformer(arena, &mut Transformer))
+                    .collect::<Vec<_>>();
+                return arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::PureFnCall(
+                    *def_id,
+                    substs,
+                    arena.alloc_slice(&args),
+                )));
+            }
+            PrustiSymValSyntheticData::Result(_) => todo!(),
+            PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
+            PrustiSymValSyntheticData::Old(_) => todo!(),
+        }
     }
-}
-
-fn old_term_to_sym_value<'sym, 'tcx>(
-    term: StructureTerm<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
-    arena: &'sym SymExContext<'tcx>,
-) -> PrustiSymValue<'sym, 'tcx, SymVar> {
 }
 
 impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, SymVar>;
-
+    type OldMapSymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>;
     fn encode_fn_call<'mir>(
         location: mir::Location,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
         heap: &mut HeapData<'sym, 'tcx, Self::SymValSynthetic>,
-        old_map: &OldMap<'sym, 'tcx, Self::SymValSynthetic>,
+        old_map: &mut OldMap<'sym, 'tcx, Self::OldMapSymValSynthetic>,
         args: &Vec<mir::Operand<'tcx>>,
-    ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic>> {
+    ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic, Self::OldMapSymValSynthetic>>
+    {
         vir::with_vcx(|vcx| {
             let fn_name = vcx.tcx().def_path_str(def_id);
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
             if fn_name == "prusti_contracts::old" {
-                let value = old_map
+                let value: PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>> = old_map
                     .get(&args[0].place().unwrap().into(), sym_ex.arena)
                     .unwrap_or_else(|| {
                         panic!(
@@ -330,9 +362,12 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             old_map
                         )
                     });
+                let value: PrustiSymValue<'sym, 'tcx> =
+                    value.apply_transformer(sym_ex.arena, &mut Transformer);
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {
                         value,
+                        old_map_value: None,
                         postcondition: None,
                     },
                     precondition_assertion: None,
@@ -343,6 +378,15 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 .iter()
                 .map(|arg| sym_ex.encode_operand(&mut heap, arg))
                 .collect();
+            let old_map_encoded_args: Vec<PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>>> = args
+                .iter()
+                .map(|arg| {
+                    let encoder = sym_ex.old_map_encoder();
+                    encoder.encode_operand(old_map, arg)
+                })
+                .collect();
+            let old_map_encoded_args: &'sym [PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>>] =
+                sym_ex.arena.alloc_slice(&old_map_encoded_args);
             let args = sym_ex.arena.alloc_slice(&encoded_args);
             match fn_name.as_str() {
                 "prusti_contracts::before_expiry" => {
@@ -350,6 +394,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                         precondition_assertion: None,
                         result: FunctionCallResult::Value {
                             value: args[0],
+                            old_map_value: None,
                             postcondition: None,
                         },
                         snapshot: None,
@@ -371,6 +416,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     return Some(FunctionCallEffects {
                         precondition_assertion: None,
                         result: FunctionCallResult::Value {
+                            old_map_value: None,
                             value: sym_ex.arena.mk_aggregate(
                                 AggregateKind::Rust(
                                     mir::AggregateKind::Adt(
@@ -399,19 +445,37 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 fn_name == "std::cmp::PartialEq::eq" || fn_name == "std::cmp::PartialEq::ne",
             );
             if is_pure {
-                return todo!();
-                // return Some(FunctionCallEffects {
-                //     precondition_assertion: None,
-                //     result: FunctionCallResult::Value {
-                //         value: sym_ex.arena.mk_synthetic(
-                //             sym_ex
-                //                 .arena
-                //                 .alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
-                //         ),
-                //         postcondition: None,
-                //     },
-                //     snapshot: None,
-                // });
+                let old_map_value: SymValue<
+                    'sym,
+                    'tcx,
+                    PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
+                    InputPlace<'tcx>,
+                > = sym_ex
+                    .arena
+                    .mk_synthetic(sym_ex.alloc(PrustiSymValSyntheticData::PureFnCall(
+                        def_id,
+                        substs,
+                        old_map_encoded_args,
+                    )));
+                let result: FunctionCallResult<
+                    'sym,
+                    'tcx,
+                    PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
+                    PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
+                > = FunctionCallResult::Value {
+                    value: sym_ex.arena.mk_synthetic(
+                        sym_ex
+                            .arena
+                            .alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
+                    ),
+                    old_map_value: Some(old_map_value),
+                    postcondition: None,
+                };
+                return Some(FunctionCallEffects {
+                    precondition_assertion: None,
+                    result,
+                    snapshot: None,
+                });
             } else {
                 return None;
             }

@@ -10,7 +10,9 @@ use prusti_rustc_interface::{
 };
 use symbolic_execution::{
     context::SymExContext,
+    path::InputPlace,
     path_conditions::{PathConditionAtom, PathConditionPredicate},
+    transform::SymValueTransformer,
     value::{AggregateKind, BackwardsFn, Substs, SymValueKind, SymVar},
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
@@ -50,6 +52,32 @@ pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
     symvars: Vec<vir::Expr<'vir>>,
     def_id: DefId,
+}
+
+struct Transformer<'sym, 'tcx>(BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>);
+impl<'sym, 'tcx>
+    SymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, InputPlace<'tcx>>
+    for Transformer<'sym, 'tcx>
+{
+    fn transform_var(
+        &mut self,
+        arena: &'sym SymExContext<'tcx>,
+        var: InputPlace<'tcx>,
+        ty: ty::Ty<'tcx>,
+    ) -> PrustiSymValue<'sym, 'tcx> {
+        let base = self.0.get(&var.local()).unwrap();
+        var.projection().iter().fold(base, |base, proj| {
+            arena.mk_projection(*proj, base)
+        })
+    }
+
+    fn transform_synthetic(
+        &mut self,
+        arena: &'sym SymExContext<'tcx>,
+        s: PrustiSymValSynthetic<'sym, 'tcx>,
+    ) -> PrustiSymValue<'sym, 'tcx> {
+        todo!()
+    }
 }
 
 impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
@@ -328,16 +356,23 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
-            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(value)) => self
-                .encode_sym_value(
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(value)) => {
+                self.encode_sym_value(
                     deps,
-                    value.subst(
-                        &self.arena,
-                        &Substs::from_iter(
-                            self.old_values.iter().map(|(k, v)| (k.as_usize() - 1, *v)),
-                        ),
-                    ),
-                ),
+                    value.apply_transformer(self.arena, &mut Transformer(self.old_values.clone())),
+                )
+                // todo!()
+                // self
+                // .encode_sym_value(
+                //     deps,
+                //     value.subst(
+                //         &self.arena,
+                //         &Substs::from_iter(
+                //             self.old_values.iter().map(|(k, v)| (k.as_usize() - 1, *v)),
+                //         ),
+                //     ),
+                // ),
+            }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
