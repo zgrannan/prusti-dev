@@ -66,9 +66,9 @@ impl<'sym, 'tcx>
         ty: ty::Ty<'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
         let base = self.0.get(&var.local()).unwrap();
-        var.projection().iter().fold(base, |base, proj| {
-            arena.mk_projection(*proj, base)
-        })
+        var.projection()
+            .iter()
+            .fold(base, |base, proj| arena.mk_projection(*proj, base))
     }
 
     fn transform_synthetic(
@@ -213,13 +213,15 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                                 AggregateType::Tuple
                             }
                             AggregateKind::PCS(ty, variant_idx) => {
-                                if let ty::TyKind::Adt(def, substs) = ty.kind() {
-                                    AggregateType::Adt {
-                                        def_id: def.did(),
-                                        variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
+                                match ty.kind() {
+                                    ty::TyKind::Adt(def, _) => {
+                                        AggregateType::Adt {
+                                            def_id: def.did(),
+                                            variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
+                                        }
                                     }
-                                } else {
-                                    todo!()
+                                    ty::TyKind::Tuple(..) => AggregateType::Tuple,
+                                    _ => todo!("{:?}", ty.kind()),
                                 }
                             }
                             other => todo!("aggregate kind {:?}", other),
