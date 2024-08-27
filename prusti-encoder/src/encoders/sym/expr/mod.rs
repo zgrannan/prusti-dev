@@ -328,24 +328,16 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
-            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(local, projection, ty)) => {
-                let mut sym_value = self.old_values.get(local).cloned().unwrap_or_else(|| {
-                    self.arena.mk_internal_error(
-                        format!(
-                            "{:?} Can't find local {:?} in values {:?}",
-                            self.def_id,
-                            local,
-                            self.old_values.keys()
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(value)) => self
+                .encode_sym_value(
+                    deps,
+                    value.subst(
+                        &self.arena,
+                        &Substs::from_iter(
+                            self.old_values.iter().map(|(k, v)| (k.as_usize() - 1, *v)),
                         ),
-                        *ty,
-                        None,
-                    )
-                });
-                for p in projection {
-                    sym_value = self.arena.mk_projection(*p, sym_value);
-                }
-                self.encode_sym_value(deps, sym_value)
-            }
+                    ),
+                ),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
