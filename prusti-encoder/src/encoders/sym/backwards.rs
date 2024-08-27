@@ -135,7 +135,7 @@ pub fn mk_backwards_fn_axioms<
                                 .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
                                 .collect::<Vec<_>>(),
                         ), // TODO, maybe too imprecise?
-                        encoder.encode_pure_spec(deps, pledge).unwrap(),
+                        encoder.encode_pure_spec(deps, pledge).unwrap().to_expr(vcx),
                     ),
                 )
             })
@@ -241,7 +241,6 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
         for path in sym_ex_results.paths.iter() {
             let mut path_stmts = vec![];
             for (idx, expr) in path.backwards_facts.0.iter() {
-                eprintln!("backwards_fact: {}", expr);
                 let expr = expr.subst(encoder.arena, &backwards_substs);
                 let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
                 let expr = encoder.encode_sym_value(deps, expr)?;
@@ -249,8 +248,13 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
                 for pledge in pledges.iter() {
                     let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
-                    path_stmts
-                        .push(vcx.mk_exhale_stmt(encoder.encode_pure_spec(deps, pledge).unwrap()));
+                    for stmt in encoder
+                        .encode_pure_spec(deps, pledge)
+                        .unwrap()
+                        .exhale_stmts(vcx)
+                    {
+                        path_stmts.push(stmt);
+                    }
                 }
             }
             match encoder.encode_path_condition(deps, &path.pcs) {
@@ -259,7 +263,11 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                     body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
                 }
                 Some(Ok(condition)) => {
-                    body_stmts.push(vcx.mk_if_stmt(condition, vcx.alloc_slice(&path_stmts), &[]));
+                    body_stmts.push(vcx.mk_if_stmt(
+                        condition.to_expr(vcx),
+                        vcx.alloc_slice(&path_stmts),
+                        &[],
+                    ));
                 }
                 None => {
                     body_stmts.extend(path_stmts);

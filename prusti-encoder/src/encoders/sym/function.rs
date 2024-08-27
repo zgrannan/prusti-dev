@@ -260,6 +260,7 @@ impl TaskEncoder for SymFunctionEnc {
                 Some(
                     encoder
                         .encode_pure_body(deps, &body)
+                        .map(|body| body.to_expr(vcx))
                         .map_err(|e| task_encoder::EncodeFullError::EncodingError(e, None))?,
                 )
             } else {
@@ -276,7 +277,7 @@ impl TaskEncoder for SymFunctionEnc {
                         .chain(
                             spec.pres
                                 .into_iter()
-                                .map(|s| encoder.encode_pure_spec(deps, s).unwrap()),
+                                .flat_map(|s| encoder.encode_pure_spec(deps, s).unwrap().clauses),
                         )
                         .collect::<Vec<_>>(),
                 ),
@@ -284,10 +285,11 @@ impl TaskEncoder for SymFunctionEnc {
                     &spec
                         .posts
                         .into_iter()
-                        .map(|s| {
+                        .flat_map(|s| {
                             encoder
                                 .encode_pure_spec(deps, s.subst(&arena, &postcondition_substs))
                                 .unwrap()
+                                .clauses
                         })
                         .collect::<Vec<_>>(),
                 ),

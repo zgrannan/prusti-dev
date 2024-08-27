@@ -39,12 +39,29 @@ use std::collections::BTreeMap;
 mod r#ref;
 mod fn_call;
 
-type EncodePCResult<'vir, T> = Result<vir::Expr<'vir>, T>;
-type EncodePureSpecResult<'vir, T> = Result<vir::Expr<'vir>, T>;
-pub type EncodePCAtomResult<'vir, T> = Result<vir::Expr<'vir>, T>;
+type EncodePCResult<'vir, T> = Result<EncodedPC<'vir>, T>;
+type EncodePureSpecResult<'vir, T> = Result<EncodedPureSpec<'vir>, T>;
+pub type EncodePCAtomResult<'vir, T> = Result<EncodedPCAtom<'vir>, T>;
 pub type EncodeSymValueResult<'vir, T> = Result<vir::Expr<'vir>, T>;
 type PrustiPathConditionAtom<'sym, 'tcx> =
     PathConditionAtom<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
+
+pub struct EncodedPureSpec<'vir> {
+    pub clauses: Vec<vir::Expr<'vir>>,
+}
+
+impl<'vir> EncodedPureSpec<'vir> {
+    pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
+        vcx.mk_conj(vcx.alloc_slice(&self.clauses))
+    }
+
+    pub fn exhale_stmts(&self, vcx: &'vir vir::VirCtxt<'_>) -> Vec<vir::Stmt<'vir>> {
+        self.clauses
+            .iter()
+            .map(|c| vcx.mk_exhale_stmt(*c))
+            .collect::<Vec<_>>()
+    }
+}
 
 pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
@@ -212,18 +229,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
                                 AggregateType::Tuple
                             }
-                            AggregateKind::PCS(ty, variant_idx) => {
-                                match ty.kind() {
-                                    ty::TyKind::Adt(def, _) => {
-                                        AggregateType::Adt {
-                                            def_id: def.did(),
-                                            variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
-                                        }
-                                    }
-                                    ty::TyKind::Tuple(..) => AggregateType::Tuple,
-                                    _ => todo!("{:?}", ty.kind()),
-                                }
-                            }
+                            AggregateKind::PCS(ty, variant_idx) => match ty.kind() {
+                                ty::TyKind::Adt(def, _) => AggregateType::Adt {
+                                    def_id: def.did(),
+                                    variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
+                                },
+                                ty::TyKind::Tuple(..) => AggregateType::Tuple,
+                                _ => todo!("{:?}", ty.kind()),
+                            },
                             other => todo!("aggregate kind {:?}", other),
                         },
                     })
@@ -409,12 +422,23 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         T: 'vir,
         EncodeFullError<'vir, T>: 'vir,
     {
-        let snap_to_prim = match deps
+        match &expr.kind {
+            SymValueKind::Constant(c) => {
+                if let Some(b) = c.as_bool(self.vcx.tcx()) {
+                    if b {
+                        return Ok(self.vcx.mk_bool::<true>());
+                    } else {
+                        return Ok(self.vcx.mk_bool::<false>());
+                    }
+                }
+            }
+            _ => {}
+        }
+        let generic_snapshot = deps
             .require_local::<RustTySnapshotsEnc>(expr.ty(self.vcx.tcx()).rust_ty())
             .unwrap()
-            .generic_snapshot
-            .specifics
-        {
+            .generic_snapshot;
+        let snap_to_prim = match generic_snapshot.specifics {
             domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
@@ -451,32 +475,65 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                         .encode_pure_spec(deps, p.subst(&self.arena, &arg_substs))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok::<vir::Expr<'vir>, String>(self.vcx.mk_conj(&encoded_posts))
+                let clauses = encoded_posts
+                    .into_iter()
+                    .flat_map(|e| e.clauses)
+                    .collect::<Vec<_>>();
+                Ok::<EncodedPCAtom, String>(EncodedPCAtom::new(self.vcx.alloc_slice(&clauses)))
             }
             PathConditionPredicate::Eq(target, ty) => {
-                let expr = self.encode_sym_value(deps, &pc.expr)?;
-                Ok(self
-                    .vcx
-                    .mk_eq_expr(expr, self.encode_target_literal(deps, *target, *ty)))
+                // Optimization for booleans
+                if *ty == self.vcx.tcx().types.bool {
+                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr)?;
+                    if *target == 0 {
+                        Ok(EncodedPCAtom::singleton(
+                            self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr),
+                            self.vcx,
+                        ))
+                    } else {
+                        Ok(EncodedPCAtom::singleton(expr, self.vcx))
+                    }
+                } else {
+                    let expr = self.encode_sym_value(deps, &pc.expr)?;
+                    Ok(EncodedPCAtom::singleton(
+                        self.vcx
+                            .mk_eq_expr(expr, self.encode_target_literal(deps, *target, *ty)),
+                        self.vcx,
+                    ))
+                }
             }
             PathConditionPredicate::Ne(targets, ty) => {
+                if *ty == self.vcx.tcx().types.bool {
+                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr)?;
+                    if targets[0] == 1 {
+                        return Ok(EncodedPCAtom::singleton(
+                            self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr),
+                            self.vcx,
+                        ));
+                    } else {
+                        return Ok(EncodedPCAtom::singleton(expr, self.vcx));
+                    }
+                }
                 let expr = self.encode_sym_value(deps, &pc.expr)?;
-                Ok(self.vcx.mk_conj(
-                    &targets
-                        .iter()
-                        .map(|t| {
-                            self.vcx.mk_unary_op_expr(
-                                vir::UnOpKind::Not,
-                                self.vcx
-                                    .mk_eq_expr(expr, self.encode_target_literal(deps, *t, *ty)),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
+                Ok(EncodedPCAtom::new(
+                    self.vcx.alloc_slice(
+                        &targets
+                            .iter()
+                            .map(|t| {
+                                self.vcx.mk_unary_op_expr(
+                                    vir::UnOpKind::Not,
+                                    self.vcx.mk_eq_expr(
+                                        expr,
+                                        self.encode_target_literal(deps, *t, *ty),
+                                    ),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
                 ))
             }
         }?;
-        assert_eq!(result.ty(), &vir::TypeData::Bool);
-        Ok::<vir::Expr<'vir>, _>(result)
+        Ok(result)
     }
 
     fn encode_target_literal<T: TaskEncoder>(
@@ -502,9 +559,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         while let Some((pc, value)) = iter.next() {
             let encoded_value = self.encode_sym_value(deps, &value).unwrap();
             let pc = self.encode_path_condition(deps, pc).unwrap()?;
-            expr = self.vcx.mk_ternary_expr(pc, encoded_value, expr);
+            expr = self
+                .vcx
+                .mk_ternary_expr(pc.to_expr(self.vcx), encoded_value, expr);
         }
-        Ok(expr)
+        Ok(EncodedPureSpec {
+            clauses: vec![expr],
+        })
     }
 
     pub fn encode_pure_spec<'slf, 'enc, T: TaskEncoder<EncodingError = String>>(
@@ -515,19 +576,42 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let clauses = spec
             .into_iter()
             .map(|(pc, value)| {
+                match &value.kind {
+                    SymValueKind::Constant(c) => {
+                        if let Some(b) = c.as_bool(self.vcx.tcx()) {
+                            if b {
+                                // TODO: Perhaps this kills some well-formedness check of the LHS?
+                                return Ok::<vir::Expr<'vir>, String>(self.vcx.mk_bool::<true>());
+                            } else {
+                                if let Some(pc) = self.encode_path_condition(deps, &pc) {
+                                    return Ok::<vir::Expr<'vir>, String>(
+                                        self.vcx.mk_unary_op_expr(
+                                            vir::UnOpKind::Not,
+                                            pc.unwrap().to_expr(self.vcx),
+                                        ),
+                                    );
+                                } else {
+                                    return Ok::<vir::Expr<'vir>, String>(
+                                        self.vcx.mk_bool::<false>(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
                 let encoded_value: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, value)?;
-                // .unwrap_or_else(|err| {
-                //     panic!("{:?} in {}", err, value);
-                // });
                 if let Some(pc) = self.encode_path_condition(deps, &pc) {
-                    let impl_expr = self.vcx.mk_implies_expr(pc.unwrap(), encoded_value);
+                    let impl_expr = self
+                        .vcx
+                        .mk_implies_expr(pc.unwrap().to_expr(self.vcx), encoded_value);
                     Ok::<vir::Expr<'vir>, String>(impl_expr)
                 } else {
                     Ok::<vir::Expr<'vir>, String>(encoded_value)
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(self.vcx.mk_conj(&clauses))
+        Ok(EncodedPureSpec { clauses })
     }
 
     pub fn encode_path_condition<T: TaskEncoder<EncodingError = String>>(
@@ -546,6 +630,41 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 Err(err) => return Some(Err(err)),
             }
         }
-        Some(Ok(self.vcx.mk_conj(&exprs)))
+        Some(Ok(EncodedPC { atoms: exprs }))
+    }
+}
+
+struct EncodedPCAtom<'vir> {
+    clauses: &'vir [vir::Expr<'vir>],
+}
+
+impl<'vir> EncodedPCAtom<'vir> {
+    pub fn new(clauses: &'vir [vir::Expr<'vir>]) -> Self {
+        Self { clauses }
+    }
+    pub fn singleton(clause: vir::Expr<'vir>, vcx: &'vir vir::VirCtxt<'_>) -> Self {
+        Self {
+            clauses: vcx.alloc_slice(&[clause]),
+        }
+    }
+    pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
+        vcx.mk_conj(self.clauses)
+    }
+}
+
+pub struct EncodedPC<'vir> {
+    atoms: Vec<EncodedPCAtom<'vir>>,
+}
+
+impl<'vir> EncodedPC<'vir> {
+    pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
+        vcx.mk_conj(
+            &self
+                .atoms
+                .iter()
+                .flat_map(|atom| atom.clauses)
+                .copied()
+                .collect::<Vec<_>>(),
+        )
     }
 }

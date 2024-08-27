@@ -343,11 +343,15 @@ impl<'vir, Curr, Next> Debug for StmtGenData<'vir, Curr, Next> {
             Self::If(data) => {
                 write!(f, "if ({:?}) {{\n", data.cond)?;
                 for stmt in data.then_statements {
+                    write!(f, "    ")?;
                     stmt.fmt(f)?;
+                    writeln!(f, "")?;
                 }
                 write!(f, "}} else {{\n")?;
                 for stmt in data.else_statements {
+                    write!(f, "    ")?;
                     stmt.fmt(f)?;
+                    writeln!(f, "")?;
                 }
                 write!(f, "}}")
             }

@@ -104,7 +104,7 @@ impl MirBuiltinEnc {
         let function = FunctionIdent::new(name, arity, e_ty.snapshot);
         deps.emit_output_ref(key, MirBuiltinEncOutputRef {
             function,
-        });
+        }).unwrap();
 
         let prim_res_ty = e_ty.specifics.expect_primitive();
         let snap_arg = vcx.mk_local_ex("arg", e_ty.snapshot);
@@ -166,7 +166,7 @@ impl MirBuiltinEnc {
         let function = FunctionIdent::new(name, arity, e_res_ty.snapshot);
         deps.emit_output_ref(key, MirBuiltinEncOutputRef {
             function,
-        });
+        }).unwrap();
         let lhs = prim_l_ty.snap_to_prim.apply(vcx,
             [vcx.mk_local_ex("arg1", e_l_ty.snapshot)],
         );

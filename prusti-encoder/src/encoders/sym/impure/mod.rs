@@ -180,9 +180,7 @@ impl TaskEncoder for SymImpureEnc {
                 output_facts: body.output_facts,
             };
 
-            eprintln!("Start PCS for {:?}", def_id);
             let fpcs_analysis = pcs::run_free_pcs(&body_with_facts, vcx.tcx(), debug_dir.clone());
-            eprintln!("Done PCS for {:?}", def_id);
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
                 def_id: def_id.as_local().unwrap(),
@@ -194,8 +192,6 @@ impl TaskEncoder for SymImpureEnc {
                 debug_output_dir: debug_dir,
                 new_symvars_allowed: true,
             });
-
-            eprintln!("Done symbolic execution for {:?}", def_id);
 
             let fb_shared =
                 ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
@@ -278,7 +274,9 @@ impl TaskEncoder for SymImpureEnc {
             for pre in spec.pres.into_iter() {
                 match visitor.encoder.encode_pure_spec(visitor.deps, pre) {
                     Ok(pre) => {
-                        stmts.push(vcx.mk_inhale_stmt(pre));
+                        for clause in pre.clauses {
+                            stmts.push(vcx.mk_inhale_stmt(clause));
+                        }
                     }
                     Err(err) => {
                         stmts
@@ -345,7 +343,9 @@ impl TaskEncoder for SymImpureEnc {
                             visitor.deps,
                             p.clone().subst(&arena, substs),
                         )
-                        .map(|expr| vec![vcx.mk_exhale_stmt(expr)])
+                        .map(|spec|
+                            spec.exhale_stmts(vcx)
+                        )
                         .unwrap_or_else(|err| {
                             vec![
                             vcx.mk_comment_stmt(
@@ -362,7 +362,8 @@ impl TaskEncoder for SymImpureEnc {
                     .collect();
                 match visitor.encoder.encode_path_condition(visitor.deps, pcs) {
                     Some(Ok(pc)) => {
-                        let if_stmt = vcx.mk_if_stmt(pc, vcx.alloc_slice(&assertions), &[]);
+                        let if_stmt =
+                            vcx.mk_if_stmt(pc.to_expr(vcx), vcx.alloc_slice(&assertions), &[]);
                         stmts.push(if_stmt);
                     }
                     Some(Err(err)) => {
@@ -418,8 +419,6 @@ impl TaskEncoder for SymImpureEnc {
             );
 
             debug_ids.insert(fn_debug_name(def_id, substs));
-
-            eprintln!("encoded method {:?}", method_ident);
 
             Ok((
                 MirImpureEncOutput {
@@ -489,15 +488,19 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                     })
                     .collect::<Result<Vec<_>, _>>()
                     .unwrap();
-                vec![self.vcx.mk_exhale_stmt(self.vcx.mk_conj(&encoded_pres))]
+                encoded_pres
+                    .into_iter()
+                    .flat_map(|e| e.clauses)
+                    .map(|expr| self.vcx.mk_exhale_stmt(expr))
+                    .collect()
             }
             Assertion::Eq(expr, val) => {
                 match self.encoder.encode_sym_value_as_prim(self.deps, expr) {
                     Ok(expr) => {
                         let expr: vir::Expr<'vir> = if *val {
-                            self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<true>())
+                            expr
                         } else {
-                            self.vcx.mk_eq_expr(expr, self.vcx.mk_bool::<false>())
+                            self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr)
                         };
                         vec![self.vcx.mk_exhale_stmt(expr)]
                     }
@@ -522,7 +525,9 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
     ) -> Result<Vec<vir::Stmt<'vir>>, EncodeFullError<'vir, SymImpureEnc>> {
         if let Some(pc_expr) = self.encoder.encode_path_condition(self.deps, pc) {
             Ok(vec![self.vcx.mk_if_stmt(
-                pc_expr.map_err(|e| EncodeFullError::EncodingError(e, None))?,
+                pc_expr
+                    .map(|e| e.to_expr(self.vcx))
+                    .map_err(|e| EncodeFullError::EncodingError(e, None))?,
                 self.vcx.alloc_slice(&self.encode_assertion(assertion)),
                 &[],
             )])
