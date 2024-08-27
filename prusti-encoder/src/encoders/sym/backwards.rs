@@ -246,17 +246,19 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 let expr = encoder.encode_sym_value(deps, expr)?;
                 let back_local = get_back_result(*idx);
                 path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
-                for pledge in pledges.iter() {
-                    let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
-                    for stmt in encoder
-                        .encode_pure_spec(deps, pledge)
-                        .unwrap()
-                        .exhale_stmts(vcx)
-                    {
-                        path_stmts.push(stmt);
-                    }
+            }
+            // for (idx, expr) in path.backwards_facts.0.iter() {
+            for pledge in pledges.iter() {
+                let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
+                for stmt in encoder
+                    .encode_pure_spec(deps, pledge)
+                    .unwrap()
+                    .exhale_stmts(vcx)
+                {
+                    path_stmts.push(stmt);
                 }
             }
+            // }
             match encoder.encode_path_condition(deps, &path.pcs) {
                 Some(Err(err)) => {
                     body_stmts.push(vcx.mk_comment_stmt(vir::vir_format!(vcx, "Error: {}", err)));
