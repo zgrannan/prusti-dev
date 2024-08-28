@@ -32,22 +32,41 @@ check_fail() {
 export -f check_pass
 export -f check_fail
 
-find "$directory_pass" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 check_pass
-# find "$directory_pass" -type f -name "*.rs" | while IFS= read -r FILE
-# do
-#     check_pass "$FILE"
-# done
-if [[ $? -ne 0 ]]; then
-   exit 1
-fi
+# Add this function to handle script termination
+cleanup() {
+    echo "Script interrupted. Exiting..."
+    exit 1
+}
 
-find "$directory_fail" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 check_fail
-# find "$directory_fail" -type f -name "*.rs" | while IFS= read -r FILE
-# do
-#     check_fail "$FILE"
-# done
-if [[ $? -ne 0 ]]; then
-   exit 1
-fi
+# Set up the trap to catch SIGINT (Ctrl+C)
+trap cleanup SIGINT
+
+run_tests() {
+    local directory=$1
+    local check_function=$2
+    if [[ "$parallel" == true ]]; then
+        find "$directory" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 "$check_function"
+    else
+        while IFS= read -r FILE
+        do
+            "$check_function" "$FILE"
+        done < <(find "$directory" -type f -name "*.rs")
+    fi
+    if [[ $? -ne 0 ]]; then
+        exit 1
+    fi
+}
+
+# Check if --parallel flag is passed
+parallel=false
+for arg in "$@"; do
+    if [[ "$arg" == "--parallel" ]]; then
+        parallel=true
+        break
+    fi
+done
+
+run_tests "$directory_pass" check_pass
+run_tests "$directory_fail" check_fail
 
 echo "All tests passed successfully"
