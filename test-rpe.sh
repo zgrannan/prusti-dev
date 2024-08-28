@@ -44,25 +44,31 @@ trap cleanup SIGINT
 run_tests() {
     local directory=$1
     local check_function=$2
+    local search_dir="$directory"
+    if [[ "$old" == true ]]; then
+        search_dir="$directory/old"
+    fi
     if [[ "$parallel" == true ]]; then
-        find "$directory" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 "$check_function"
+        find "$search_dir" -type f -name "*.rs" | parallel -j 4 --halt now,fail=1 "$check_function"
     else
         while IFS= read -r FILE
         do
             "$check_function" "$FILE"
-        done < <(find "$directory" -type f -name "*.rs")
+        done < <(find "$search_dir" -type f -name "*.rs")
     fi
     if [[ $? -ne 0 ]]; then
         exit 1
     fi
 }
 
-# Check if --parallel flag is passed
+# Check if --parallel or --old flags are passed
 parallel=false
+old=false
 for arg in "$@"; do
     if [[ "$arg" == "--parallel" ]]; then
         parallel=true
-        break
+    elif [[ "$arg" == "--old" ]]; then
+        old=true
     fi
 done
 
