@@ -50,7 +50,21 @@ impl<'tcx> MostGenericTy<'tcx> {
             }
             TyKind::Param(_) => String::from("Param"),
             TyKind::Array(..) => String::from("Array"),
-            other => unimplemented!("get_domain_base_name for {:?}", other),
+            TyKind::Foreign(_) => todo!(),
+            TyKind::Slice(_) => todo!(),
+            TyKind::FnDef(_, _) => todo!(),
+            TyKind::FnPtr(_) => todo!(),
+            TyKind::Dynamic(_, _, _) => todo!(),
+            TyKind::Closure(_, _) => todo!(),
+            TyKind::Generator(_, _, _) => todo!(),
+            TyKind::GeneratorWitness(_) => todo!(),
+            TyKind::GeneratorWitnessMIR(_, _) => todo!(),
+            TyKind::Alias(_, _) => todo!(),
+            TyKind::Bound(_, _) => todo!(),
+            TyKind::Placeholder(_) => todo!(),
+            TyKind::Infer(_) => todo!(),
+            TyKind::Error(_) => todo!(),
+
         }
     }
 
