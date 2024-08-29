@@ -301,6 +301,22 @@ impl TaskEncoder for DomainEnc {
                     let specifics = enc.mk_struct_specifics(vec![]);
                     Ok((Some(enc.finalize(task_key)), specifics))
                 }
+                &TyKind::Closure(..) => {
+                    let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
+                    let base_name = String::from("Closure");
+                    enc.deps
+                        .emit_output_ref(*task_key, enc.output_ref(base_name))?;
+                    let specifics = enc.mk_struct_specifics(vec![]);
+                    Ok((Some(enc.finalize(task_key)), specifics))
+                }
+                &TyKind::FnPtr(_) => {
+                    let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
+                    let base_name = String::from("FnPtr");
+                    enc.deps
+                        .emit_output_ref(*task_key, enc.output_ref(base_name))?;
+                    let specifics = enc.mk_struct_specifics(vec![]);
+                    Ok((Some(enc.finalize(task_key)), specifics))
+                }
                 kind => todo!("{kind:?}"),
             }
         })
@@ -543,7 +559,10 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
             .chain(fnames.iter().map(|f| self.vcx.mk_local_decl_local(f)))
             .collect();
         let cons_qvars = self.vcx.alloc_slice(&cons_qvars);
-        let generic_exprs = generics.iter().map(|g| g.expr(self.vcx)).collect::<Vec<_>>();
+        let generic_exprs = generics
+            .iter()
+            .map(|g| g.expr(self.vcx))
+            .collect::<Vec<_>>();
         let cons_call_with_qvars = field_snaps_to_snap.apply(
             self.vcx,
             generic_exprs.iter().copied(),

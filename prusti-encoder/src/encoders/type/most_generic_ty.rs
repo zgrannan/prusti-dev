@@ -53,7 +53,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Foreign(_) => todo!(),
             TyKind::Slice(_) => todo!(),
             TyKind::FnDef(_, _) => todo!(),
-            TyKind::FnPtr(_) => todo!(),
+            TyKind::FnPtr(_) => String::from("FnPtr"),
             TyKind::Dynamic(_, _, _) => todo!(),
             TyKind::Closure(_, _) => String::from("Closure"),
             TyKind::Generator(_, _, _) => todo!(),
@@ -64,7 +64,6 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Placeholder(_) => todo!(),
             TyKind::Infer(_) => todo!(),
             TyKind::Error(_) => todo!(),
-
         }
     }
 
@@ -114,6 +113,8 @@ impl<'tcx> MostGenericTy<'tcx> {
             | TyKind::Never
             | TyKind::Param(_)
             | TyKind::Uint(_) => Vec::new(),
+            TyKind::Closure(..) => vec![], // TODO
+            TyKind::FnPtr(_) => vec![], // TODO
             other => todo!("generics for {:?}", other),
         }
     }
@@ -187,11 +188,29 @@ pub fn extract_type_params<'tcx>(
             }));
             (MostGenericTy(ty), vec![type_and_mut.ty])
         }
-        TyKind::Closure(..) =>
-        {
-            // TODO
-            (MostGenericTy(ty), vec![])
+        TyKind::Closure(def_id, substs) => {
+            let id = ty::List::identity_for_item(tcx, def_id).iter();
+            let id = tcx.mk_args_from_iter(id);
+            let ty = tcx.mk_ty_from_kind(TyKind::Closure(def_id, id));
+            (
+                MostGenericTy(ty),
+                substs
+                    .into_iter()
+                    .flat_map(ty::GenericArg::as_type)
+                    .collect(),
+            )
         }
-        _ => todo!("extract_type_params for {:?}", ty),
+        TyKind::Foreign(_) => todo!(),
+        TyKind::FnDef(_, _) => todo!(),
+        TyKind::FnPtr(_) => (MostGenericTy(ty), Vec::new()), // TODO,
+        TyKind::Dynamic(_, _, _) => todo!(),
+        TyKind::Generator(_, _, _) => todo!(),
+        TyKind::GeneratorWitness(_) => todo!(),
+        TyKind::GeneratorWitnessMIR(_, _) => todo!(),
+        TyKind::Alias(_, _) => todo!(),
+        TyKind::Bound(_, _) => todo!(),
+        TyKind::Placeholder(_) => todo!(),
+        TyKind::Infer(_) => todo!(),
+        TyKind::Error(_) => todo!(),
     }
 }

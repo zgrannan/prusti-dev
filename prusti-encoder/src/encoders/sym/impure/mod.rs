@@ -381,7 +381,9 @@ impl TaskEncoder for SymImpureEnc {
                             None => stmts.extend(assertions),
                         }
                     }
-                    _ => todo!(),
+                    ResultPath::Loop { path, pcs } => {
+                        // TODO
+                    }
                 }
             }
 
