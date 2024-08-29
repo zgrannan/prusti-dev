@@ -240,39 +240,45 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
 
         for path in sym_ex_results.paths.iter() {
             let mut path_stmts = vec![];
-            for (idx, expr) in path.backwards_facts.0.iter() {
-                let expr = expr.subst(encoder.arena, &backwards_substs);
-                let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
-                let expr = encoder.encode_sym_value(deps, expr)?;
-                let back_local = get_back_result(*idx);
-                path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
-            }
-            // for (idx, expr) in path.backwards_facts.0.iter() {
-            for pledge in pledges.iter() {
-                let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
-                for stmt in encoder
-                    .encode_pure_spec(deps, pledge)
-                    .unwrap()
-                    .exhale_stmts(vcx)
-                {
-                    path_stmts.push(stmt);
+            if let Some(backwards_facts) = path.backwards_facts() {
+                for (idx, expr) in backwards_facts.0.iter() {
+                    let expr = expr.subst(encoder.arena, &backwards_substs);
+                    let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
+                    let expr = encoder.encode_sym_value(deps, expr)?;
+                    let back_local = get_back_result(*idx);
+                    path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
                 }
-            }
-            // }
-            match encoder.encode_path_condition(deps, &path.pcs) {
-                Some(Err(err)) => {
-                    body_stmts.push(vcx.mk_comment_stmt(vir::vir_format!(vcx, "Error: {}", err)));
-                    body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                // for (idx, expr) in path.backwards_facts.0.iter() {
+                for pledge in pledges.iter() {
+                    let pledge = pledge.clone().subst(&encoder.arena, &pledge_substs);
+                    for stmt in encoder
+                        .encode_pure_spec(deps, pledge)
+                        .unwrap()
+                        .exhale_stmts(vcx)
+                    {
+                        path_stmts.push(stmt);
+                    }
                 }
-                Some(Ok(condition)) => {
-                    body_stmts.push(vcx.mk_if_stmt(
-                        condition.to_expr(vcx),
-                        vcx.alloc_slice(&path_stmts),
-                        &[],
-                    ));
-                }
-                None => {
-                    body_stmts.extend(path_stmts);
+                // }
+                match encoder.encode_path_condition(deps, &path.pcs()) {
+                    Some(Err(err)) => {
+                        body_stmts.push(vcx.mk_comment_stmt(vir::vir_format!(
+                            vcx,
+                            "Error: {}",
+                            err
+                        )));
+                        body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                    }
+                    Some(Ok(condition)) => {
+                        body_stmts.push(vcx.mk_if_stmt(
+                            condition.to_expr(vcx),
+                            vcx.alloc_slice(&path_stmts),
+                            &[],
+                        ));
+                    }
+                    None => {
+                        body_stmts.extend(path_stmts);
+                    }
                 }
             }
         }

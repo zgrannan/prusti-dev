@@ -55,7 +55,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::FnDef(_, _) => todo!(),
             TyKind::FnPtr(_) => todo!(),
             TyKind::Dynamic(_, _, _) => todo!(),
-            TyKind::Closure(_, _) => todo!(),
+            TyKind::Closure(_, _) => String::from("Closure"),
             TyKind::Generator(_, _, _) => todo!(),
             TyKind::GeneratorWitness(_) => todo!(),
             TyKind::GeneratorWitnessMIR(_, _) => todo!(),
@@ -186,6 +186,11 @@ pub fn extract_type_params<'tcx>(
                 mutbl: type_and_mut.mutbl,
             }));
             (MostGenericTy(ty), vec![type_and_mut.ty])
+        }
+        TyKind::Closure(..) =>
+        {
+            // TODO
+            (MostGenericTy(ty), vec![])
         }
         _ => todo!("extract_type_params for {:?}", ty),
     }

@@ -299,43 +299,44 @@ impl TaskEncoder for SymImpureEnc {
                     }
                 }
             }
-            for ResultPath {
-                path,
-                pcs,
-                result,
-                heap,
-                ..
-            } in symbolic_execution.paths.iter()
-            {
+            for path in symbolic_execution.paths.iter() {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
 
-                // The postcondition may refer to `result`; in this case
-                // `expr` should be considered as the result. The
-                // postcondition is encoded as a fn taking all arguments
-                // of this function plus an extra argument corresponding
-                // Therefore, the symbolic value at argument `body.arg_count`
-                // corresponds to the spec's symbolic input argument.
-                let substs = arena.alloc(Substs::from_iter(
-                    (0..arg_count)
-                        .flat_map(|idx| {
-                            if symbolic_execution.symvars[idx].ref_mutability()
-                                == Some(Mutability::Mut)
-                            {
-                                // TODO: Should this always be gettable?
-                                heap.get(&MaybeOldPlace::Current {
-                                    place: Local::from_usize(idx + 1).into(),
+                match path {
+                    ResultPath::Return {
+                        path,
+                        pcs,
+                        result,
+                        backwards_facts,
+                        heap,
+                    } => {
+                        // The postcondition may refer to `result`; in this case
+                        // `expr` should be considered as the result. The
+                        // postcondition is encoded as a fn taking all arguments
+                        // of this function plus an extra argument corresponding
+                        // Therefore, the symbolic value at argument `body.arg_count`
+                        // corresponds to the spec's symbolic input argument.
+                        let substs = arena.alloc(Substs::from_iter(
+                            (0..arg_count)
+                                .flat_map(|idx| {
+                                    if symbolic_execution.symvars[idx].ref_mutability()
+                                        == Some(Mutability::Mut)
+                                    {
+                                        // TODO: Should this always be gettable?
+                                        heap.get(&MaybeOldPlace::Current {
+                                            place: Local::from_usize(idx + 1).into(),
+                                        })
+                                        .map(|expr| (idx, expr))
+                                    } else {
+                                        None
+                                    }
                                 })
-                                .map(|expr| (idx, expr))
-                            } else {
-                                None
-                            }
-                        })
-                        .chain(std::iter::once((arg_count, *result))),
-                ));
+                                .chain(std::iter::once((arg_count, *result))),
+                        ));
 
-                // Generate assertions ensuring that `expr` satisfies each
-                // postcondition attached to the function definition
-                let assertions: Vec<_> = spec
+                        // Generate assertions ensuring that `expr` satisfies each
+                        // postcondition attached to the function definition
+                        let assertions: Vec<_> = spec
                     .posts
                     .iter()
                     .flat_map(|p| {
@@ -360,18 +361,27 @@ impl TaskEncoder for SymImpureEnc {
                         })
                     })
                     .collect();
-                match visitor.encoder.encode_path_condition(visitor.deps, pcs) {
-                    Some(Ok(pc)) => {
-                        let if_stmt =
-                            vcx.mk_if_stmt(pc.to_expr(vcx), vcx.alloc_slice(&assertions), &[]);
-                        stmts.push(if_stmt);
+                        match visitor.encoder.encode_path_condition(visitor.deps, pcs) {
+                            Some(Ok(pc)) => {
+                                let if_stmt = vcx.mk_if_stmt(
+                                    pc.to_expr(vcx),
+                                    vcx.alloc_slice(&assertions),
+                                    &[],
+                                );
+                                stmts.push(if_stmt);
+                            }
+                            Some(Err(err)) => {
+                                stmts.push(
+                                    vcx.mk_comment_stmt(
+                                        vcx.alloc(format!("Encoding err: {err:?}")),
+                                    ),
+                                );
+                                stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                            }
+                            None => stmts.extend(assertions),
+                        }
                     }
-                    Some(Err(err)) => {
-                        stmts
-                            .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
-                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
-                    }
-                    None => stmts.extend(assertions),
+                    _ => todo!(),
                 }
             }
 

@@ -538,7 +538,7 @@ impl SymPureEnc {
                 paths: symbolic_execution
                     .paths
                     .into_iter()
-                    .map(|path| (path.pcs, path.result))
+                    .map(|path| (path.pcs().clone(), path.result().unwrap()))
                     .collect(),
                 debug_id: Some(fn_debug_name(def_id, substs)),
             }
