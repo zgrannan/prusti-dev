@@ -5,7 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::{
-    environment::{mir_sets::PlaceSet, mir_utils::RealEdges, procedure::BasicBlockIndex},
+    environment::{mir_utils::RealEdges, procedure::BasicBlockIndex},
     utils,
 };
 use log::{debug, trace};
@@ -396,7 +396,7 @@ impl ProcedureLoops {
             loop_exit_blocks,
             nonconditional_loop_blocks,
             back_edges,
-            dominators,
+            dominators: dominators.clone(),
             ordered_blocks,
         }
     }
@@ -501,115 +501,115 @@ impl ProcedureLoops {
         }
     }
 
-    /// If `definitely_initalised_paths` is not `None`, returns only leaves that are
-    /// definitely initialised.
-    #[tracing::instrument(level = "debug", skip(self, mir, definitely_initalised_paths))]
-    pub fn compute_read_and_write_leaves<'a, 'tcx: 'a>(
-        &self,
-        loop_head: BasicBlockIndex,
-        mir: &'a mir::Body<'tcx>,
-        definitely_initalised_paths: Option<&PlaceSet<'tcx>>,
-    ) -> Result<ReadAndWriteLeaves<'tcx>, LoopAnalysisError> {
-        // 1.  Let ``A1`` be a set of pairs ``(p, t)`` where ``p`` is a prefix
-        //     accessed in the loop body and ``t`` is the type of access (read,
-        //     destructive read, …).
-        // 2.  Let ``A2`` be a subset of ``A1`` that contains only the prefixes
-        //     whose roots are defined before the loop. (The root of the prefix
-        //     ``x.f.g.h`` is ``x``.)
-        // 3.  Let ``A3`` be a subset of ``A2`` without accesses that are subsumed
-        //     by other accesses.
-        // 4.  Let ``U`` be a set of prefixes that are unreachable at the loop
-        //     head because they are either moved out or mutably borrowed.
-        // 5.  For each access ``(p, t)`` in the set ``A3``:
-        //
-        //     1.  Add a read permission to the loop invariant to read the prefix
-        //         up to the last element. If needed, unfold the corresponding
-        //         predicates.
-        //     2.  Add a permission to the last element based on what is required
-        //         by the type of access. If ``p`` is a prefix of some prefixes in
-        //         ``U``, then the invariant would contain corresponding predicate
-        //         bodies without unreachable elements instead of predicates.
+    // /// If `definitely_initalised_paths` is not `None`, returns only leaves that are
+    // /// definitely initialised.
+    // #[tracing::instrument(level = "debug", skip(self, mir, definitely_initalised_paths))]
+    // pub fn compute_read_and_write_leaves<'a, 'tcx: 'a>(
+    //     &self,
+    //     loop_head: BasicBlockIndex,
+    //     mir: &'a mir::Body<'tcx>,
+    //     definitely_initalised_paths: Option<&PlaceSet<'tcx>>,
+    // ) -> Result<ReadAndWriteLeaves<'tcx>, LoopAnalysisError> {
+    //     // 1.  Let ``A1`` be a set of pairs ``(p, t)`` where ``p`` is a prefix
+    //     //     accessed in the loop body and ``t`` is the type of access (read,
+    //     //     destructive read, …).
+    //     // 2.  Let ``A2`` be a subset of ``A1`` that contains only the prefixes
+    //     //     whose roots are defined before the loop. (The root of the prefix
+    //     //     ``x.f.g.h`` is ``x``.)
+    //     // 3.  Let ``A3`` be a subset of ``A2`` without accesses that are subsumed
+    //     //     by other accesses.
+    //     // 4.  Let ``U`` be a set of prefixes that are unreachable at the loop
+    //     //     head because they are either moved out or mutably borrowed.
+    //     // 5.  For each access ``(p, t)`` in the set ``A3``:
+    //     //
+    //     //     1.  Add a read permission to the loop invariant to read the prefix
+    //     //         up to the last element. If needed, unfold the corresponding
+    //     //         predicates.
+    //     //     2.  Add a permission to the last element based on what is required
+    //     //         by the type of access. If ``p`` is a prefix of some prefixes in
+    //     //         ``U``, then the invariant would contain corresponding predicate
+    //     //         bodies without unreachable elements instead of predicates.
 
-        // Paths accessed inside the loop body.
-        let accesses = self.compute_used_paths(loop_head, mir)?;
-        debug!("accesses = {:?}", accesses);
-        let mut accesses_pairs: Vec<_> = accesses
-            .iter()
-            .map(|PlaceAccess { place, kind, .. }| (*place, *kind))
-            .collect();
-        debug!("accesses_pairs = {:?}", accesses_pairs);
-        if let Some(paths) = definitely_initalised_paths {
-            debug!("definitely_initalised_paths = {:?}", paths);
-            accesses_pairs.retain(|(place, kind)| {
-                paths.iter().any(|initialised_place|
-                        // If the prefix is definitely initialised, then this place is a potential
-                        // loop invariant.
-                        utils::is_prefix(*place, *initialised_place) ||
-                        // If the access is store, then we only need the path to exist, which is
-                        // guaranteed if we have at least some of the leaves still initialised.
-                        //
-                        // Note that the Rust compiler is even more permissive as explained in this
-                        // issue: https://github.com/rust-lang/rust/issues/21232.
-                        (
-                            *kind == PlaceAccessKind::Store &&
-                            utils::is_prefix(*initialised_place, *place)
-                        ))
-            });
-        }
-        debug!("accesses_pairs = {:?}", accesses_pairs);
-        // Paths to whose leaves we need write permissions.
-        let mut write_leaves: Vec<mir::Place> = Vec::new();
-        for (place, kind) in accesses_pairs.iter() {
-            if kind.is_write_access() {
-                let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
-                    kind.is_write_access()
-                        && place != potential_prefix
-                        && utils::is_prefix(*place, *potential_prefix)
-                });
-                if !has_prefix && !write_leaves.contains(place) {
-                    write_leaves.push(*place);
-                }
-            }
-        }
-        debug!("write_leaves = {:?}", write_leaves);
+    //     // Paths accessed inside the loop body.
+    //     let accesses = self.compute_used_paths(loop_head, mir)?;
+    //     debug!("accesses = {:?}", accesses);
+    //     let mut accesses_pairs: Vec<_> = accesses
+    //         .iter()
+    //         .map(|PlaceAccess { place, kind, .. }| (*place, *kind))
+    //         .collect();
+    //     debug!("accesses_pairs = {:?}", accesses_pairs);
+    //     if let Some(paths) = definitely_initalised_paths {
+    //         debug!("definitely_initalised_paths = {:?}", paths);
+    //         accesses_pairs.retain(|(place, kind)| {
+    //             paths.iter().any(|initialised_place|
+    //                     // If the prefix is definitely initialised, then this place is a potential
+    //                     // loop invariant.
+    //                     utils::is_prefix(*place, *initialised_place) ||
+    //                     // If the access is store, then we only need the path to exist, which is
+    //                     // guaranteed if we have at least some of the leaves still initialised.
+    //                     //
+    //                     // Note that the Rust compiler is even more permissive as explained in this
+    //                     // issue: https://github.com/rust-lang/rust/issues/21232.
+    //                     (
+    //                         *kind == PlaceAccessKind::Store &&
+    //                         utils::is_prefix(*initialised_place, *place)
+    //                     ))
+    //         });
+    //     }
+    //     debug!("accesses_pairs = {:?}", accesses_pairs);
+    //     // Paths to whose leaves we need write permissions.
+    //     let mut write_leaves: Vec<mir::Place> = Vec::new();
+    //     for (place, kind) in accesses_pairs.iter() {
+    //         if kind.is_write_access() {
+    //             let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
+    //                 kind.is_write_access()
+    //                     && place != potential_prefix
+    //                     && utils::is_prefix(*place, *potential_prefix)
+    //             });
+    //             if !has_prefix && !write_leaves.contains(place) {
+    //                 write_leaves.push(*place);
+    //             }
+    //         }
+    //     }
+    //     debug!("write_leaves = {:?}", write_leaves);
 
-        // Paths to whose leaves are roots of trees to which we need write permissions.
-        let mut mut_borrow_leaves: Vec<mir::Place> = Vec::new();
-        for (place, kind) in accesses_pairs.iter() {
-            if *kind == PlaceAccessKind::MutableBorrow {
-                let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
-                    (kind.is_write_access() || *kind == PlaceAccessKind::MutableBorrow)
-                        && place != potential_prefix
-                        && utils::is_prefix(*place, *potential_prefix)
-                });
-                if !has_prefix
-                    && !write_leaves.contains(place)
-                    && !mut_borrow_leaves.contains(place)
-                {
-                    mut_borrow_leaves.push(*place);
-                }
-            }
-        }
-        debug!("mut_borrow_leaves = {:?}", write_leaves);
+    //     // Paths to whose leaves are roots of trees to which we need write permissions.
+    //     let mut mut_borrow_leaves: Vec<mir::Place> = Vec::new();
+    //     for (place, kind) in accesses_pairs.iter() {
+    //         if *kind == PlaceAccessKind::MutableBorrow {
+    //             let has_prefix = accesses_pairs.iter().any(|(potential_prefix, kind)| {
+    //                 (kind.is_write_access() || *kind == PlaceAccessKind::MutableBorrow)
+    //                     && place != potential_prefix
+    //                     && utils::is_prefix(*place, *potential_prefix)
+    //             });
+    //             if !has_prefix
+    //                 && !write_leaves.contains(place)
+    //                 && !mut_borrow_leaves.contains(place)
+    //             {
+    //                 mut_borrow_leaves.push(*place);
+    //             }
+    //         }
+    //     }
+    //     debug!("mut_borrow_leaves = {:?}", write_leaves);
 
-        // Paths to whose leaves we need read permissions.
-        let mut read_leaves: Vec<mir::Place> = Vec::new();
-        for (place, kind) in accesses_pairs.iter() {
-            if !kind.is_write_access() {
-                let has_prefix = accesses_pairs.iter().any(|(potential_prefix, _kind)| {
-                    place != potential_prefix && utils::is_prefix(*place, *potential_prefix)
-                });
-                if !has_prefix
-                    && !read_leaves.contains(place)
-                    && !write_leaves.contains(place)
-                    && !mut_borrow_leaves.contains(place)
-                {
-                    read_leaves.push(*place);
-                }
-            }
-        }
-        debug!("read_leaves = {:?}", read_leaves);
+    //     // Paths to whose leaves we need read permissions.
+    //     let mut read_leaves: Vec<mir::Place> = Vec::new();
+    //     for (place, kind) in accesses_pairs.iter() {
+    //         if !kind.is_write_access() {
+    //             let has_prefix = accesses_pairs.iter().any(|(potential_prefix, _kind)| {
+    //                 place != potential_prefix && utils::is_prefix(*place, *potential_prefix)
+    //             });
+    //             if !has_prefix
+    //                 && !read_leaves.contains(place)
+    //                 && !write_leaves.contains(place)
+    //                 && !mut_borrow_leaves.contains(place)
+    //             {
+    //                 read_leaves.push(*place);
+    //             }
+    //         }
+    //     }
+    //     debug!("read_leaves = {:?}", read_leaves);
 
-        Ok((write_leaves, mut_borrow_leaves, read_leaves))
-    }
+    //     Ok((write_leaves, mut_borrow_leaves, read_leaves))
+    // }
 }

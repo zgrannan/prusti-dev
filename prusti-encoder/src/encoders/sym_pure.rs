@@ -1,4 +1,5 @@
 use pcs::{combined_pcs::BodyWithBorrowckFacts, utils::Place};
+use prusti_interface::environment::Procedure;
 use prusti_rustc_interface::{
     abi::FIRST_VARIANT,
     ast,
@@ -7,7 +8,7 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::{
         mir::{self, PlaceElem, VarDebugInfo},
-        ty::{self, GenericArgsRef},
+        ty::{self, GenericArgsRef, TyCtxt},
     },
     span::def_id::DefId,
     type_ir::sty::TyKind,
@@ -40,7 +41,7 @@ use crate::{
     encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc},
 };
 
-use super::{mir_base::MirBaseEnc, mir_pure::PureKind};
+use super::{mir_base::MirBaseEnc, mir_pure::PureKind, spec::with_def_spec};
 
 pub struct SymPureEnc;
 
@@ -70,8 +71,29 @@ pub struct SymPureEncTask<'tcx> {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SymPureEncResult<'sym, 'tcx> {
-    paths: BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
+    pub paths: BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
     pub debug_id: Option<String>,
+}
+
+impl<'sym, 'tcx> VisFormat for SymPureEncResult<'sym, 'tcx> {
+    fn to_vis_string(
+        &self,
+        tcx: Option<TyCtxt<'_>>,
+        debug_info: &[VarDebugInfo],
+        mode: OutputMode,
+    ) -> String {
+        self.paths
+            .iter()
+            .map(|(path_conditions, value)| {
+                format!(
+                    "{} ==> {}",
+                    path_conditions.to_vis_string(tcx, debug_info, mode),
+                    value.to_vis_string(tcx, debug_info, mode)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
@@ -94,13 +116,17 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         self.paths.iter()
     }
 
-    pub fn subst(
+    pub fn subst<'substs>(
         self,
         arena: &'sym SymExContext<'tcx>,
-        substs: &'sym PrustiSubsts<'sym, 'tcx>,
+        substs: &'substs PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
-        let mut result = BTreeSet::new();
+        let mut result: BTreeSet<(
+            PathConditions<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
+            PrustiSymValue<'sym, 'tcx>,
+        )> = BTreeSet::new();
         for (path_conditions, value) in self.paths {
+            println!("substs2: {:?}", substs);
             let path_conditions = path_conditions.subst(arena, substs);
             let value = value.subst(arena, substs);
             result.insert((path_conditions, value));
@@ -481,6 +507,86 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
             }
         })
     }
+
+    fn encode_loop_invariant<'heap, 'mir: 'heap>(
+        def_id: DefId,
+        block: mir::BasicBlock,
+        heap: &mut SymbolicHeap<'heap, 'mir, 'sym, 'tcx, Self::SymValSynthetic>,
+        sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
+    ) -> BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
+        let arena = sym_ex.arena;
+        let tcx = sym_ex.tcx;
+        let body = heap.body();
+        let procedure = Procedure::new(heap.tcx(), def_id, body.clone());
+        let spec_blocks = get_loop_spec_blocks(&procedure, block);
+        for bbi in spec_blocks {
+            for stmt in &body[bbi].statements {
+                if let mir::StatementKind::Assign(box (
+                    _,
+                    agg @ mir::Rvalue::Aggregate(
+                        agg_kind @ box mir::AggregateKind::Closure(cl_def_id, cl_substs),
+                        operands,
+                    ),
+                )) = &stmt.kind
+                {
+                    return with_def_spec(|def_spec| {
+                        let loop_spec = def_spec.get_loop_spec(&cl_def_id).unwrap();
+                        let encoded = SymPureEnc::encode(
+                            arena,
+                            SymPureEncTask {
+                                kind: PureKind::Closure,
+                                parent_def_id: loop_spec.def_id().into(),
+                                param_env: tcx.param_env(def_id),
+                                substs: cl_substs,
+                                caller_def_id: None, // TODO
+                            },
+                            None,
+                        );
+                        eprintln!("encoded: {:?}", encoded);
+                        eprintln!("operands: {:?}", operands);
+                        let subst = arena.mk_ref(
+                            arena.mk_aggregate(
+                                AggregateKind::Rust(*agg_kind.clone(), agg.ty(body, tcx)),
+                                arena.alloc_slice(
+                                    &operands
+                                        .iter()
+                                        .map(|op| sym_ex.encode_operand(heap, op))
+                                        .collect::<Vec<_>>(),
+                                ),
+                            ),
+                            Mutability::Not,
+                        );
+                        let substs = Substs::singleton(0, subst);
+                        eprintln!("substs: {:?}", substs);
+                        let encoded = encoded.subst(heap.arena(), &substs);
+                        eprintln!(
+                            "Hit it: {}",
+                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
+                        );
+                        return encoded.paths;
+                    });
+                }
+            }
+        }
+        BTreeSet::new()
+    }
+}
+
+fn get_loop_spec_blocks(procedure: &Procedure, loop_head: mir::BasicBlock) -> Vec<mir::BasicBlock> {
+    let mut res = vec![];
+    for bbi in procedure.get_reachable_cfg_blocks() {
+        if Some(loop_head) == procedure.get_loop_head(bbi) && procedure.is_spec_block(bbi) {
+            res.push(bbi)
+        } else {
+            // debug!(
+            //     "bbi {:?} has head {:?} and 'is spec' is {}",
+            //     bbi,
+            //     self.loop_encoder.get_loop_head(bbi),
+            //     self.procedure.is_spec_block(bbi)
+            // );
+        }
+    }
+    res
 }
 
 impl SymPureEnc {
@@ -505,7 +611,6 @@ impl SymPureEnc {
                 PureKind::Constant(promoted) => todo!(),
             };
             let body = body.body().as_ref().clone();
-            let arg_count = body.body.arg_count;
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
                 def_id: def_id.as_local().unwrap(),
                 body: &body.body,

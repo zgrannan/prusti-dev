@@ -268,6 +268,15 @@ pub enum LoopSpecification {
     Variant(LocalDefId),
 }
 
+impl LoopSpecification {
+    pub fn def_id(&self) -> LocalDefId {
+        match self {
+            LoopSpecification::Invariant(def_id) => *def_id,
+            LoopSpecification::Variant(def_id) => *def_id,
+        }
+    }
+}
+
 /// Specification of a type.
 #[derive(Debug, Clone, TyEncodable, TyDecodable)]
 pub struct TypeSpecification {

@@ -287,7 +287,7 @@ impl TaskEncoder for SymImpureEnc {
             }
 
             for (path, pcs, assertion) in symbolic_execution.assertions.iter() {
-                stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
+                stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "Assertion for path: {:?}", path)));
                 match visitor.encode_pc_assertion(pcs, assertion) {
                     Ok(assertion) => {
                         stmts.extend(assertion);

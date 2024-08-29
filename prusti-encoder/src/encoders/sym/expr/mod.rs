@@ -229,12 +229,16 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             AggregateKind::Rust(mir::AggregateKind::Tuple, _) => {
                                 AggregateType::Tuple
                             }
+                            AggregateKind::Rust(mir::AggregateKind::Closure(..), _) => {
+                                AggregateType::Closure
+                            }
                             AggregateKind::PCS(ty, variant_idx) => match ty.kind() {
                                 ty::TyKind::Adt(def, _) => AggregateType::Adt {
                                     def_id: def.did(),
                                     variant_index: variant_idx.unwrap_or(FIRST_VARIANT),
                                 },
                                 ty::TyKind::Tuple(..) => AggregateType::Tuple,
+                                ty::TyKind::Closure(..) => AggregateType::Closure,
                                 _ => todo!("{:?}", ty.kind()),
                             },
                             other => todo!("aggregate kind {:?}", other),

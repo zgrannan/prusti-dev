@@ -12,15 +12,15 @@ pub mod body;
 mod collect_closure_defs_visitor;
 mod collect_prusti_spec_visitor;
 mod diagnostic;
-//mod loops;
+mod loops;
 //mod loops_utils;
 //pub mod mir_analyses;
 //pub mod mir_body;
 //pub mod mir_sets;
 pub mod mir_storage;
-//pub mod mir_utils;
+pub mod mir_utils;
 mod name;
-//mod procedure;
+mod procedure;
 mod query;
 
 pub use self::{
@@ -31,10 +31,7 @@ pub use self::{
     //loops::{LoopAnalysisError, PlaceAccess, PlaceAccessKind, ProcedureLoops},
     //loops_utils::*,
     name::EnvName,
-    //procedure::{
-    //    get_loop_invariant, is_ghost_begin_marker, is_ghost_end_marker, is_loop_invariant_block,
-    //    is_loop_variant_block, is_marked_specification_block, BasicBlockIndex, Procedure,
-    //},
+    procedure::Procedure,
     query::EnvQuery,
 };
 use crate::data::ProcedureDefId;

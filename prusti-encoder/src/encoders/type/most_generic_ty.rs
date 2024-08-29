@@ -1,4 +1,5 @@
 use prusti_rustc_interface::{
+    hir::def_id::DefId,
     middle::ty::{self, TyKind, TypeAndMut},
     span::symbol,
 };
@@ -10,7 +11,10 @@ use vir::{DomainParamData, NullaryArityAny};
 ///
 /// To construct an instance, use [`extract_type_params`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct MostGenericTy<'tcx>(ty::Ty<'tcx>);
+pub enum MostGenericTy<'tcx> {
+    Ty(ty::Ty<'tcx>),
+    Closure(DefId, usize),
+}
 
 impl<'tcx: 'vir, 'vir> MostGenericTy<'tcx> {
     pub fn get_vir_domain_ident(
@@ -24,6 +28,9 @@ impl<'tcx: 'vir, 'vir> MostGenericTy<'tcx> {
 
 impl<'tcx> MostGenericTy<'tcx> {
     pub fn get_vir_base_name(&self, vcx: &vir::VirCtxt<'tcx>) -> String {
+        if let MostGenericTy::Closure(def_id, _) = self {
+            return vcx.tcx().def_path_str(*def_id);
+        }
         match self.kind() {
             TyKind::Bool => String::from("Bool"),
             TyKind::Char => String::from("Char"),
@@ -55,7 +62,6 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::FnDef(_, _) => todo!(),
             TyKind::FnPtr(_) => String::from("FnPtr"),
             TyKind::Dynamic(_, _, _) => todo!(),
-            TyKind::Closure(_, _) => String::from("Closure"),
             TyKind::Generator(_, _, _) => todo!(),
             TyKind::GeneratorWitness(_) => todo!(),
             TyKind::GeneratorWitnessMIR(_, _) => todo!(),
@@ -64,15 +70,22 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Placeholder(_) => todo!(),
             TyKind::Infer(_) => todo!(),
             TyKind::Error(_) => todo!(),
+            TyKind::Closure(_, _) => todo!(),
         }
     }
 
     pub fn is_generic(&self) -> bool {
+        if let MostGenericTy::Closure(_, _) = self {
+            return false;
+        }
         matches!(self.kind(), TyKind::Param(_))
     }
 
     pub fn kind(&self) -> &TyKind<'tcx> {
-        self.0.kind()
+        match self {
+            MostGenericTy::Ty(ty) => ty.kind(),
+            MostGenericTy::Closure(_, _) => todo!(),
+        }
     }
 
     pub fn tuple(arity: usize) -> Self {
@@ -83,11 +96,16 @@ impl<'tcx> MostGenericTy<'tcx> {
             );
             vcx.tcx().mk_ty_from_kind(ty::TyKind::Tuple(new_tys))
         });
-        MostGenericTy(tuple)
+        MostGenericTy::Ty(tuple)
     }
 
     pub fn ty(&self) -> ty::Ty<'tcx> {
-        self.0
+        match self {
+            MostGenericTy::Ty(ty) => *ty,
+            MostGenericTy::Closure(def_id, _) => {
+                todo!()
+            }
+        }
     }
 
     pub fn generics(&self) -> Vec<&'tcx ty::ParamTy> {
@@ -95,38 +113,47 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Param(p) => p,
             _ => unreachable!(),
         };
-        match self.kind() {
-            TyKind::Adt(_, args) => args
-                .into_iter()
-                .flat_map(ty::GenericArg::as_type)
-                .map(as_param_ty)
-                .collect(),
-            TyKind::Tuple(tys) => tys.iter().map(as_param_ty).collect::<Vec<_>>(),
-            TyKind::Array(orig, _) => vec![as_param_ty(*orig)],
-            TyKind::Slice(orig) => vec![as_param_ty(*orig)],
-            TyKind::Ref(_, orig, _) => vec![as_param_ty(*orig)],
-            TyKind::RawPtr(type_and_mut) => vec![as_param_ty(type_and_mut.ty)],
-            TyKind::Bool
-            | TyKind::Char
-            | TyKind::Float(_)
-            | TyKind::Int(_)
-            | TyKind::Never
-            | TyKind::Param(_)
-            | TyKind::Uint(_) => Vec::new(),
-            TyKind::Closure(..) => vec![], // TODO
-            TyKind::FnPtr(_) => vec![], // TODO
-            other => todo!("generics for {:?}", other),
-        }
+        vir::with_vcx(|vcx| {
+            if let MostGenericTy::Closure(_, num_upvars) = self {
+                return (0..*num_upvars)
+                    .map(|idx| as_param_ty(to_placeholder(vcx.tcx(), Some(idx))))
+                    .collect();
+            }
+            match self.kind() {
+                TyKind::Adt(_, args) => args
+                    .into_iter()
+                    .flat_map(ty::GenericArg::as_type)
+                    .map(as_param_ty)
+                    .collect(),
+                TyKind::Tuple(tys) => tys.iter().map(as_param_ty).collect::<Vec<_>>(),
+                TyKind::Array(orig, _) => vec![as_param_ty(*orig)],
+                TyKind::Slice(orig) => vec![as_param_ty(*orig)],
+                TyKind::Ref(_, orig, _) => vec![as_param_ty(*orig)],
+                TyKind::RawPtr(type_and_mut) => vec![as_param_ty(type_and_mut.ty)],
+                TyKind::Bool
+                | TyKind::Char
+                | TyKind::Float(_)
+                | TyKind::Int(_)
+                | TyKind::Never
+                | TyKind::Param(_)
+                | TyKind::Uint(_) => Vec::new(),
+                TyKind::FnPtr(_) => vec![], // TODO
+                other => todo!("generics for {:?}", other),
+            }
+        })
     }
 }
 
 impl<'tcx> From<MostGenericTy<'tcx>> for ty::Ty<'tcx> {
     fn from(value: MostGenericTy<'tcx>) -> Self {
-        value.0
+        match value {
+            MostGenericTy::Ty(ty) => ty,
+            MostGenericTy::Closure(def_id, _) => todo!(),
+        }
     }
 }
 
-fn to_placeholder(tcx: ty::TyCtxt<'_>, idx: Option<usize>) -> ty::Ty<'_> {
+pub fn to_placeholder(tcx: ty::TyCtxt<'_>, idx: Option<usize>) -> ty::Ty<'_> {
     let name = idx
         .map(|idx| format!("T{idx}"))
         .unwrap_or_else(|| String::from("T"));
@@ -146,7 +173,7 @@ pub fn extract_type_params<'tcx>(
             let id = tcx.mk_args_from_iter(id);
             let ty = tcx.mk_ty_from_kind(TyKind::Adt(adt, id));
             (
-                MostGenericTy(ty),
+                MostGenericTy::Ty(ty),
                 args.into_iter().flat_map(ty::GenericArg::as_type).collect(),
             )
         }
@@ -155,54 +182,53 @@ pub fn extract_type_params<'tcx>(
                 (0..tys.len()).map(|index| to_placeholder(tcx, Some(index))),
             );
             let ty = tcx.mk_ty_from_kind(TyKind::Tuple(new_tys));
-            (MostGenericTy(ty), tys.to_vec())
+            (MostGenericTy::Ty(ty), tys.to_vec())
         }
         TyKind::Array(orig, val) => {
             let ty = to_placeholder(tcx, None);
             let ty = tcx.mk_ty_from_kind(TyKind::Array(ty, val));
-            (MostGenericTy(ty), vec![orig])
+            (MostGenericTy::Ty(ty), vec![orig])
         }
         TyKind::Slice(orig) => {
             let ty = to_placeholder(tcx, None);
             let ty = tcx.mk_ty_from_kind(TyKind::Slice(ty));
-            (MostGenericTy(ty), vec![orig])
+            (MostGenericTy::Ty(ty), vec![orig])
         }
         TyKind::Ref(_, orig, m) => {
             let ty = to_placeholder(tcx, None);
             let ty = tcx.mk_ty_from_kind(TyKind::Ref(tcx.lifetimes.re_erased, ty, m));
-            (MostGenericTy(ty), vec![orig])
+            (MostGenericTy::Ty(ty), vec![orig])
         }
-        TyKind::Param(_) => (MostGenericTy(to_placeholder(tcx, None)), Vec::new()),
+        TyKind::Param(_) => (MostGenericTy::Ty(to_placeholder(tcx, None)), Vec::new()),
         TyKind::Bool
         | TyKind::Char
         | TyKind::Int(_)
         | TyKind::Uint(_)
         | TyKind::Float(_)
         | TyKind::Never
-        | TyKind::Str => (MostGenericTy(ty), Vec::new()),
+        | TyKind::Str => (MostGenericTy::Ty(ty), Vec::new()),
         TyKind::RawPtr(type_and_mut) => {
             let ty = to_placeholder(tcx, None);
             let ty = tcx.mk_ty_from_kind(TyKind::RawPtr(TypeAndMut {
                 ty,
                 mutbl: type_and_mut.mutbl,
             }));
-            (MostGenericTy(ty), vec![type_and_mut.ty])
+            (MostGenericTy::Ty(ty), vec![type_and_mut.ty])
         }
         TyKind::Closure(def_id, substs) => {
-            let id = ty::List::identity_for_item(tcx, def_id).iter();
-            let id = tcx.mk_args_from_iter(id);
-            let ty = tcx.mk_ty_from_kind(TyKind::Closure(def_id, id));
+            let upvar_tys = substs.as_closure().upvar_tys();
+            let ty = MostGenericTy::Closure(def_id, upvar_tys.len());
             (
-                MostGenericTy(ty),
-                substs
+                ty,
+                ty.generics()
                     .into_iter()
-                    .flat_map(ty::GenericArg::as_type)
+                    .map(|ty| tcx.mk_ty_from_kind(TyKind::Param(*ty)))
                     .collect(),
             )
         }
         TyKind::Foreign(_) => todo!(),
         TyKind::FnDef(_, _) => todo!(),
-        TyKind::FnPtr(_) => (MostGenericTy(ty), Vec::new()), // TODO,
+        TyKind::FnPtr(_) => (MostGenericTy::Ty(ty), Vec::new()), // TODO,
         TyKind::Dynamic(_, _, _) => todo!(),
         TyKind::Generator(_, _, _) => todo!(),
         TyKind::GeneratorWitness(_) => todo!(),

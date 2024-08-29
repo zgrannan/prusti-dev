@@ -30,6 +30,7 @@ pub enum AggregateType {
         def_id: DefId,
         variant_index: VariantIdx,
     },
+    Closure
 }
 
 impl From<&mir::AggregateKind<'_>> for AggregateType {
@@ -85,7 +86,7 @@ impl TaskEncoder for AggregateSnapArgsCastEnc {
         deps.emit_output_ref(task_key.clone(), ())?;
         vir::with_vcx(|vcx| {
             let cast_functions: Vec<Option<PureCast<'vir>>> = match task_key.aggregate_type {
-                AggregateType::Tuple => task_key
+                AggregateType::Tuple | AggregateType::Closure => task_key
                     .tys
                     .iter()
                     .map(|ty| {

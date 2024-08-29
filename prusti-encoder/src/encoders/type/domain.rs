@@ -129,7 +129,7 @@ use super::{
         ty::{EncodeGenericsAsParamTy, LiftedTy, LiftedTyEnc},
         ty_constructor::{TyConstructorEnc, TyConstructorEncOutputRef},
     },
-    most_generic_ty::{extract_type_params, MostGenericTy},
+    most_generic_ty::{extract_type_params, to_placeholder, MostGenericTy},
     rust_ty_snapshots::RustTySnapshotsEnc,
 };
 
@@ -163,6 +163,31 @@ impl TaskEncoder for DomainEnc {
     ) -> EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
             let base_name = task_key.get_vir_base_name(vcx);
+            if let MostGenericTy::Closure(def_id, _) = task_key {
+                let upvar_tys = task_key
+                    .generics()
+                    .into_iter()
+                    .map(|ty| vcx.tcx().mk_ty_from_kind(TyKind::Param(*ty)))
+                    .collect::<Vec<_>>();
+
+                let generics = upvar_tys
+                    .iter()
+                    .map(|ty| {
+                        deps.require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(*ty)
+                            .unwrap()
+                            .expect_generic()
+                    })
+                    .collect();
+                let mut enc = DomainEncData::new(vcx, task_key, generics, deps);
+                let field_tys = upvar_tys
+                    .iter()
+                    .map(|ty| FieldTy::from_ty(vcx, enc.deps, *ty))
+                    .collect::<Result<Vec<_>, _>>()?;
+                enc.deps
+                    .emit_output_ref(*task_key, enc.output_ref(base_name))?;
+                let specifics = enc.mk_struct_specifics(field_tys);
+                return Ok((Some(enc.finalize(task_key)), specifics));
+            }
             match task_key.kind() {
                 TyKind::Bool
                 | TyKind::Char
@@ -295,15 +320,6 @@ impl TaskEncoder for DomainEnc {
                 }
                 &TyKind::Str => {
                     let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
-                    let base_name = String::from("String");
-                    enc.deps
-                        .emit_output_ref(*task_key, enc.output_ref(base_name))?;
-                    let specifics = enc.mk_struct_specifics(vec![]);
-                    Ok((Some(enc.finalize(task_key)), specifics))
-                }
-                &TyKind::Closure(..) => {
-                    let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
-                    let base_name = String::from("Closure");
                     enc.deps
                         .emit_output_ref(*task_key, enc.output_ref(base_name))?;
                     let specifics = enc.mk_struct_specifics(vec![]);
@@ -311,7 +327,6 @@ impl TaskEncoder for DomainEnc {
                 }
                 &TyKind::FnPtr(_) => {
                     let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
-                    let base_name = String::from("FnPtr");
                     enc.deps
                         .emit_output_ref(*task_key, enc.output_ref(base_name))?;
                     let specifics = enc.mk_struct_specifics(vec![]);

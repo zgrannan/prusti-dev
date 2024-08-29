@@ -61,11 +61,10 @@ impl TaskEncoder for TyConstructorEnc {
         let mut functions = vec![];
         let mut axioms = vec![];
         vir::with_vcx(|vcx| {
-            let (ty_constructor, _) = extract_type_params(vcx.tcx(), task_key.ty());
-            let args = ty_constructor.generics();
+            let args = task_key.generics();
             let type_function_args = vcx.alloc_slice(&vec![generic_ref.type_snapshot; args.len()]);
             let type_function_ident = FunctionIdent::new(
-                vir::vir_format_identifier!(vcx, "s_{}_type", ty_constructor.get_vir_base_name(vcx)),
+                vir::vir_format_identifier!(vcx, "s_{}_type", task_key.get_vir_base_name(vcx)),
                 UnknownArity::new(type_function_args),
                 generic_ref.type_snapshot,
             );
@@ -94,7 +93,7 @@ impl TaskEncoder for TyConstructorEnc {
                         vir::vir_format_identifier!(
                             vcx,
                             "s_{}_typaram_{}",
-                            ty_constructor.get_vir_base_name(vcx),
+                            task_key.get_vir_base_name(vcx),
                             arg.name
                         ),
                         UnaryArity::new(ty_accessor_args),
