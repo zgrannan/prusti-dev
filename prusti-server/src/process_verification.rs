@@ -23,21 +23,8 @@ pub fn process_verification_request<'v, 't: 'v>(
     request: VerificationRequest,
     cache: impl Cache,
 ) -> viper::VerificationResult {
-    /*
-    let ast_utils = verification_context.new_ast_utils();
 
-    // Only for testing: Check that the normalization is reversible.
-    if config::print_hash() {
-        debug_assert!({
-            let mut program = request.program.clone();
-            let normalization_info = NormalizationInfo::normalize_program(&mut program);
-            normalization_info.denormalize_program(&mut program);
-            program == request.program
-        });
-    }
-
-    // Normalize the request before reaching the cache.
-    let normalization_info = NormalizationInfo::normalize_program(&mut request.program);*/
+    eprintln!("process_verification_request {:?}", request);
 
     let hash = request.get_hash();
     info!(
@@ -45,43 +32,7 @@ pub fn process_verification_request<'v, 't: 'v>(
         hash,
         request.program.get_name(),
     );
-    /*
-    let build_or_dump_viper_program = || {
-        let mut stopwatch = Stopwatch::start("prusti-server", "construction of JVM objects");
-        let ast_factory = verification_context.new_ast_factory();
 
-        let viper_program = prusti_viper::program_to_viper(request.program, &ast_factory);
-        //let viper_program = request
-        //    .program
-        //    .to_viper(prusti_common::vir::LoweringContext::default(), &ast_factory);
-        if config::dump_viper_program() {
-            stopwatch.start_next("dumping viper program");
-            dump_viper_program(
-                &ast_utils,
-                viper_program,
-                &request.program.get_name_with_check_mode(),
-            );
-        }
-
-        viper_program
-    };
-
-    // Only for testing: Print the hash and skip verification.
-    if config::print_hash() {
-        println!(
-            "Received verification request for: {}",
-            request.program.get_name()
-        );
-        println!("Hash of the request is: {hash}");
-        // Some tests need the dump to report a diff of the Viper programs.
-        if config::dump_viper_program() {
-            ast_utils.with_local_frame(16, || {
-                let _ = build_or_dump_viper_program();
-            });
-        }
-        return viper::VerificationResult::Success;
-    }
-*/
     // Early return in case of cache hit
     if config::enable_cache() {
         if let Some(result) = cache.get(hash) {

@@ -20,7 +20,7 @@ use prusti_rustc_interface::{
         },
         ty::TyCtxt,
     },
-    session::{EarlyErrorHandler, Session},
+    session::{Session},
 };
 
 #[derive(Default)]

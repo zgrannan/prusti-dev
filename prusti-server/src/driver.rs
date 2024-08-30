@@ -18,6 +18,8 @@ struct Args {
 }
 
 fn main() {
+    let xs = [0, 1, 2, 3];
+    let _y = unsafe { *xs.as_ptr().offset(4) };
     env_logger::init_from_env(
         env_logger::Env::new()
             .filter_or("PRUSTI_LOG", config::log())

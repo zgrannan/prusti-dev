@@ -154,7 +154,7 @@ impl<'vir, T> task_encoder::OutputRefAny for GenericCastOutputRef<'vir, T> {}
 /// [`CastTypeImpure`].
 pub struct CastToEnc<T>(std::marker::PhantomData<T>);
 
-fn sanity_check<'tcx>(lhs: ty::Ty<'tcx>, rhs: ty::Ty<'tcx>) {
+fn sanity_check<'tcx>(_lhs: ty::Ty<'tcx>, _rhs: ty::Ty<'tcx>) {
     // eprintln!("Checking sanity of {lhs:?} and {rhs:?}");
     // match (lhs.kind(), rhs.kind()) {
     //     (TyKind::Param(_), TyKind::Param(_)) | (TyKind::Param(_), TyKind::Ref(_, inner, _)) | (TyKind::Ref(_, inner, _), TyKind::Param(_)) => {

@@ -73,5 +73,5 @@ fn sanitize_char(c: char) -> Option<String> {
 }
 
 fn is_valid_identifier(s: &str) -> bool {
-    s.chars().all(|c| sanitize_char(c).is_none())
+    s.trim().len() == s.len() && s.is_ascii() && s.chars().all(|c| sanitize_char(c).is_none())
 }

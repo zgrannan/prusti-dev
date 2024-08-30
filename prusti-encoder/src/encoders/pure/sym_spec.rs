@@ -122,7 +122,7 @@ impl TaskEncoder for SymSpecEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> task_encoder::EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task_key, ())?;
-        let (def_id, substs, caller_def_id) = task_key;
+        let (def_id, substs, _caller_def_id) = task_key;
 
         let result = sctx::with_scx(|scx| {
             let panic_lang_items = [

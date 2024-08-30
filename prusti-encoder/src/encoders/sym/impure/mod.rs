@@ -307,7 +307,7 @@ impl TaskEncoder for SymImpureEnc {
                         path,
                         pcs,
                         result,
-                        backwards_facts,
+                        backwards_facts: _,
                         heap,
                     } => {
                         // The postcondition may refer to `result`; in this case
@@ -381,7 +381,7 @@ impl TaskEncoder for SymImpureEnc {
                             None => stmts.extend(assertions),
                         }
                     }
-                    ResultPath::Loop { path, pcs } => {
+                    ResultPath::Loop { path: _, pcs: _ } => {
                         // TODO
                     }
                 }

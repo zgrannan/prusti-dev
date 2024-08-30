@@ -56,7 +56,7 @@ pub fn test_entrypoint<'tcx>(
                     continue;
                 }
 
-                let (is_pure, is_trusted) = crate::encoders::with_proc_spec(def_id, |proc_spec| {
+                let (_is_pure, is_trusted) = crate::encoders::with_proc_spec(def_id, |proc_spec| {
                     let is_pure = proc_spec.kind.is_pure().unwrap_or_default();
                     let is_trusted = proc_spec.trusted.extract_inherit().unwrap_or_default();
                     (is_pure, is_trusted)

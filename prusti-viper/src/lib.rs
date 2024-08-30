@@ -5,6 +5,8 @@ pub fn program_to_viper<'vir, 'v>(program: vir::Program<'vir>, ast: &'vir AstFac
     let mut domains: FxHashMap<_, _> = Default::default();
     let mut domain_functions: FxHashMap<_, _> = Default::default();
     let mut domain_axioms: FxHashMap<_, _> = Default::default();
+    eprintln!("program.domains!!!");
+    println!("program.domains!!!");
     for domain in program.domains {
         domains.insert(domain.name, *domain);
         for function in domain.functions {

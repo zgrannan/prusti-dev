@@ -3,3 +3,6 @@ bindeps = true
 
 [registries.crates-io]
 protocol = "sparse"
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-Z", "sanitizer=address"]

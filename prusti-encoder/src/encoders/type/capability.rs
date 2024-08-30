@@ -24,13 +24,13 @@ impl TaskEncoder for CapabilityEnc {
     }
 
     fn do_encode_full<'vir>(
-        task_key: &Self::TaskKey<'vir>,
-        deps: &mut TaskEncoderDependencies<'vir, Self>,
+        _task_key: &Self::TaskKey<'vir>,
+        _deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> Result<(
         Self::OutputFullLocal<'vir>,
         Self::OutputFullDependency<'vir>,
     ), EncodeFullError<'vir, Self>> {
-        vir::with_vcx(|vcx| {
+        vir::with_vcx(|_vcx| {
             // let mut folder = RegionRenumberVisitor {
             //     tcx: vcx.tcx(),
             //     map: FxHashMap::default(),

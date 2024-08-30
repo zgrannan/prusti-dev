@@ -116,7 +116,7 @@ impl TaskEncoder for MirPureEnc {
                 PureKind::Pure => vcx
                     .body_mut()
                     .get_pure_fn_body(def_id, substs, caller_def_id),
-                PureKind::Constant(promoted) => todo!(), // vcx.body_mut().get_promoted_constant_body(def_id, promoted)
+                PureKind::Constant(_promoted) => todo!(), // vcx.body_mut().get_promoted_constant_body(def_id, promoted)
             };
 
             let body = &body.body().body;
@@ -463,7 +463,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let otherwise_update = updates.pop().unwrap();
                 let phi_expr = targets.iter().zip(updates.into_iter()).fold(
                     self.reify_branch(&tuple_ref, &mod_locals, &new_curr_ver, otherwise_update),
-                    |expr, ((cond_val, target), branch_update)| {
+                    |expr, ((cond_val, _target), branch_update)| {
                         self.vcx.mk_ternary_expr(
                             self.vcx.mk_bin_op_expr(
                                 vir::BinOpKind::CmpEq,
@@ -962,7 +962,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             }
             PrustiBuiltin::Forall => {
                 assert_eq!(arg_tys.len(), 2);
-                let (qvar_tys, upvar_tys, cl_def_id) = match arg_tys[1].expect_ty().kind() {
+                let (qvar_tys, _upvar_tys, cl_def_id) = match arg_tys[1].expect_ty().kind() {
                     TyKind::Closure(cl_def_id, cl_args) => (
                         match cl_args.as_closure().sig().skip_binder().inputs()[0].kind() {
                             TyKind::Tuple(list) => list,

@@ -163,7 +163,7 @@ impl TaskEncoder for DomainEnc {
     ) -> EncodeFullResult<'vir, Self> {
         vir::with_vcx(|vcx| {
             let base_name = task_key.get_vir_base_name(vcx);
-            if let MostGenericTy::Closure(def_id, _) = task_key {
+            if let MostGenericTy::Closure(_def_id, _) = task_key {
                 let upvar_tys = task_key
                     .generics()
                     .into_iter()

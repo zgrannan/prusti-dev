@@ -102,7 +102,7 @@ impl<'tcx> MostGenericTy<'tcx> {
     pub fn ty(&self) -> ty::Ty<'tcx> {
         match self {
             MostGenericTy::Ty(ty) => *ty,
-            MostGenericTy::Closure(def_id, _) => {
+            MostGenericTy::Closure(_def_id, _) => {
                 todo!()
             }
         }
@@ -148,7 +148,7 @@ impl<'tcx> From<MostGenericTy<'tcx>> for ty::Ty<'tcx> {
     fn from(value: MostGenericTy<'tcx>) -> Self {
         match value {
             MostGenericTy::Ty(ty) => ty,
-            MostGenericTy::Closure(def_id, _) => todo!(),
+            MostGenericTy::Closure(_def_id, _) => todo!(),
         }
     }
 }

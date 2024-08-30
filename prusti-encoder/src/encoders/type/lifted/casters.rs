@@ -322,7 +322,7 @@ impl TaskEncoder for CastersEnc<CastTypePure> {
                     .collect::<Vec<_>>(),
             );
 
-            let make_concrete_pre = mk_type_spec(
+            let _make_concrete_pre = mk_type_spec(
                 vcx.mk_local_ex(
                     make_concrete_snap_arg_decl.name,
                     make_concrete_snap_arg_decl.ty,

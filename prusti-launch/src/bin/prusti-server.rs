@@ -35,11 +35,19 @@ fn process(args: Vec<String>) -> Result<(), i32> {
     // Prevent shadowing of default log behavior.
     cmd.env("DEFAULT_PRUSTI_LOG", "info");
 
+    cmd.env("RUST_BACKTRACE", "1");
+
     let libjvm_path =
         launch::find_libjvm(&java_home).expect("Failed to find JVM library. Check JAVA_HOME");
     launch::add_to_loader_path(vec![libjvm_path], &mut cmd);
 
     launch::set_environment_settings(&mut cmd, &current_executable_dir, &java_home);
+
+    eprintln!("Running prusti-server-driver with args: {:?}", cmd.get_args());
+
+    // Redirect stderr of prusti-server-driver to this process's stderr
+    cmd.stderr(std::process::Stdio::inherit());
+    cmd.stdout(std::process::Stdio::inherit());
 
     let exit_status = cmd.status().expect("could not run prusti-server-driver");
 

@@ -9,7 +9,7 @@ pub fn fn_debug_name(def_id: DefId, substs: GenericArgsRef<'_>) -> String {
 }
 
 pub fn visualization_data_dir(def_id: DefId, substs: GenericArgsRef<'_>) -> Option<String> {
-    vir::with_vcx(|vcx| {
+    vir::with_vcx(|_vcx| {
         let fn_debug_name = fn_debug_name(def_id, substs);
         let debug_dir = std::env::var("PCS_VIS_DATA_DIR").map(|dir| {
             let mut hasher = DefaultHasher::new();

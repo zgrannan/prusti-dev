@@ -39,8 +39,8 @@ where
     ) -> ViperIdent<'vir>;
 
     fn encode<'vir>(
-        task_key: Self::TaskKey<'vir>,
-        deps: &mut TaskEncoderDependencies<'vir, Self>,
+        _task_key: Self::TaskKey<'vir>,
+        _deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> Result<
         ImpureFunctionEncOutput<'vir>,
         EncodeFullError<'vir, Self>,

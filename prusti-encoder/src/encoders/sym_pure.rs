@@ -180,7 +180,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                 then_expr.to_vis_string(tcx, debug_info, mode),
                 else_expr.to_vis_string(tcx, debug_info, mode)
             ),
-            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => vir::with_vcx(|vcx| {
+            PrustiSymValSyntheticData::PureFnCall(def_id, _substs, args) => vir::with_vcx(|vcx| {
                 let fn_name = vcx.tcx().item_name(*def_id);
                 let args_str = args
                     .iter()
@@ -189,7 +189,7 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
                     .join(", ");
                 format!("{}({})", fn_name, args_str)
             }),
-            PrustiSymValSyntheticData::Result(ty) => "result".to_string(),
+            PrustiSymValSyntheticData::Result(_ty) => "result".to_string(),
             PrustiSymValSyntheticData::VirLocal(name, _) => name.to_string(),
             PrustiSymValSyntheticData::Old(value) => {
                 format!("old({:?})", value)
@@ -222,7 +222,7 @@ impl<'sym, 'tcx> CanSubst<'sym, 'tcx> for PrustiSymValSynthetic<'sym, 'tcx> {
     fn subst(
         self,
         arena: &'sym SymExContext<'tcx>,
-        tcx: ty::TyCtxt<'tcx>,
+        _tcx: ty::TyCtxt<'tcx>,
         substs: &Substs<'sym, 'tcx, Self>,
     ) -> Self {
         match self {
@@ -274,7 +274,7 @@ impl<'sym, 'tcx, V> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym
         }
     }
 
-    fn optimize(self, arena: &'sym SymExContext<'tcx>, tcx: ty::TyCtxt<'tcx>) -> Self {
+    fn optimize(self, _arena: &'sym SymExContext<'tcx>, _tcx: ty::TyCtxt<'tcx>) -> Self {
         // TODO
         self
         // match &self {
@@ -366,7 +366,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, SymVar>;
     type OldMapSymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>;
     fn encode_fn_call<'mir>(
-        location: mir::Location,
+        _location: mir::Location,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
@@ -608,7 +608,7 @@ impl SymPureEnc {
                 PureKind::Pure => vcx
                     .body_mut()
                     .get_pure_fn_body(def_id, substs, caller_def_id),
-                PureKind::Constant(promoted) => todo!(),
+                PureKind::Constant(_promoted) => todo!(),
             };
             let body = body.body().as_ref().clone();
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {

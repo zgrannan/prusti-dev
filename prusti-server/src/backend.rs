@@ -13,6 +13,7 @@ impl<'a> Backend<'a> {
     pub fn verify(&mut self, program: vir::ProgramRef) -> VerificationResult {
         match self {
             Backend::Viper(viper, context) => {
+                eprintln!("prog0: {:?}", program);
                 let mut stopwatch =
                     Stopwatch::start("prusti-server backend", "construction of JVM objects");
 
@@ -22,6 +23,7 @@ impl<'a> Backend<'a> {
                     let ast_factory = context.new_ast_factory();
 
                     let viper_program = vir::with_vcx(|vcx| {
+                        eprintln!("prog: {:?}", program);
                         let program = vcx.get_program(program);
                         prusti_viper::program_to_viper(program, &ast_factory)
                     });

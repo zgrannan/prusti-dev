@@ -80,7 +80,7 @@ impl<'sym, 'tcx>
         &mut self,
         arena: &'sym SymExContext<'tcx>,
         var: InputPlace<'tcx>,
-        ty: ty::Ty<'tcx>,
+        _ty: ty::Ty<'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
         let base = self.0.get(&var.local()).unwrap();
         var.projection()
@@ -90,8 +90,8 @@ impl<'sym, 'tcx>
 
     fn transform_synthetic(
         &mut self,
-        arena: &'sym SymExContext<'tcx>,
-        s: PrustiSymValSynthetic<'sym, 'tcx>,
+        _arena: &'sym SymExContext<'tcx>,
+        _s: PrustiSymValSynthetic<'sym, 'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
         todo!()
     }
@@ -300,13 +300,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                         };
                         let proj_app = proj_fn.apply(self.vcx, [expr]);
                         match ty.rust_ty().kind() {
-                            ty::TyKind::Closure(def_id, substs) => {
+                            ty::TyKind::Closure(_def_id, _substs) => {
                                 let generic_cast = deps
                                     .require_local::<RustTyCastersEnc<CastTypePure>>(*field_ty)
                                     .unwrap();
                                 Ok(generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app))
                             }
-                            ty::TyKind::Adt(def, substs) => {
+                            ty::TyKind::Adt(def, _substs) => {
                                 // The ADT type for the field might be generic, concretize if necessary
                                 let variant =
                                     def.variant(ty.variant_index().unwrap_or(abi::FIRST_VARIANT));
