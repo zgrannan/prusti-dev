@@ -8,10 +8,9 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::{
         mir::{self, PlaceElem, VarDebugInfo},
-        ty::{self, GenericArgsRef, TyCtxt},
+        ty::{self, GenericArgsRef, TyCtxt, TyKind},
     },
     span::def_id::DefId,
-    type_ir::sty::TyKind,
 };
 use std::{
     collections::{BTreeSet, HashMap},

@@ -4,10 +4,9 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::{
         mir::{self, Body},
-        ty::{self, GenericArgs},
+        ty::{self, GenericArgs, TyKind},
     },
     span::def_id::DefId,
-    type_ir::sty::TyKind,
 };
 use std::collections::HashMap;
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
