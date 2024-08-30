@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    abi,
+    target::abi,
     middle::ty::{self, util::IntTypeExt, IntTy, TyKind, TypeAndMut, UintTy},
     span::symbol,
 };

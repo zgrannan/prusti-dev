@@ -1,4 +1,4 @@
-use mir_state_analysis::coupling_graph::BodyWithBorrowckFacts;
+use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
     index::IndexVec,
     macros::{TyDecodable, TyEncodable},
@@ -24,7 +24,7 @@ use prusti_rustc_interface::{
     dataflow::{Analysis, ResultsCursor},
     middle::{
         mir::{Body, Local, Location, Promoted, RETURN_PLACE},
-        ty::{ParamEnv, RegionVid, GenericArgs},
+        ty::{GenericArgs, ParamEnv, RegionVid},
     },
 };
 
@@ -46,7 +46,7 @@ impl<'tcx> MirBody<'tcx> {
     }
 
     pub fn arg_count(&self) -> usize {
-        self.0.clone().body.arg_count
+        self.0.body.arg_count
     }
 
     pub fn body(&self) -> Rc<BodyWithBorrowckFacts<'tcx>> {
@@ -60,12 +60,12 @@ impl<'tcx> MirBody<'tcx> {
         substs: GenericArgsRef<'tcx>,
         param_env: ParamEnv<'tcx>,
     ) -> Self {
-        let body = if substs == GenericArgs::identity_for_item(tcx, def_id) {
-            (*self.0).clone()
+        if substs == GenericArgs::identity_for_item(tcx, def_id) {
+            self.clone()
         } else {
-            (*self.0).clone().monomorphize(tcx, substs, param_env)
-        };
-        MirBody(Rc::new(body))
+            let body = (*self.0).clone().monomorphize(tcx, substs, param_env);
+            MirBody(Rc::new(body))
+        }
     }
 }
 

@@ -138,7 +138,7 @@ impl TaskEncoder for SymFunctionEnc {
             }
             let ty_arg_decls = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut ident_args = ty_arg_decls.iter().map(|arg| arg.ty()).collect::<Vec<_>>();
-            let sig = vcx.tcx().subst_and_normalize_erasing_regions(
+            let sig = vcx.tcx().instantiate_and_normalize_erasing_regions(
                 substs,
                 vcx.tcx().param_env(def_id),
                 vcx.tcx().fn_sig(def_id),

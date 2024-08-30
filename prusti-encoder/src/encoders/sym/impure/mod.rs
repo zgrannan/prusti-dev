@@ -11,7 +11,7 @@ use prusti_rustc_interface::{
     hir::Mutability,
     index::IndexVec,
     middle::{
-        mir::{self, interpret::Scalar, ConstantKind, Local, LocalDecl, ProjectionElem},
+        mir::{self, interpret::Scalar, Local, LocalDecl, ProjectionElem},
         ty::{self, GenericArgs},
     },
     span::def_id::{DefId, LocalDefId},

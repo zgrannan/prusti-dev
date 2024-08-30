@@ -13,15 +13,34 @@ fn main() {
     }
 }
 
+fn setup_command(current_executable_dir: &PathBuf, args: Vec<String>) -> Command {
+    let miri = true;
+
+    if miri {
+        let mut cmd = Command::new("./x.py");
+        cmd.arg("miri");
+        cmd.arg("run");
+        cmd.arg("--bin");
+        cmd.arg("prusti-server-driver");
+        if !args.is_empty() {
+            cmd.arg("--");
+            cmd.args(args);
+        }
+        cmd.envs(std::env::vars());
+        return cmd;
+    } else {
+        let mut prusti_server_driver_path = current_executable_dir.join("prusti-server-driver");
+        if cfg!(windows) {
+            prusti_server_driver_path.set_extension("exe");
+        }
+        let mut cmd = Command::new(prusti_server_driver_path);
+        cmd.args(args);
+        return cmd;
+    }
+}
+
 fn process(args: Vec<String>) -> Result<(), i32> {
     let _setup = launch::job::setup().unwrap(); // Kill all subprocesses on kill or Ctrl-C
-
-    let current_executable_dir = launch::get_current_executable_dir();
-
-    let mut prusti_server_driver_path = current_executable_dir.join("prusti-server-driver");
-    if cfg!(windows) {
-        prusti_server_driver_path.set_extension("exe");
-    }
 
     let java_home = match std::env::var("JAVA_HOME") {
         Ok(java_home) => PathBuf::from(java_home),
@@ -29,8 +48,9 @@ fn process(args: Vec<String>) -> Result<(), i32> {
             .expect("Failed to find Java home directory. Try setting JAVA_HOME"),
     };
 
-    let mut cmd = Command::new(&prusti_server_driver_path);
-    cmd.args(args);
+    let current_executable_dir = launch::get_current_executable_dir();
+
+    let mut cmd = setup_command(&current_executable_dir, args);
 
     // Prevent shadowing of default log behavior.
     cmd.env("DEFAULT_PRUSTI_LOG", "info");
@@ -43,9 +63,11 @@ fn process(args: Vec<String>) -> Result<(), i32> {
 
     launch::set_environment_settings(&mut cmd, &current_executable_dir, &java_home);
 
-    eprintln!("Running prusti-server-driver with args: {:?}", cmd.get_args());
+    eprintln!(
+        "Running prusti-server-driver with args: {:?}",
+        cmd.get_args()
+    );
 
-    // Redirect stderr of prusti-server-driver to this process's stderr
     cmd.stderr(std::process::Stdio::inherit());
     cmd.stdout(std::process::Stdio::inherit());
 

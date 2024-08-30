@@ -378,7 +378,13 @@ impl ProcedureLoops {
         for &(back_edge_source, loop_head) in back_edges.iter() {
             let blocks = nonconditional_loop_blocks.get_mut(&loop_head).unwrap();
             *blocks = blocks
-                .intersection(&dominators.dominators(back_edge_source).collect())
+                .intersection(
+                    &mir.basic_blocks
+                        .iter_enumerated()
+                        .filter(|(bb, _)| dominators.dominates(*bb, back_edge_source))
+                        .map(|(bb, _)| bb)
+                        .collect(),
+                )
                 .copied()
                 .collect();
         }

@@ -1,7 +1,7 @@
 use pcs::{combined_pcs::BodyWithBorrowckFacts, utils::Place};
 use prusti_interface::environment::Procedure;
 use prusti_rustc_interface::{
-    abi::FIRST_VARIANT,
+    target::abi::FIRST_VARIANT,
     ast,
     ast::Local,
     hir::Mutability,

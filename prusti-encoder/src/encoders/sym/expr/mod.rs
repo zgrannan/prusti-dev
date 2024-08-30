@@ -1,9 +1,9 @@
-use abi::FIRST_VARIANT;
 use prusti_rustc_interface::{
+    target::abi::{VariantIdx, FIRST_VARIANT},
     abi,
     index::IndexVec,
     middle::{
-        mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
+        mir::{self, interpret::Scalar, ProjectionElem},
         ty::{self, GenericArgs, TyKind},
     },
     span::def_id::{DefId, LocalDefId},
@@ -309,7 +309,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                             ty::TyKind::Adt(def, _substs) => {
                                 // The ADT type for the field might be generic, concretize if necessary
                                 let variant =
-                                    def.variant(ty.variant_index().unwrap_or(abi::FIRST_VARIANT));
+                                    def.variant(ty.variant_index().unwrap_or(FIRST_VARIANT));
                                 let generic_field_ty = variant.fields[*field_idx].ty(
                                     self.vcx.tcx(),
                                     GenericArgs::identity_for_item(self.vcx.tcx(), def.did()),
@@ -568,7 +568,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         ty: ty::Ty<'tcx>,
     ) -> vir::Expr<'vir> {
         deps.require_local::<ConstEnc>((
-            ConstantKind::from_scalar(self.vcx.tcx(), Scalar::from_u128(target), ty),
+            mir::Const::from_scalar(self.vcx.tcx(), Scalar::from_u128(target), ty),
             0,
             self.def_id,
         ))

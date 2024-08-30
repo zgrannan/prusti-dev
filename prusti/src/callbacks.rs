@@ -1,5 +1,4 @@
 use crate::verifier::verify;
-use prusti_utils::config;
 use prusti_interface::{
     environment::{mir_storage, Environment},
     specs::{self, cross_crate::CrossCrateSpecs, is_spec_fn},
@@ -8,20 +7,18 @@ use prusti_rustc_interface::{
     borrowck::consumers,
     data_structures::steal::Steal,
     driver::Compilation,
+    hir::{def::DefKind, def_id::LocalDefId},
     index::IndexVec,
     interface::{interface::Compiler, Config, Queries},
-    hir::{def::DefKind, def_id::LocalDefId},
     middle::{
         mir,
-        query::{
-            queries::mir_borrowck::ProvidedValue as MirBorrowck,
-            ExternProviders,
-            Providers
-        },
+        query::{queries::mir_borrowck::ProvidedValue as MirBorrowck, ExternProviders},
         ty::TyCtxt,
+        util::Providers,
     },
-    session::{Session},
+    session::Session,
 };
+use prusti_utils::config;
 
 #[derive(Default)]
 pub struct PrustiCompilerCalls;
@@ -76,15 +73,15 @@ fn mir_promoted<'tcx>(
     result
 }
 
+fn override_queries(_session: &Session, providers: &mut Providers) {
+    providers.mir_borrowck = mir_borrowck;
+    providers.mir_promoted = mir_promoted;
+}
+
 impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
     fn config(&mut self, config: &mut Config) {
         assert!(config.override_queries.is_none());
-        config.override_queries = Some(
-            |_session: &Session, providers: &mut Providers, _external: &mut ExternProviders| {
-                providers.mir_borrowck = mir_borrowck;
-                providers.mir_promoted = mir_promoted;
-            },
-        );
+        config.override_queries = Some(override_queries);
     }
     #[tracing::instrument(level = "debug", skip_all)]
     fn after_expansion<'tcx>(
@@ -172,7 +169,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
                         test_free_pcs(&mir, tcx);
                     }
                 } else {*/
-                    verify(env, def_spec);
+                verify(env, def_spec);
                 //}
             }
         });

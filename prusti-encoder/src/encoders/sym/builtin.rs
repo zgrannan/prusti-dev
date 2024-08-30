@@ -1,5 +1,5 @@
 use middle::{
-    mir::interpret::{ConstValue, Scalar},
+    mir::{interpret::Scalar, ConstValue},
     ty::VariantDiscr,
 };
 use prusti_rustc_interface::{

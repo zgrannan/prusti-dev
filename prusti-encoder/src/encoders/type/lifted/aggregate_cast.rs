@@ -1,10 +1,10 @@
 use prusti_rustc_interface::{
-    abi::VariantIdx,
     middle::{
         mir,
         ty::{GenericArgs, Ty},
     },
     span::def_id::DefId,
+    target::abi::VariantIdx,
 };
 use task_encoder::{EncodeFullResult, TaskEncoder};
 
@@ -30,7 +30,7 @@ pub enum AggregateType {
         def_id: DefId,
         variant_index: VariantIdx,
     },
-    Closure
+    Closure,
 }
 
 impl From<&mir::AggregateKind<'_>> for AggregateType {

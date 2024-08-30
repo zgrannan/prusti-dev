@@ -53,11 +53,13 @@ mod imp {
     }
 
     pub(super) unsafe fn setup() -> Option<Setup> {
-        // Move process to group leader if it isn't. The only applicable error should be EPERM which
-        // can be thrown when the process is already the group leader. Thus, we ignore it.
-        let _ = setpgid(Pid::this(), Pid::this());
-        // Register the SIGINT handler
-        ctrlc::set_handler(sigint_handler).expect("Error setting Ctrl-C handler");
+        if !cfg!(miri) {
+            // Move process to group leader if it isn't. The only applicable error should be EPERM which
+            // can be thrown when the process is already the group leader. Thus, we ignore it.
+            let _ = setpgid(Pid::this(), Pid::this());
+            // Register the SIGINT handler
+            ctrlc::set_handler(sigint_handler).expect("Error setting Ctrl-C handler");
+        }
         Some(false)
     }
 }

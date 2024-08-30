@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    abi, ast,
+    target::abi, ast,
     ast::Local,
     index::IndexVec,
     middle::{
@@ -526,7 +526,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                             let param_env = self.vcx().tcx().param_env(self.def_id);
                             self.vcx()
                                 .tcx()
-                                .subst_and_normalize_erasing_regions(arg_tys, param_env, sig)
+                                .instantiate_and_normalize_erasing_regions(arg_tys, param_env, sig)
                         } else {
                             sig.instantiate_identity()
                         };
@@ -622,20 +622,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     // a re-borrow of created-in-pure reference then it will be
                     // field projections of `null` which is also `null`.
                     let place_ref = place_ref.unwrap_or_else(|| self.vcx.mk_null());
-                    e_rvalue_ty.apply(
-                        self.vcx,
-                        ty_arg_exprs,
-                        vec![snap, place_ref],
-                    )
+                    e_rvalue_ty.apply(self.vcx, ty_arg_exprs, vec![snap, place_ref])
                 } else {
                     // For shared borrows we want to use just the snapshot
                     // without the reference so that snapshot equality compares
                     // only values.
-                    e_rvalue_ty.apply(
-                        self.vcx,
-                        ty_arg_exprs,
-                        vec![snap],
-                    )
+                    e_rvalue_ty.apply(self.vcx, ty_arg_exprs, vec![snap])
                 }
             }
             // ThreadLocalRef
@@ -780,7 +772,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             }
             mir::Operand::Constant(box constant) => self
                 .deps
-                .require_local::<ConstEnc>((constant.literal, self.encoding_depth, self.def_id))
+                .require_local::<ConstEnc>((constant.const_, self.encoding_depth, self.def_id))
                 .unwrap()
                 .lift(),
         }

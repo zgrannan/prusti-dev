@@ -2,7 +2,7 @@ use prusti_rustc_interface::{
     abi,
     ast::Mutability,
     middle::{
-        mir::{self, interpret::Scalar, ConstantKind, ProjectionElem},
+        mir::{self, interpret::Scalar, ProjectionElem},
         ty::{self, GenericArgs, TyKind},
     },
     span::def_id::{DefId, LocalDefId},

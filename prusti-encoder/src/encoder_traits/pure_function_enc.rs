@@ -148,7 +148,7 @@ where
                 );
                 Some(expr)
             };
-            let sig = vcx.tcx().subst_and_normalize_erasing_regions(
+            let sig = vcx.tcx().instantiate_and_normalize_erasing_regions(
                 substs,
                 vcx.tcx().param_env(def_id),
                 vcx.tcx().fn_sig(def_id),
