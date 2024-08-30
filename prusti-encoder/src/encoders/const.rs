@@ -41,7 +41,7 @@ impl ConstEnc {
                 vir::with_vcx(|vcx| prim.prim_to_snap.apply(vcx, [val]))
             }
             ConstValue::Scalar(Scalar::Ptr(ptr, _)) => vir::with_vcx(|vcx| {
-                match vcx.tcx().global_alloc(ptr.provenance) {
+                match vcx.tcx().global_alloc(ptr.provenance.alloc_id()) {
                     GlobalAlloc::Function(_) => todo!(),
                     GlobalAlloc::VTable(_, _) => todo!(),
                     GlobalAlloc::Static(_) => todo!(),

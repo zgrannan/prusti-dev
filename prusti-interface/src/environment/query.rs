@@ -350,25 +350,25 @@ impl<'tcx> EnvQuery<'tcx> {
         .unwrap_or((called_def_id, call_substs))
     }
 
-    /// Checks whether `ty` is copy.
-    /// The type is wrapped into a `Binder` to handle regions correctly.
-    /// The `param_env` should be passed as a `ProcedureDefId` which is
-    /// then used to calculate the param env; i.e. the set of
-    /// where-clauses that are in scope at this particular point.
-    pub fn type_is_copy(
-        self,
-        ty: ty::Binder<'tcx, ty::Ty<'tcx>>,
-        param_env: impl IntoParamTcx<'tcx, ParamEnv<'tcx>>,
-    ) -> bool {
-        let param_env = param_env.into_param(self.tcx);
-        // Normalize the type to account for associated types
-        let ty = self.resolve_assoc_types(ty, param_env);
-        let ty = self.tcx.erase_late_bound_regions(ty);
-        ty.is_copy_modulo_regions(
-            *self.tcx.at(prusti_rustc_interface::span::DUMMY_SP),
-            param_env,
-        )
-    }
+    // /// Checks whether `ty` is copy.
+    // /// The type is wrapped into a `Binder` to handle regions correctly.
+    // /// The `param_env` should be passed as a `ProcedureDefId` which is
+    // /// then used to calculate the param env; i.e. the set of
+    // /// where-clauses that are in scope at this particular point.
+    // pub fn type_is_copy(
+    //     self,
+    //     ty: ty::Binder<'tcx, ty::Ty<'tcx>>,
+    //     param_env: impl IntoParamTcx<'tcx, ParamEnv<'tcx>>,
+    // ) -> bool {
+    //     let param_env = param_env.into_param(self.tcx);
+    //     // Normalize the type to account for associated types
+    //     let ty = self.resolve_assoc_types(ty, param_env);
+    //     let ty = self.tcx.erase_regions(ty);
+    //     ty.is_copy_modulo_regions(
+    //         *self.tcx.at(prusti_rustc_interface::span::DUMMY_SP),
+    //         param_env,
+    //     )
+    // }
 
     /// Checks whether the given type implements the trait with the given DefId.
     /// The `param_env` should be passed as a `ProcedureDefId` which is
@@ -526,13 +526,13 @@ mod sealed {
     impl<'tcx> IntoParamTcx<'tcx, HirId> for OwnerId {
         #[inline(always)]
         fn into_param(self, tcx: TyCtxt<'tcx>) -> HirId {
-            tcx.hir().local_def_id_to_hir_id(self.def_id)
+            tcx.local_def_id_to_hir_id(self.def_id)
         }
     }
     impl<'tcx> IntoParamTcx<'tcx, HirId> for LocalDefId {
         #[inline(always)]
         fn into_param(self, tcx: TyCtxt<'tcx>) -> HirId {
-            tcx.hir().local_def_id_to_hir_id(self)
+            tcx.local_def_id_to_hir_id(self)
         }
     }
     impl<'tcx> IntoParamTcx<'tcx, LocalDefId> for HirId {

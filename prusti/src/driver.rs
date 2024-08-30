@@ -74,7 +74,7 @@ fn init_loggers() -> Option<FlushGuard> {
 fn main() {
     driver::install_ice_hook(BUG_REPORT_URL, |handler| {
         let version_info = get_prusti_version_info();
-        handler.note_without_error(format!("Prusti version: {version_info}"));
+        handler.note(format!("Prusti version: {version_info}"));
     });
 
     // To measure how long Prusti takes to run

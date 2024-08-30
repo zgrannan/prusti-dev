@@ -4,6 +4,7 @@ use prusti_interface::{
     specs::{self, cross_crate::CrossCrateSpecs, is_spec_fn},
 };
 use prusti_rustc_interface::{
+    ast_pretty::pprust::PpAnn,
     borrowck::consumers,
     data_structures::steal::Steal,
     driver::Compilation,
@@ -89,9 +90,9 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        if compiler.session().is_rust_2015() {
+        if compiler.sess.is_rust_2015() {
             compiler
-                .session()
+                .sess
                 .struct_warn(
                     "Prusti specifications are supported only from 2018 edition. Please \
                     specify the edition with adding a command line argument `--edition=2018` or \
@@ -99,11 +100,13 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
                 )
                 .emit();
         }
-        compiler.session().abort_if_errors();
+        compiler.sess.abort_if_errors();
         if config::print_desugared_specs() {
+            struct NoAnn;
+            impl PpAnn for NoAnn {}
             // based on the implementation of rustc_driver::pretty::print_after_parsing
             queries.global_ctxt().unwrap().enter(|tcx| {
-                let sess = compiler.session();
+                let sess = &compiler.sess;
                 let krate = &tcx.resolver_for_lowering(()).borrow().1;
                 let src_name = sess.io.input.source_name();
                 let src = sess
@@ -121,7 +124,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
                         krate,
                         src_name,
                         src,
-                        &prusti_rustc_interface::ast_pretty::pprust::state::NoAnn,
+                        &NoAnn,
                         false,
                         sess.edition(),
                         &sess.parse_sess.attr_id_generator,
@@ -138,12 +141,12 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        compiler.session().abort_if_errors();
+        compiler.sess.abort_if_errors();
         queries.global_ctxt().unwrap().enter(|tcx| {
             let mut env = Environment::new(tcx, env!("CARGO_PKG_VERSION"));
             let spec_checker = specs::checker::SpecChecker::new();
             spec_checker.check(&env);
-            compiler.session().abort_if_errors();
+            compiler.sess.abort_if_errors();
 
             let hir = env.query.hir();
             let mut spec_collector = specs::SpecCollector::new(&mut env);
@@ -174,7 +177,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
             }
         });
 
-        compiler.session().abort_if_errors();
+        compiler.sess.abort_if_errors();
         if config::full_compilation() {
             Compilation::Continue
         } else {

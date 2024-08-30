@@ -16,6 +16,7 @@ pub extern crate rustc_data_structures as data_structures;
 pub extern crate rustc_driver as driver;
 pub extern crate rustc_errors as errors;
 pub extern crate rustc_hash as hash;
+pub extern crate rustc_hir_pretty as hir_pretty;
 pub extern crate rustc_index as index;
 pub extern crate rustc_infer as infer;
 pub extern crate rustc_interface as interface;

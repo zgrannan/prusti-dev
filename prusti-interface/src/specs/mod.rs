@@ -7,7 +7,6 @@ use crate::{
     PrustiError,
 };
 use log::debug;
-use prusti_utils::config;
 use prusti_rustc_interface::{
     ast::ast,
     data_structures::fx::FxHashMap,
@@ -15,11 +14,13 @@ use prusti_rustc_interface::{
     hir::{
         self,
         def_id::{DefId, LocalDefId},
-        intravisit, FnRetTy,
+        intravisit::{self, Map},
+        FnRetTy,
     },
-    middle::{hir::map::Map, ty},
+    middle::{hir::map::Map as HirMap, ty},
     span::Span,
 };
+use prusti_utils::config;
 use std::{convert::TryInto, fmt::Debug};
 
 pub mod checker;
@@ -107,7 +108,7 @@ impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
-    pub fn collect_specs(&mut self, hir: Map<'tcx>) {
+    pub fn collect_specs(&mut self, hir: HirMap<'tcx>) {
         hir.walk_toplevel_module(self);
         hir.walk_attributes(self);
     }
@@ -334,7 +335,7 @@ impl<'a, 'tcx> SpecCollector<'a, 'tcx> {
 /// quantifiers/triggers inside specs and predicates, so they can be
 /// exported.
 struct CollectAllClosureDefsVisitor<'tcx> {
-    map: Map<'tcx>,
+    map: HirMap<'tcx>,
     result: Vec<LocalDefId>,
 }
 
@@ -442,7 +443,7 @@ fn get_procedure_spec_ids(def_id: DefId, attrs: &[ast::Attribute]) -> Option<Pro
 }
 
 impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
-    type Map = Map<'tcx>;
+    type Map = HirMap<'tcx>;
     type NestedFilter = prusti_rustc_interface::middle::hir::nested_filter::All;
 
     fn nested_visit_map(&mut self) -> Self::Map {
@@ -497,7 +498,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let hir = self.env.query.hir();
                 let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let type_id = get_type_id_from_impl_node(hir.find(impl_id).unwrap()).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -510,7 +511,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 let self_id = fn_decl.inputs[0].hir_id;
                 let hir = self.env.query.hir();
                 let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let type_id = get_type_id_from_impl_node(hir.find(impl_id).unwrap()).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -523,7 +524,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                 let name = read_prusti_attr("counterexample_print", attrs);
                 let hir = self.env.query.hir();
                 let impl_id = hir.parent_id(hir.parent_id(self_id));
-                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                let type_id = get_type_id_from_impl_node(hir.find(impl_id).unwrap()).unwrap();
                 self.type_specs
                     .entry(type_id.as_local().unwrap())
                     .or_default()
@@ -577,7 +578,8 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
                                 let self_id = fn_decl.inputs[0].hir_id;
                                 let hir = self.env.query.hir();
                                 let impl_id = hir.parent_id(hir.parent_id(self_id));
-                                let type_id = get_type_id_from_impl_node(hir.get(impl_id)).unwrap();
+                                let type_id =
+                                    get_type_id_from_impl_node(hir.find(impl_id).unwrap()).unwrap();
                                 if let Some(local_id) = type_id.as_local() {
                                     self.type_specs.entry(local_id).or_default().model =
                                         Some((attr, model_ty_id));
