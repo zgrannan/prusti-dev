@@ -508,7 +508,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         })
     }
 
-    fn encode_loop_invariant<'heap, 'mir: 'heap>(
+    fn encode_loop_invariant_assumption<'heap, 'mir: 'heap>(
         def_id: DefId,
         block: mir::BasicBlock,
         heap: &mut SymbolicHeap<'heap, 'mir, 'sym, 'tcx, Self::SymValSynthetic>,

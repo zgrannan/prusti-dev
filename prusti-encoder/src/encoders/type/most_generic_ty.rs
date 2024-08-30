@@ -220,10 +220,7 @@ pub fn extract_type_params<'tcx>(
             let ty = MostGenericTy::Closure(def_id, upvar_tys.len());
             (
                 ty,
-                ty.generics()
-                    .into_iter()
-                    .map(|ty| tcx.mk_ty_from_kind(TyKind::Param(*ty)))
-                    .collect(),
+                upvar_tys.to_vec()
             )
         }
         TyKind::Foreign(_) => todo!(),

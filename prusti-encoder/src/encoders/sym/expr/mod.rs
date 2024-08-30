@@ -300,6 +300,12 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                         };
                         let proj_app = proj_fn.apply(self.vcx, [expr]);
                         match ty.rust_ty().kind() {
+                            ty::TyKind::Closure(def_id, substs) => {
+                                let generic_cast = deps
+                                    .require_local::<RustTyCastersEnc<CastTypePure>>(*field_ty)
+                                    .unwrap();
+                                Ok(generic_cast.cast_to_concrete_if_possible(self.vcx, proj_app))
+                            }
                             ty::TyKind::Adt(def, substs) => {
                                 // The ADT type for the field might be generic, concretize if necessary
                                 let variant =
@@ -456,6 +462,21 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir, String> {
         let result = match &pc.predicate {
+            PathConditionPredicate::ImpliedBy(pcs) => {
+                if let Some(pcs) = self.encode_path_condition(deps, pcs) {
+                    let pcs = pcs.unwrap();
+                    let expr = self.vcx.mk_implies_expr(
+                        pcs.to_expr(self.vcx),
+                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
+                    );
+                    Ok(EncodedPCAtom::singleton(expr, self.vcx))
+                } else {
+                    Ok(EncodedPCAtom::singleton(
+                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
+                        self.vcx,
+                    ))
+                }
+            }
             PathConditionPredicate::Postcondition {
                 def_id,
                 substs,
