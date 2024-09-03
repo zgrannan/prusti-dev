@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
         ty::{self, codec::TyEncoder, PredicateKind, Ty, TyCtxt},
     },
     serialize::{opaque, Encodable, Encoder},
-    span::{source_map::StableSourceFileId, Span},
+    span::{ExpnId, Span, SpanEncoder, StableSourceFileId, Symbol, SyntaxContext},
 };
 
 pub struct DefSpecsEncoder<'tcx> {
@@ -61,38 +61,79 @@ impl<'tcx> Encoder for DefSpecsEncoder<'tcx> {
     }
 }
 
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefId {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        s.tcx.def_path_hash(*self).encode(s)
-    }
-}
+// impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefId {
+//     fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
+//         s.tcx.def_path_hash(*self).encode(s)
+//     }
+// }
 
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefIndex {
-    fn encode(&self, _: &mut DefSpecsEncoder<'tcx>) {
-        panic!("encoding `DefIndex` without context");
-    }
-}
+// impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for DefIndex {
+//     fn encode(&self, _: &mut DefSpecsEncoder<'tcx>) {
+//         panic!("encoding `DefIndex` without context");
+//     }
+// }
 
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for CrateNum {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        s.tcx.stable_crate_id(*self).encode(s)
-    }
-}
+// impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for CrateNum {
+//     fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
+//         s.tcx.stable_crate_id(*self).encode(s)
+//     }
+// }
 
 // See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/encoder/struct.EncodeContext.html
-impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for Span {
-    fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
-        let sm = s.tcx.sess.source_map();
-        for bp in [self.lo(), self.hi()] {
+// impl<'tcx> Encodable<DefSpecsEncoder<'tcx>> for Span {
+//     fn encode(&self, s: &mut DefSpecsEncoder<'tcx>) {
+//         let sm = s.tcx.sess.source_map();
+//         for bp in [self.lo(), self.hi()] {
+//             let sf = sm.lookup_source_file(bp);
+//             let ssfi = StableSourceFileId::new(&sf);
+//             ssfi.encode(s);
+//             // Not sure if this is the most stable way to encode a BytePos. If it fails
+//             // try finding a function in `SourceMap` or `SourceFile` instead. E.g. the
+//             // `bytepos_to_file_charpos` fn which returns `CharPos` (though there is
+//             // currently no fn mapping back to `BytePos` for decode)
+//             (bp - sf.start_pos).encode(s);
+//         }
+//     }
+// }
+
+impl<'tcx> SpanEncoder for DefSpecsEncoder<'tcx> {
+    // See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/encoder/struct.EncodeContext.html
+    fn encode_span(&mut self, span: Span) {
+        let sm = self.tcx.sess.source_map();
+        for bp in [span.lo(), span.hi()] {
             let sf = sm.lookup_source_file(bp);
-            let ssfi = StableSourceFileId::new(&sf);
-            ssfi.encode(s);
+            let ssfi = sf.stable_id; //StableSourceFileId::new(&sf);
+            ssfi.encode(self);
             // Not sure if this is the most stable way to encode a BytePos. If it fails
             // try finding a function in `SourceMap` or `SourceFile` instead. E.g. the
             // `bytepos_to_file_charpos` fn which returns `CharPos` (though there is
             // currently no fn mapping back to `BytePos` for decode)
-            (bp - sf.start_pos).encode(s);
+            (bp - sf.start_pos).encode(self);
         }
+    }
+
+    fn encode_symbol(&mut self, symbol: Symbol) {
+        todo!()
+    }
+
+    fn encode_expn_id(&mut self, expn_id: ExpnId) {
+        todo!()
+    }
+
+    fn encode_syntax_context(&mut self, syntax_context: SyntaxContext) {
+        todo!()
+    }
+
+    fn encode_crate_num(&mut self, crate_num: CrateNum) {
+        self.tcx.stable_crate_id(crate_num).encode(self)
+    }
+
+    fn encode_def_index(&mut self, def_index: DefIndex) {
+        todo!()
+    }
+
+    fn encode_def_id(&mut self, def_id: DefId) {
+        self.tcx.def_path_hash(def_id).encode(self)
     }
 }
 

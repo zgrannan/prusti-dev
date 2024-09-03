@@ -5,6 +5,7 @@ use log::debug;
 use prusti_rustc_interface::{
     ast::ast::Attribute,
     hir::hir_id::HirId,
+    hir::def::DefKind,
     middle::{
         hir::map::Map,
         ty::{self, GenericArgsRef, ImplPolarity, ParamEnv, TraitPredicate, TyCtxt},
@@ -157,7 +158,7 @@ impl<'tcx> EnvQuery<'tcx> {
         substs: GenericArgsRef<'tcx>,
     ) -> ty::PolyFnSig<'tcx> {
         let def_id = def_id.into_param();
-        let sig = if self.tcx.is_closure(def_id) {
+        let sig = if self.tcx.def_kind(def_id) == DefKind::Closure {
             ty::EarlyBinder::bind(substs.as_closure().sig())
         } else {
             self.tcx.fn_sig(def_id)
@@ -179,7 +180,7 @@ impl<'tcx> EnvQuery<'tcx> {
 
     /// Returns true iff `def_id` is a closure.
     pub fn is_closure(self, def_id: impl IntoParam<DefId>) -> bool {
-        self.tcx.is_closure(def_id.into_param())
+        self.tcx.def_kind(def_id.into_param()) == DefKind::Closure
     }
 
     // /// Returns the `DefId` of the corresponding trait method, if any.

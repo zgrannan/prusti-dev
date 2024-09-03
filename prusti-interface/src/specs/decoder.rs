@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use prusti_rustc_interface::{
+    ast::AttrId,
     hir::def_id::{CrateNum, DefId, DefIndex, DefPathHash},
     middle::{
         implement_ty_decoder,
@@ -8,7 +9,7 @@ use prusti_rustc_interface::{
     },
     serialize::{opaque, Decodable},
     session::StableCrateId,
-    span::{source_map::StableSourceFileId, BytePos, Span, SyntaxContext},
+    span::{BytePos, ExpnId, Span, SpanDecoder, StableSourceFileId, Symbol, SyntaxContext},
 };
 use rustc_hash::FxHashMap;
 
@@ -55,40 +56,15 @@ impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
     }
 }
 
-// This impl makes sure that we get a runtime error when we try decode a
-// `DefIndex` that is not contained in a `DefId`. Such a case would be problematic
-// because we would not know how to transform the `DefIndex` to the current
-// context.
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for DefIndex {
-    fn decode(_: &mut DefSpecsDecoder<'a, 'tcx>) -> DefIndex {
-        panic!("trying to decode `DefIndex` outside the context of a `DefId`")
-    }
-}
+implement_ty_decoder!(DefSpecsDecoder<'a, 'tcx>);
 
-// Both the `CrateNum` and the `DefIndex` of a `DefId` can change in between two
-// compilation sessions. We use the `DefPathHash`, which is stable across
-// sessions, to map the old `DefId` to the new one.
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for DefId {
-    fn decode(d: &mut DefSpecsDecoder<'a, 'tcx>) -> Self {
-        let def_path_hash = DefPathHash::decode(d);
-        d.def_path_hash_to_def_id(def_path_hash)
-    }
-}
-
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for CrateNum {
-    fn decode(d: &mut DefSpecsDecoder<'a, 'tcx>) -> CrateNum {
-        let stable_id = StableCrateId::decode(d);
-        d.tcx.stable_crate_id_to_crate_num(stable_id)
-    }
-}
-
-// See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/decoder/struct.DecodeContext.html
-impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for Span {
-    fn decode(s: &mut DefSpecsDecoder<'a, 'tcx>) -> Span {
-        let sm = s.tcx.sess.source_map();
+impl<'a, 'tcx> SpanDecoder for DefSpecsDecoder<'a, 'tcx> {
+    // See https://doc.rust-lang.org/nightly/nightly-rustc/rustc_metadata/rmeta/decoder/struct.DecodeContext.html
+    fn decode_span(&mut self) -> Span {
+        let sm = self.tcx.sess.source_map();
         let pos = [(); 2].map(|_| {
-            let ssfi = StableSourceFileId::decode(s);
-            let rel_bp = BytePos::decode(s);
+            let ssfi = StableSourceFileId::decode(self);
+            let rel_bp = BytePos::decode(self);
             sm.source_file_by_stable_id(ssfi)
                 // See comment in 'encoder.rs'
                 .map(|sf| sf.start_pos + rel_bp)
@@ -98,43 +74,78 @@ impl<'a, 'tcx> Decodable<DefSpecsDecoder<'a, 'tcx>> for Span {
         });
         Span::new(pos[0], pos[1], SyntaxContext::root(), None)
     }
-}
 
-implement_ty_decoder!(DefSpecsDecoder<'a, 'tcx>);
-
-impl<'a, 'tcx> TyDecoder for DefSpecsDecoder<'a, 'tcx> {
-    type I = TyCtxt<'tcx>;
-    const CLEAR_CROSS_CRATE: bool = true;
-
-    fn interner(&self) -> Self::I {
-        self.tcx
+    fn decode_symbol(&mut self) -> Symbol {
+        todo!()
     }
 
-    fn cached_ty_for_shorthand<F>(&mut self, shorthand: usize, or_insert_with: F) -> Ty<'tcx>
-    where
-        F: FnOnce(&mut Self) -> Ty<'tcx>,
-    {
-        if let Some(&ty) = self.ty_rcache.get(&shorthand) {
-            return ty;
-        }
-
-        let ty = or_insert_with(self);
-        self.ty_rcache.insert(shorthand, ty);
-        ty
+    fn decode_expn_id(&mut self) -> ExpnId {
+        todo!()
     }
 
-    fn with_position<F, R>(&mut self, pos: usize, f: F) -> R
-    where
-        F: FnOnce(&mut Self) -> R,
-    {
-        let new_opaque = opaque::MemDecoder::new(self.opaque.data(), pos);
-        let old_opaque = std::mem::replace(&mut self.opaque, new_opaque);
-        let r = f(self);
-        self.opaque = old_opaque;
-        r
+    fn decode_syntax_context(&mut self) -> SyntaxContext {
+        todo!()
     }
 
-    fn decode_alloc_id(&mut self) -> rustc_middle::mir::interpret::AllocId {
-        unimplemented!("decode_alloc_id")
+    fn decode_crate_num(&mut self) -> CrateNum {
+        let stable_id = StableCrateId::decode(self);
+        self.tcx.stable_crate_id_to_crate_num(stable_id)
+    }
+
+    // This impl makes sure that we get a runtime error when we try decode a
+    // `DefIndex` that is not contained in a `DefId`. Such a case would be problematic
+    // because we would not know how to transform the `DefIndex` to the current
+    // context.
+    fn decode_def_index(&mut self) -> DefIndex {
+        panic!("trying to decode `DefIndex` outside the context of a `DefId`")
+    }
+
+    // Both the `CrateNum` and the `DefIndex` of a `DefId` can change in between two
+    // compilation sessions. We use the `DefPathHash`, which is stable across
+    // sessions, to map the old `DefId` to the new one.
+    fn decode_def_id(&mut self) -> DefId {
+        let def_path_hash = DefPathHash::decode(self);
+        self.def_path_hash_to_def_id(def_path_hash)
+    }
+
+    fn decode_attr_id(&mut self) -> AttrId {
+        todo!()
     }
 }
+
+// impl<'a, 'tcx> TyDecoder for DefSpecsDecoder<'a, 'tcx> {
+//     type I = TyCtxt<'tcx>;
+//     const CLEAR_CROSS_CRATE: bool = true;
+
+//     fn interner(&self) -> Self::I {
+//         self.tcx
+//     }
+
+//     fn cached_ty_for_shorthand<F>(&mut self, shorthand: usize, or_insert_with: F) -> Ty<'tcx>
+//     where
+//         F: FnOnce(&mut Self) -> Ty<'tcx>,
+//     {
+//         if let Some(&ty) = self.ty_rcache.get(&shorthand) {
+//             return ty;
+//         }
+
+//         let ty = or_insert_with(self);
+//         self.ty_rcache.insert(shorthand, ty);
+//         ty
+//     }
+
+//     fn with_position<F, R>(&mut self, pos: usize, f: F) -> R
+//     where
+//         F: FnOnce(&mut Self) -> R,
+//     {
+//         let new_opaque = opaque::MemDecoder::new(self.opaque.data(), pos);
+//         let old_opaque = std::mem::replace(&mut self.opaque, new_opaque);
+//         let r = f(self);
+//         self.opaque = old_opaque;
+//         r
+//     }
+
+//     fn decode_alloc_id(&mut self) -> rustc_middle::mir::interpret::AllocId {
+//         unimplemented!("decode_alloc_id")
+//     }
+// }

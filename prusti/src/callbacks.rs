@@ -93,6 +93,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
         if compiler.sess.is_rust_2015() {
             compiler
                 .sess
+                .dcx()
                 .struct_warn(
                     "Prusti specifications are supported only from 2018 edition. Please \
                     specify the edition with adding a command line argument `--edition=2018` or \
@@ -100,7 +101,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
                 )
                 .emit();
         }
-        compiler.sess.abort_if_errors();
+        compiler.sess.dcx().abort_if_errors();
         if config::print_desugared_specs() {
             struct NoAnn;
             impl PpAnn for NoAnn {}
@@ -141,12 +142,12 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
         compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        compiler.sess.abort_if_errors();
+        compiler.sess.dcx().abort_if_errors();
         queries.global_ctxt().unwrap().enter(|tcx| {
             let mut env = Environment::new(tcx, env!("CARGO_PKG_VERSION"));
             let spec_checker = specs::checker::SpecChecker::new();
             spec_checker.check(&env);
-            compiler.sess.abort_if_errors();
+            compiler.sess.dcx().abort_if_errors();
 
             let hir = env.query.hir();
             let mut spec_collector = specs::SpecCollector::new(&mut env);
@@ -177,7 +178,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
             }
         });
 
-        compiler.sess.abort_if_errors();
+        compiler.sess.dcx().abort_if_errors();
         if config::full_compilation() {
             Compilation::Continue
         } else {
