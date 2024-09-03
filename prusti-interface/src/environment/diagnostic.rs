@@ -1,24 +1,24 @@
 use prusti_rustc_interface::{
-    errors::{DiagnosticBuilder, EmissionGuarantee, MultiSpan},
+    errors::{EmissionGuarantee, MultiSpan, Diag},
     middle::ty::TyCtxt,
 };
 use std::{borrow::Borrow, cell::RefCell};
 
 pub struct EnvDiagnostic<'tcx> {
     tcx: TyCtxt<'tcx>,
-    warn_buffer: RefCell<Vec<prusti_rustc_interface::errors::Diagnostic>>,
+    // warn_buffer: RefCell<Vec<prusti_rustc_interface::errors::Diagnostic>>,
 }
 
 impl<'tcx> EnvDiagnostic<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         EnvDiagnostic {
             tcx,
-            warn_buffer: RefCell::new(Vec::new()),
+            // warn_buffer: RefCell::new(Vec::new()),
         }
     }
 
     fn configure_diagnostic<S: Into<MultiSpan> + Clone, T: EmissionGuarantee>(
-        diagnostic: &mut DiagnosticBuilder<T>,
+        diagnostic: &mut Diag<T>,
         sp: S,
         help: &Option<String>,
         notes: &[(String, Option<S>)],
@@ -46,9 +46,10 @@ impl<'tcx> EnvDiagnostic<'tcx> {
     ) {
         let mut diagnostic = self.tcx.sess.dcx().struct_err(msg.to_string());
         Self::configure_diagnostic(&mut diagnostic, sp, help, notes);
-        for warn in self.warn_buffer.borrow_mut().iter_mut() {
-            self.tcx.sess.dcx().emit_diagnostic(warn.clone());
-        }
+        // TODO
+        // for warn in self.warn_buffer.borrow_mut().iter_mut() {
+        //     self.tcx.sess.dcx().emit_diagnostic(warn.clone());
+        // }
         diagnostic.emit();
     }
 

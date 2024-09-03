@@ -63,7 +63,7 @@ impl<'vir> Identifiable for PureFunctionIdent<'vir> {
         })
     }
 
-    fn preferred_idents(&self) -> impl Iterator<Item = String> {
+    fn preferred_idents(&self) -> Vec<String> {
         vir::with_vcx(|vcx| {
             let base_name = vcx.tcx().item_name(self.0.def_id).to_string();
             let extra: String = self.0.substs.iter().map(|s| format!("_{s}")).collect();
@@ -72,7 +72,6 @@ impl<'vir> Identifiable for PureFunctionIdent<'vir> {
                 format!("pure_{}_{}", base_name, extra),
                 ViperIdent::sanitize_with_underscores(&self.to_full_ident()),
             ]
-            .into_iter()
         })
     }
 }

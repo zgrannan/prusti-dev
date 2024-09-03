@@ -7,7 +7,7 @@ pub type ShortIdent = String;
 
 pub trait Identifiable {
     fn to_full_ident(&self) -> FullIdent;
-    fn preferred_idents(&self) -> impl Iterator<Item = String>;
+    fn preferred_idents(&self) -> Vec<String>;
 }
 
 pub struct Interner {
@@ -31,6 +31,7 @@ impl Interner {
         } else {
             for ident in identifiable
                 .preferred_idents()
+                .into_iter()
                 .chain(std::iter::once(full_ident.clone()))
             {
                 if !self.used_identifiers.contains(&ident.as_str()) {

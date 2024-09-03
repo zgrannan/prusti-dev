@@ -108,7 +108,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
             // based on the implementation of rustc_driver::pretty::print_after_parsing
             queries.global_ctxt().unwrap().enter(|tcx| {
                 let sess = &compiler.sess;
-                let krate = &tcx.resolver_for_lowering(()).borrow().1;
+                let krate = &tcx.resolver_for_lowering().borrow().1;
                 let src_name = sess.io.input.source_name();
                 let src = sess
                     .source_map()
@@ -128,7 +128,7 @@ impl prusti_rustc_interface::driver::Callbacks for PrustiCompilerCalls {
                         &NoAnn,
                         false,
                         sess.edition(),
-                        &sess.parse_sess.attr_id_generator,
+                        &sess.psess.attr_id_generator,
                     )
                 );
             });
