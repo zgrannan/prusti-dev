@@ -69,7 +69,7 @@ pub trait PureFuncAppEnc<'vir, E: TaskEncoder + 'vir + ?Sized> {
         &mut self,
         sig: Binder<'vir, FnSig<'vir>>,
         substs: &'vir List<GenericArg<'vir>>,
-        args: &[mir::Operand<'vir>],
+        args: &[&mir::Operand<'vir>],
         encode_operand_args: &Self::EncodeOperandArgs,
     ) -> Vec<vir::ExprGen<'vir, Self::Curr, Self::Next>> {
         let mono = self.monomorphize();
@@ -120,7 +120,7 @@ pub trait PureFuncAppEnc<'vir, E: TaskEncoder + 'vir + ?Sized> {
         def_id: DefId,
         sig: Binder<'vir, FnSig<'vir>>,
         substs: &'vir List<GenericArg<'vir>>,
-        args: &Vec<mir::Operand<'vir>>,
+        args: &Vec<&mir::Operand<'vir>>,
         destination: &mir::Place<'vir>,
         caller_def_id: DefId,
         encode_operand_args: &Self::EncodeOperandArgs,

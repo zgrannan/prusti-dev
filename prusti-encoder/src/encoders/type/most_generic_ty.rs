@@ -70,6 +70,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Infer(_) => todo!(),
             TyKind::Error(_) => todo!(),
             TyKind::Closure(_, _) => todo!(),
+            TyKind::CoroutineClosure(..) => todo!(),
         }
     }
 
@@ -233,5 +234,6 @@ pub fn extract_type_params<'tcx>(
         TyKind::Placeholder(_) => todo!(),
         TyKind::Infer(_) => todo!(),
         TyKind::Error(_) => todo!(),
+        TyKind::CoroutineClosure(..) => todo!(),
     }
 }

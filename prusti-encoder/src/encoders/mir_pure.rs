@@ -1,5 +1,5 @@
 use prusti_rustc_interface::{
-    target::abi, ast,
+    ast,
     ast::Local,
     index::IndexVec,
     middle::{
@@ -7,6 +7,7 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgs, TyKind},
     },
     span::def_id::DefId,
+    target::abi,
 };
 use std::collections::HashMap;
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
@@ -533,13 +534,18 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                             def_id,
                             sig,
                             arg_tys,
-                            args,
+                            &args.iter().map(|arg| &arg.node).collect::<Vec<_>>(),
                             destination,
                             self.def_id,
                             &new_curr_ver,
                         )
                     } else {
-                        self.encode_prusti_builtin(&new_curr_ver, def_id, arg_tys, args)
+                        self.encode_prusti_builtin(
+                            &new_curr_ver,
+                            def_id,
+                            arg_tys,
+                            &args.iter().map(|arg| &arg.node).collect::<Vec<_>>(),
+                        )
                     }
                 };
 
@@ -900,7 +906,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         curr_ver: &HashMap<mir::Local, usize>,
         def_id: DefId,
         arg_tys: ty::GenericArgsRef<'vir>,
-        args: &Vec<mir::Operand<'vir>>,
+        args: &Vec<&mir::Operand<'vir>>,
     ) -> ExprRet<'vir> {
         #[derive(Debug)]
         enum PrustiBuiltin {

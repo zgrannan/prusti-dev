@@ -371,7 +371,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         substs: GenericArgsRef<'tcx>,
         heap: &mut HeapData<'sym, 'tcx, Self::SymValSynthetic>,
         old_map: &mut OldMap<'sym, 'tcx, Self::OldMapSymValSynthetic>,
-        args: &Vec<mir::Operand<'tcx>>,
+        args: &Vec<&mir::Operand<'tcx>>,
     ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic, Self::OldMapSymValSynthetic>>
     {
         vir::with_vcx(|vcx| {

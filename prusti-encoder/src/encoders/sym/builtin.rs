@@ -59,7 +59,7 @@ pub fn partial_eq_expr<'sym, 'tcx>(
             Some(mk_conj(arena, tcx, exprs))
         }
         ty::TyKind::Adt(adt_def, substs) => {
-            if tcx.has_structural_eq_impls(ty) {
+            if tcx.has_structural_eq_impl(ty) {
                 let lhs_discriminant = arena.mk_discriminant(lhs);
                 let rhs_discriminant = arena.mk_discriminant(rhs);
                 let mut iter = adt_def.variants().iter_enumerated();
