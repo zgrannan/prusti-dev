@@ -63,7 +63,6 @@ where
     }
     let build_verification_request_handler = |viper_arc: Arc<Lazy<Viper, _>>, cache| {
         move |request: VerificationRequest| {
-            eprintln!("Request: {:?}", request);
             let stopwatch = Stopwatch::start("prusti-server", "attach thread to JVM");
             let viper_thread = Lazy::new(|| viper_arc.attach_current_thread());
             stopwatch.finish();

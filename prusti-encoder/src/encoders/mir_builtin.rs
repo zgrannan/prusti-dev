@@ -247,6 +247,7 @@ impl MirBuiltinEnc {
                 }
                 (pres, val)
             }
+            mir::BinOp::Cmp => todo!(),
             // Cannot overflow and no undefined behavior
             BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset => (Vec::new(), val),
         };

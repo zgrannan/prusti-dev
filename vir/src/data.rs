@@ -89,6 +89,7 @@ impl From<mir::BinOp> for BinOpKind {
             mir::BinOp::Ge => BinOpKind::CmpGe,
             mir::BinOp::Gt => BinOpKind::CmpGt,
             mir::BinOp::Offset => todo!(),
+            mir::BinOp::Cmp => todo!(),
         }
     }
 }

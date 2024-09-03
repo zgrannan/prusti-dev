@@ -26,12 +26,11 @@ impl CrossCrateSpecs {
     fn export_specs(env: &Environment, def_spec: &DefSpecificationMap) {
         let outputs = env.tcx().output_filenames(());
         // If we run `rustc` without the `--out-dir` flag set, then don't export specs
-        if outputs.out_directory.to_string_lossy() == "" {
+        if env.tcx().sess.io.output_dir.is_none() {
             return;
         }
-        let target_filename = outputs
-            .out_directory
-            .join(format!("lib{}.specs", env.name.local_crate_filename()));
+        let target_filename = outputs.with_extension("specs");
+        eprintln!("target_filename: {:?}", target_filename);
         if let Err(e) = Self::write_into_file(env, def_spec, &target_filename) {
             PrustiError::internal(
                 format!(

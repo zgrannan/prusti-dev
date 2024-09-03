@@ -290,7 +290,7 @@ impl<'tcx> EnvQuery<'tcx> {
                 ParamEnv::reveal_all(),
                 TraitPredicate {
                     trait_ref,
-                    polarity: ImplPolarity::Positive,
+                    polarity: ty::PredicatePolarity::Positive
                 },
             );
             let result = sc.select(&obligation);

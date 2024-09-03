@@ -1,7 +1,6 @@
 use pcs::{combined_pcs::BodyWithBorrowckFacts, utils::Place};
 use prusti_interface::environment::Procedure;
 use prusti_rustc_interface::{
-    target::abi::FIRST_VARIANT,
     ast,
     ast::Local,
     hir::Mutability,
@@ -11,6 +10,7 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgsRef, TyCtxt, TyKind},
     },
     span::def_id::DefId,
+    target::abi::FIRST_VARIANT,
 };
 use std::{
     collections::{BTreeSet, HashMap},
@@ -68,9 +68,9 @@ pub struct SymPureEncTask<'tcx> {
     pub caller_def_id: Option<DefId>,     // Caller/Use DefID
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymPureEncResult<'sym, 'tcx> {
-    pub paths: BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
+    pub paths: Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
     pub debug_id: Option<String>,
 }
 
@@ -120,18 +120,18 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         arena: &'sym SymExContext<'tcx>,
         substs: &'substs PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
-        let mut result: BTreeSet<(
-            PathConditions<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
-            PrustiSymValue<'sym, 'tcx>,
-        )> = BTreeSet::new();
-        for (path_conditions, value) in self.paths {
-            println!("substs2: {:?}", substs);
-            let path_conditions = path_conditions.subst(arena, substs);
-            let value = value.subst(arena, substs);
-            result.insert((path_conditions, value));
-        }
+        let paths = self
+            .paths
+            .into_iter()
+            .map(|(path_conditions, value)| {
+                (
+                    path_conditions.subst(arena, substs),
+                    value.subst(arena, substs),
+                )
+            })
+            .collect();
         Self {
-            paths: result,
+            paths,
             debug_id: self.debug_id,
         }
     }
@@ -142,7 +142,7 @@ pub struct PrustiSemantics<'sym, 'tcx>(pub PhantomData<&'sym &'tcx ()>);
 pub type PrustiSymValSynthetic<'sym, 'tcx, V = SymVar> =
     &'sym PrustiSymValSyntheticData<'sym, 'tcx, V>;
 
-#[derive(Ord, Eq, Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Eq, Debug, PartialEq, Clone)]
 pub enum PrustiSymValSyntheticData<'sym, 'tcx, V = SymVar> {
     And(PrustiSymValue<'sym, 'tcx, V>, PrustiSymValue<'sym, 'tcx, V>),
     If(
@@ -512,7 +512,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         block: mir::BasicBlock,
         heap: &mut SymbolicHeap<'heap, 'mir, 'sym, 'tcx, Self::SymValSynthetic>,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
-    ) -> BTreeSet<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
+    ) -> Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
         let arena = sym_ex.arena;
         let tcx = sym_ex.tcx;
         let body = heap.body();
@@ -541,8 +541,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             },
                             None,
                         );
-                        eprintln!("encoded: {:?}", encoded);
-                        eprintln!("operands: {:?}", operands);
                         let subst = arena.mk_ref(
                             arena.mk_aggregate(
                                 AggregateKind::Rust(*agg_kind.clone(), agg.ty(body, tcx)),
@@ -556,18 +554,13 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             Mutability::Not,
                         );
                         let substs = Substs::singleton(0, subst);
-                        eprintln!("substs: {:?}", substs);
                         let encoded = encoded.subst(heap.arena(), &substs);
-                        eprintln!(
-                            "Hit it: {}",
-                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
-                        );
                         return encoded.paths;
                     });
                 }
             }
         }
-        BTreeSet::new()
+        vec![]
     }
 }
 

@@ -48,8 +48,8 @@ impl<'tcx> MostGenericTy<'tcx> {
                     String::from("Ref_immutable")
                 }
             }
-            TyKind::RawPtr(type_and_mut) => {
-                if type_and_mut.mutbl.is_mut() {
+            TyKind::RawPtr(_, mutbl) => {
+                if mutbl.is_mut() {
                     String::from("Ptr_mutable")
                 } else {
                     String::from("Ptr_immutable")
@@ -71,6 +71,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Error(_) => todo!(),
             TyKind::Closure(_, _) => todo!(),
             TyKind::CoroutineClosure(..) => todo!(),
+            TyKind::Pat(_, _) => todo!(),
         }
     }
 
@@ -129,7 +130,7 @@ impl<'tcx> MostGenericTy<'tcx> {
                 TyKind::Array(orig, _) => vec![as_param_ty(*orig)],
                 TyKind::Slice(orig) => vec![as_param_ty(*orig)],
                 TyKind::Ref(_, orig, _) => vec![as_param_ty(*orig)],
-                TyKind::RawPtr(type_and_mut) => vec![as_param_ty(type_and_mut.ty)],
+                TyKind::RawPtr(ptr_ty, _) => vec![as_param_ty(*ptr_ty)],
                 TyKind::Bool
                 | TyKind::Char
                 | TyKind::Float(_)
@@ -207,21 +208,15 @@ pub fn extract_type_params<'tcx>(
         | TyKind::Float(_)
         | TyKind::Never
         | TyKind::Str => (MostGenericTy::Ty(ty), Vec::new()),
-        TyKind::RawPtr(type_and_mut) => {
+        TyKind::RawPtr(ptr_ty, mutbl) => {
             let ty = to_placeholder(tcx, None);
-            let ty = tcx.mk_ty_from_kind(TyKind::RawPtr(TypeAndMut {
-                ty,
-                mutbl: type_and_mut.mutbl,
-            }));
-            (MostGenericTy::Ty(ty), vec![type_and_mut.ty])
+            let ty = tcx.mk_ty_from_kind(TyKind::RawPtr(ty, mutbl));
+            (MostGenericTy::Ty(ty), vec![ptr_ty])
         }
         TyKind::Closure(def_id, substs) => {
             let upvar_tys = substs.as_closure().upvar_tys();
             let ty = MostGenericTy::Closure(def_id, upvar_tys.len());
-            (
-                ty,
-                upvar_tys.to_vec()
-            )
+            (ty, upvar_tys.to_vec())
         }
         TyKind::Foreign(_) => todo!(),
         TyKind::FnDef(_, _) => todo!(),
@@ -235,5 +230,6 @@ pub fn extract_type_params<'tcx>(
         TyKind::Infer(_) => todo!(),
         TyKind::Error(_) => todo!(),
         TyKind::CoroutineClosure(..) => todo!(),
+        TyKind::Pat(_, _) => todo!(),
     }
 }

@@ -601,7 +601,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for SpecCollector<'a, 'tcx> {
         intravisit::walk_stmt(self, stmt);
 
         // Collect closure specifications
-        if let prusti_rustc_interface::hir::StmtKind::Local(local) = stmt.kind {
+        if let prusti_rustc_interface::hir::StmtKind::Let(local) = stmt.kind {
             let attrs = self.env.query.get_local_attributes(local.hir_id);
             if has_prusti_attr(attrs, "closure") {
                 let init_expr = local.init.expect("closure on Local without assignment");

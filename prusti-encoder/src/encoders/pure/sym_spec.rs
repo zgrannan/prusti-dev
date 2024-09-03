@@ -1,6 +1,5 @@
 use middle::{
-    mir::ConstValue,
-    mir::interpret::{Scalar},
+    mir::{interpret::Scalar, ConstValue},
     ty::VariantDiscr,
 };
 use prusti_rustc_interface::{
@@ -35,14 +34,14 @@ use crate::{
 pub struct SymSpecEnc;
 
 #[derive(Clone)]
-pub struct SymSpec<'sym, 'tcx>(BTreeSet<SymPureEncResult<'sym, 'tcx>>);
+pub struct SymSpec<'sym, 'tcx>(Vec<SymPureEncResult<'sym, 'tcx>>);
 
 impl<'sym, 'tcx> SymSpec<'sym, 'tcx> {
     pub fn new() -> Self {
-        Self(BTreeSet::new())
+        Self(vec![])
     }
     pub fn singleton(value: SymPureEncResult<'sym, 'tcx>) -> Self {
-        Self(vec![value].into_iter().collect())
+        Self(vec![value])
     }
 
     pub fn into_iter(self) -> impl Iterator<Item = SymPureEncResult<'sym, 'tcx>> {
@@ -173,7 +172,7 @@ impl TaskEncoder for SymSpecEnc {
                         visualization_data_dir(*spec_def_id, substs),
                     )
                 })
-                .collect::<BTreeSet<_>>();
+                .collect::<Vec<_>>();
 
             let posts = specs
                 .posts
@@ -193,7 +192,7 @@ impl TaskEncoder for SymSpecEnc {
                     );
                     post
                 })
-                .collect::<BTreeSet<_>>();
+                .collect::<Vec<_>>();
 
             let pledges = specs
                 .pledges
@@ -213,7 +212,7 @@ impl TaskEncoder for SymSpecEnc {
                     );
                     post
                 })
-                .collect::<BTreeSet<_>>();
+                .collect::<Vec<_>>();
 
             SymSpecEncOutput {
                 pres: SymSpec(pres),

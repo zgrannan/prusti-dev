@@ -3,7 +3,7 @@ use prusti_rustc_interface::{
         mir::{self, ConstValue},
         ty,
     },
-    span::def_id::DefId,
+    span::{def_id::DefId, Span}
 };
 use rustc_middle::mir::interpret::{GlobalAlloc, Scalar};
 use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
@@ -129,7 +129,7 @@ impl TaskEncoder for ConstEnc {
                 }
                 None => {
                     let evaluated = const_
-                        .eval(vcx.tcx(), vcx.tcx().param_env(uneval.def), None)
+                        .eval(vcx.tcx(), vcx.tcx().param_env(uneval.def), Span::default())
                         .unwrap();
                     Self::encode_const_value(evaluated, ty, deps)
                 }

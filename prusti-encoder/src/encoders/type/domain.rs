@@ -1,7 +1,7 @@
 use prusti_rustc_interface::{
-    target::abi,
     middle::ty::{self, util::IntTypeExt, IntTy, TyKind, TypeAndMut, UintTy},
     span::symbol,
+    target::abi,
 };
 use rustc_middle::ty::ParamTy;
 use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
@@ -294,7 +294,7 @@ impl TaskEncoder for DomainEnc {
                     let specifics = enc.mk_enum_specifics(None);
                     Ok((Some(enc.finalize(task_key)), specifics))
                 }
-                &TyKind::RawPtr(TypeAndMut { ty: inner, .. }) | &TyKind::Ref(_, inner, _) => {
+                &TyKind::RawPtr(inner, _) | &TyKind::Ref(_, inner, _) => {
                     let generics = vec![deps
                         .require_local::<LiftedTyEnc<EncodeGenericsAsParamTy>>(inner)?
                         .expect_generic()];

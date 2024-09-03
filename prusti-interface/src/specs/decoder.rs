@@ -50,9 +50,8 @@ impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
             )
         }
         // Get `DefId`
-        self.tcx.def_path_hash_to_def_id(hash, &mut || {
-            panic!("DefPathHash not found in the local crate")
-        })
+        self.tcx
+            .def_path_hash_to_def_id(hash, &"DefPathHash not found in the local crate")
     }
 }
 
