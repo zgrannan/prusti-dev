@@ -18,11 +18,11 @@ for arg in "$@"; do
 done
 
 if [[ "$pcs" == true ]]; then
-    cd ../pcs/ && cargo build && cd - || exit 1
+    cd ../pcs/ && cargo build --all --release && cd - || exit 1
 else
-    ./x.py build || exit 1
+    ./x.py build --all --release || exit 1
     killall prusti-server-driver
-    target/debug/prusti-server -p 3000 &
+    target/release/prusti-server -p 3000 &
     PRUSTI_SERVER_PID=$!
     export PRUSTI_SERVER_ADDRESS=localhost:3000
     sleep 2
@@ -37,14 +37,14 @@ check_pass() {
     local file=$1
     if [[ "$pcs" == true ]]; then
         echo "Checking $file (PCS only)"
-        ../pcs/target/debug/pcs_bin "$file"
+        ../pcs/target/release/pcs_bin "$file"
         if [[ $? -ne 0 ]]; then
             echo "Test $file failed"
             exit 1
         fi
     else
         echo "Checking $file (expected to pass)"
-        target/debug/prusti-rustc --edition=2018 "$file"
+        target/release/prusti-rustc --edition=2018 "$file"
         if [[ $? -ne 0 ]]; then
             echo "Test $file failed"
             exit 1
