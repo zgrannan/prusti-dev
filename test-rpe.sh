@@ -56,14 +56,14 @@ check_fail() {
     local file=$1
     if [[ "$pcs" == true ]]; then
         echo "Checking $file (PCS only)"
-        ../pcs/target/debug/pcs_bin "$file"
+        ../pcs/target/release/pcs_bin "$file"
         if [[ $? -ne 0 ]]; then
             echo "Test $file failed"
             exit 1
         fi
     else
         echo "Checking $file (expected to fail)"
-        target/debug/prusti-rustc --edition=2018 "$file"
+        target/release/prusti-rustc --edition=2018 "$file"
         if [[ $? -eq 0 ]]; then
             echo "Test $file passed but it should have failed"
             exit 1
