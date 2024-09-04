@@ -121,35 +121,37 @@ impl TaskEncoder for MirPureEnc {
 
             let body = &body.body().body;
 
-            let expr_inner = Enc::new(
-                vcx,
-                cfg!(feature = "mono_function_encoding"),
-                task_key.0,
-                def_id,
-                &body,
-                deps,
-            )
-            .encode_body();
+            // let expr_inner = todo!();
+            // Enc::new(
+            //     vcx,
+            //     cfg!(feature = "mono_function_encoding"),
+            //     task_key.0,
+            //     def_id,
+            //     &body,
+            //     deps,
+            // )
+            // .encode_body();
 
             // We wrap the expression with an additional lazy that will perform
             // some sanity checks. These requirements cannot be expressed using
             // only the type system.
-            let expr = vcx.mk_lazy_expr(
-                vir::vir_format!(vcx, "pure body {def_id:?}"),
-                Box::new(move |vcx, lctx: ExprInput<'_>| {
-                    // check: are we actually providing arguments for the
-                    //   correct `DefId`?
-                    assert_eq!(lctx.0, def_id);
+            // let expr = vcx.mk_lazy_expr(
+            //     vir::vir_format!(vcx, "pure body {def_id:?}"),
+            //     Box::new(move |vcx, lctx: ExprInput<'_>| {
+            //         // check: are we actually providing arguments for the
+            //         //   correct `DefId`?
+            //         assert_eq!(lctx.0, def_id);
 
-                    // check: are we providing the expected number of arguments?
-                    // assert_eq!(lctx.1.len(), body.arg_count);
+            //         // check: are we providing the expected number of arguments?
+            //         // assert_eq!(lctx.1.len(), body.arg_count);
 
-                    use vir::Reify;
-                    expr_inner.kind.reify(vcx, lctx)
-                }),
-            );
-            add_debug_note!(expr.debug_info, "Inner expr: {}", expr_inner.debug_info);
-            expr
+            //         use vir::Reify;
+            //         expr_inner.kind.reify(vcx, lctx)
+            //     }),
+            // );
+            // add_debug_note!(expr.debug_info, "Inner expr: {}", expr_inner.debug_info);
+            // expr
+            todo!()
         });
         tracing::debug!("finished {def_id:?}");
 
@@ -244,32 +246,32 @@ impl<'vir, 'enc> PureFuncAppEnc<'vir, MirPureEnc> for Enc<'vir, 'enc> {
 }
 
 impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
-    fn new(
-        vcx: &'vir vir::VirCtxt<'vir>,
-        monomorphize: bool,
-        encoding_depth: usize,
-        def_id: DefId,
-        body: &'enc mir::Body<'vir>,
-        deps: &'enc mut TaskEncoderDependencies<'vir, MirPureEnc>,
-    ) -> Self {
-        assert!(
-            !body.basic_blocks.is_cfg_cyclic(),
-            "MIR pure encoding does not support loops"
-        );
-        let rev_doms = rev_doms::ReverseDominators::new(&body.basic_blocks);
-        Self {
-            monomorphize,
-            vcx,
-            encoding_depth,
-            def_id,
-            body,
-            rev_doms,
-            deps,
-            visited: IndexVec::from_elem_n(false, body.basic_blocks.len()),
-            version_ctr: IndexVec::from_elem_n(0, body.local_decls.len()),
-            phi_ctr: 0,
-        }
-    }
+    // fn new(
+    //     vcx: &'vir vir::VirCtxt<'vir>,
+    //     monomorphize: bool,
+    //     encoding_depth: usize,
+    //     def_id: DefId,
+    //     body: &'enc mir::Body<'vir>,
+    //     deps: &'enc mut TaskEncoderDependencies<'vir, MirPureEnc>,
+    // ) -> Self {
+    //     assert!(
+    //         !body.basic_blocks.is_cfg_cyclic(),
+    //         "MIR pure encoding does not support loops"
+    //     );
+    //     let rev_doms = rev_doms::ReverseDominators::new(&body.basic_blocks);
+    //     Self {
+    //         monomorphize,
+    //         vcx,
+    //         encoding_depth,
+    //         def_id,
+    //         body,
+    //         rev_doms,
+    //         deps,
+    //         visited: IndexVec::from_elem_n(false, body.basic_blocks.len()),
+    //         version_ctr: IndexVec::from_elem_n(0, body.local_decls.len()),
+    //         phi_ctr: 0,
+    //     }
+    // }
 
     fn mk_local(&self, local: mir::Local, version: usize) -> &'vir str {
         vir::vir_format!(
@@ -1065,18 +1067,18 @@ mod rev_doms {
         pub end: mir::BasicBlock,
     }
     impl ReverseDominators {
-        pub fn new<'a, 'vir>(blocks: &'a mir::BasicBlocks<'vir>) -> Self {
-            let no_succ_blocks = blocks
-                .iter_enumerated()
-                .filter(|(_, data)| data.terminator().successors().next().is_none())
-                .map(|(bb, _)| bb)
-                .collect();
-            let rbb = RevBasicBlocks(blocks, no_succ_blocks);
-            Self {
-                dom: dominators::dominators(&rbb),
-                end: rbb.start_node(),
-            }
-        }
+        // pub fn new<'a, 'vir>(blocks: &'a mir::BasicBlocks<'vir>) -> Self {
+        //     let no_succ_blocks = blocks
+        //         .iter_enumerated()
+        //         .filter(|(_, data)| data.terminator().successors().next().is_none())
+        //         .map(|(bb, _)| bb)
+        //         .collect();
+        //     let rbb = RevBasicBlocks(blocks, no_succ_blocks);
+        //     Self {
+        //         dom: dominators::dominators(&rbb),
+        //         end: rbb.start_node(),
+        //     }
+        // }
         pub fn immediate_dominator(&self, bb: mir::BasicBlock) -> mir::BasicBlock {
             // This unwrap should never fail since all blocks can reach `end`
             self.dom.immediate_dominator(bb).unwrap()
@@ -1091,43 +1093,42 @@ mod rev_doms {
     struct RevBasicBlocks<'a, 'vir>(&'a mir::BasicBlocks<'vir>, Vec<mir::BasicBlock>);
     impl DirectedGraph for RevBasicBlocks<'_, '_> {
         type Node = mir::BasicBlock;
+
+        fn num_nodes(&self) -> usize {
+            self.0.num_nodes()
+        }
     }
-    impl WithStartNode for RevBasicBlocks<'_, '_> {
+    impl StartNode for RevBasicBlocks<'_, '_> {
         fn start_node(&self) -> Self::Node {
             self.0.next_index()
         }
     }
-    impl WithNumNodes for RevBasicBlocks<'_, '_> {
-        fn num_nodes(&self) -> usize {
-            self.0.num_nodes() + 1
-        }
-    }
-    impl<'graph> GraphPredecessors<'graph> for RevBasicBlocks<'_, '_> {
-        type Item = mir::BasicBlock;
-        type Iter = Box<dyn Iterator<Item = Self::Item> + 'graph>;
-    }
-    impl WithPredecessors for RevBasicBlocks<'_, '_> {
-        fn predecessors<'a>(&'a self, node: Self::Node) -> <Self as GraphPredecessors<'a>>::Iter {
-            if node == self.start_node() {
-                Box::new([].into_iter())
-            } else if self.1.contains(&node) {
-                Box::new([self.start_node()].into_iter())
-            } else {
-                Box::new(self.0.successors(node))
-            }
-        }
-    }
-    impl<'graph> GraphSuccessors<'graph> for RevBasicBlocks<'_, '_> {
-        type Item = mir::BasicBlock;
-        type Iter = std::iter::Copied<std::slice::Iter<'graph, mir::BasicBlock>>;
-    }
-    impl WithSuccessors for RevBasicBlocks<'_, '_> {
-        fn successors<'a>(&'a self, node: Self::Node) -> <Self as GraphSuccessors<'a>>::Iter {
-            if node == self.start_node() {
-                self.1.iter().copied()
-            } else {
-                (&self.0).predecessors(node)
-            }
-        }
-    }
+    // impl<'graph> GraphPredecessors<'graph> for RevBasicBlocks<'_, '_> {
+    //     type Item = mir::BasicBlock;
+    //     type Iter = Box<dyn Iterator<Item = Self::Item> + 'graph>;
+    // }
+    // impl Predecessors for RevBasicBlocks<'_, '_> {
+    //     fn predecessors<'a>(&'a self, node: Self::Node) -> <Self as GraphPredecessors<'a>>::Iter {
+    //         if node == self.start_node() {
+    //             Box::new([].into_iter())
+    //         } else if self.1.contains(&node) {
+    //             Box::new([self.start_node()].into_iter())
+    //         } else {
+    //             Box::new(self.0.successors(node))
+    //         }
+    //     }
+    // }
+    // impl<'graph> GraphSuccessors<'graph> for RevBasicBlocks<'_, '_> {
+    //     type Item = mir::BasicBlock;
+    //     type Iter = std::iter::Copied<std::slice::Iter<'graph, mir::BasicBlock>>;
+    // }
+    // impl WithSuccessors for RevBasicBlocks<'_, '_> {
+    //     fn successors<'a>(&'a self, node: Self::Node) -> <Self as GraphSuccessors<'a>>::Iter {
+    //         if node == self.start_node() {
+    //             self.1.iter().copied()
+    //         } else {
+    //             (&self.0).predecessors(node)
+    //         }
+    //     }
+    // }
 }

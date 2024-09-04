@@ -36,7 +36,7 @@ impl ConstEnc {
         let result = match val {
             ConstValue::Scalar(Scalar::Int(int)) => {
                 let prim = kind.expect_primitive();
-                let val = int.to_bits(int.size()).unwrap();
+                let val = int.try_to_bits(int.size()).unwrap();
                 let val = prim.expr_from_bits(ty, val);
                 vir::with_vcx(|vcx| prim.prim_to_snap.apply(vcx, [val]))
             }
@@ -48,7 +48,7 @@ impl ConstEnc {
                     GlobalAlloc::Memory(_mem) => {
                         // If the `unwrap` ever panics we need a different way to get the inner type
                         // let inner_ty = ty.builtin_deref(true).map(|t| t.ty).unwrap_or(ty);
-                        let _inner_ty = ty.builtin_deref(true).unwrap().ty;
+                        let _inner_ty = ty.builtin_deref(true).unwrap();
                         todo!()
                     }
                 }

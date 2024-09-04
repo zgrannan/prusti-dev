@@ -33,25 +33,26 @@ impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
     }
 
     fn def_path_hash_to_def_id(&self, hash: DefPathHash) -> DefId {
-        // Sanity check
-        let cstore = std::panic::AssertUnwindSafe(self.tcx.cstore_untracked());
-        let result = std::panic::catch_unwind(|| {
-            cstore.stable_crate_id_to_crate_num(hash.stable_crate_id())
-        });
-        if result.is_err() {
-            // The way to fix this in Prusti is to somehow regenerate the `.specs`
-            // file whenever the DefPathHash might change (e.g. different args)
-            let (specs_file, crate_name) = (&self.specs_file, &self.crate_name);
-            let target_dir = specs_file.parent().unwrap();
-            panic!(
-                "A compiled dependency (referenced from `{specs_file:?}`) is out of sync. \
-            Running `cargo clean -p {crate_name}` and rebuilding should fix this. \
-            Otherwise try deleting the entire `{target_dir:?}` directory."
-            )
-        }
-        // Get `DefId`
         self.tcx
             .def_path_hash_to_def_id(hash, &"DefPathHash not found in the local crate")
+        // // Sanity check let cstore = std::panic::AssertUnwindSafe(self.tcx.cstore_untracked());
+        // let result = std::panic::catch_unwind(|| {
+        //     cstore.stable_crate_id_to_crate_num(hash.stable_crate_id())
+        // });
+        // if result.is_err() {
+        //     // The way to fix this in Prusti is to somehow regenerate the `.specs`
+        //     // file whenever the DefPathHash might change (e.g. different args)
+        //     let (specs_file, crate_name) = (&self.specs_file, &self.crate_name);
+        //     let target_dir = specs_file.parent().unwrap();
+        //     panic!(
+        //         "A compiled dependency (referenced from `{specs_file:?}`) is out of sync. \
+        //     Running `cargo clean -p {crate_name}` and rebuilding should fix this. \
+        //     Otherwise try deleting the entire `{target_dir:?}` directory."
+        //     )
+        // }
+        // // Get `DefId`
+        // self.tcx
+        //     .def_path_hash_to_def_id(hash, &"DefPathHash not found in the local crate")
     }
 }
 
