@@ -6,55 +6,57 @@
 
 use crate::{class_name::*, errors::*, utils::*};
 use jni::{
-    objects::{JClass, JObject, JValue},
+    objects::{JClass, JObject, JObjectArray, JValue},
     JNIEnv,
 };
 
 use super::trait_field_getter_setter;
 
 fn hierarchy_field_lookup<'a>(
-    env: &JNIEnv<'a>,
+    env: &mut JNIEnv<'a>,
     class: &ClassName,
     lookup_name: &str,
 ) -> Result<Option<JObject<'a>>> {
     let mut class = env.find_class(class.path())?;
     while !class.is_null() {
-        if let Some(field) = class_field_lookup(env, class, lookup_name)? {
+        if let Some(field) = class_field_lookup(env, &class, lookup_name)? {
             return Ok(Some(field));
         }
 
-        class = env.get_superclass(class)?;
+        class = env.get_superclass(&class)?.unwrap();
     }
 
     Ok(None)
 }
 
 fn class_field_lookup<'a>(
-    env: &JNIEnv<'a>,
-    class: JClass<'a>,
+    env: &mut JNIEnv<'a>,
+    class: &JClass<'a>,
     lookup_name: &str,
 ) -> Result<Option<JObject<'a>>> {
-    let fields = env
+    let fields: JObjectArray<'_> = env
         .call_method(
             class,
             "getDeclaredFields",
             "()[Ljava/lang/reflect/Field;",
             &[],
         )?
-        .l()?;
+        .l()?
+        .into();
 
-    let num_fields = env.get_array_length(*fields)?;
+    let num_fields = env.get_array_length(&fields)?;
 
     for field_index in 0..num_fields {
-        let field = env.get_object_array_element(*fields, field_index)?;
+        let field = env.get_object_array_element(&fields, field_index)?;
 
-        let field_name = java_str_to_string(
-            &env.get_string(
-                env.call_method(field, "getName", "()Ljava/lang/String;", &[])?
-                    .l()?
-                    .into(),
-            )?,
-        )?;
+        let name = env
+            .call_method(&field, "getName", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
+
+        let name = env.get_string(&name)?;
+
+        let field_name = java_str_to_string(&name)?;
 
         if field_name == lookup_name {
             return Ok(Some(field));
@@ -175,7 +177,7 @@ fn generate_field_setter(class: &ClassName, field_name: &str, type_signature: &s
 /// It also generates runtime checks verifying
 /// that the given object is of the specified class (or its descendant)
 pub fn generate_field_getter_setter_for_class(
-    env: &JNIEnv,
+    env: &mut JNIEnv,
     class: &ClassName,
     field_name: &str,
 ) -> Result<String> {
@@ -188,18 +190,19 @@ pub fn generate_field_getter_setter_for_class(
                 .call_method(field, "getType", "()Ljava/lang/Class;", &[])?
                 .l()?;
 
-            java_str_to_string(
-                &env.get_string(
-                    env.call_static_method(
-                        "org/objectweb/asm/Type",
-                        "getDescriptor",
-                        "(Ljava/lang/Class;)Ljava/lang/String;",
-                        &[JValue::Object(field_type)],
-                    )?
-                    .l()?
-                    .into(),
-                )?,
-            )?
+            let descriptor = env
+                .call_static_method(
+                    "org/objectweb/asm/Type",
+                    "getDescriptor",
+                    "(Ljava/lang/Class;)Ljava/lang/String;",
+                    &[JValue::Object(&field_type)],
+                )?
+                .l()?
+                .into();
+
+            let descriptor = env.get_string(&descriptor)?;
+
+            java_str_to_string(&descriptor)?
         }
         _ => return Err(ErrorKind::NoField(class.full_name(), field_name.into()).into()),
     };

@@ -7,7 +7,7 @@
 use crate::{class_name::*, errors::Result};
 use jni::JNIEnv;
 
-pub fn generate_scala_object_getter(env: &JNIEnv, class_name: &ClassName) -> Result<String> {
+pub fn generate_scala_object_getter(env: &mut JNIEnv, class_name: &ClassName) -> Result<String> {
     env.get_static_field_id(
         class_name.path(),
         "MODULE$",

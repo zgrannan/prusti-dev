@@ -5,44 +5,47 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::{class_name::*, errors::*, utils::*};
-use jni::{objects::JValue, JNIEnv};
+use jni::{
+    objects::{JObjectArray, JValue},
+    JNIEnv,
+};
 use std::collections::BTreeMap;
 
 pub fn generate_constructor(
-    env: &JNIEnv,
+    env: &mut JNIEnv,
     class: &ClassName,
     target_signature: Option<String>,
     suffix: Option<String>,
 ) -> Result<String> {
     let clazz = env.find_class(class.path())?;
 
-    let constructors = env
+    let constructors: JObjectArray<'_> = env
         .call_method(
             clazz,
             "getConstructors",
             "()[Ljava/lang/reflect/Constructor;",
             &[],
         )?
-        .l()?;
-    let num_constructors = env.get_array_length(*constructors)?;
+        .l()?
+        .into();
+    let num_constructors = env.get_array_length(&constructors)?;
 
     let mut indexed_constructors = BTreeMap::new();
 
     for constructor_index in 0..num_constructors {
-        let constructor = env.get_object_array_element(*constructors, constructor_index)?;
+        let constructor = env.get_object_array_element(&constructors, constructor_index)?;
 
-        let constructor_signature = java_str_to_string(
-            &env.get_string(
-                env.call_static_method(
-                    "org/objectweb/asm/Type",
-                    "getConstructorDescriptor",
-                    "(Ljava/lang/reflect/Constructor;)Ljava/lang/String;",
-                    &[JValue::Object(constructor)],
-                )?
-                .l()?
-                .into(),
-            )?,
-        )?;
+        let descriptor = env
+            .call_static_method(
+                "org/objectweb/asm/Type",
+                "getConstructorDescriptor",
+                "(Ljava/lang/reflect/Constructor;)Ljava/lang/String;",
+                &[JValue::Object(&constructor)],
+            )?
+            .l()?
+            .into();
+
+        let constructor_signature = java_str_to_string(&env.get_string(&descriptor)?)?;
 
         indexed_constructors.insert(constructor_signature, constructor);
     }
@@ -61,45 +64,47 @@ pub fn generate_constructor(
             }
             indexed_constructors.pop_first().unwrap()
         }
-        Some(sign) => match indexed_constructors.get(&sign) {
-            Some(constr) => (sign, *constr),
+        Some(sign) => match indexed_constructors.remove(&sign) {
+            Some(constr) => (sign, constr),
             None => return Err(ErrorKind::NoMatchingConstructor(class.full_name(), sign).into()),
         },
     };
 
-    let parameters = env
+    let parameters: JObjectArray<'_> = env
         .call_method(
             constructor,
             "getParameters",
             "()[Ljava/lang/reflect/Parameter;",
             &[],
         )?
-        .l()?;
-    let num_parameters = env.get_array_length(*parameters)?;
+        .l()?
+        .into();
+    let num_parameters = env.get_array_length(&parameters)?;
 
     let mut parameter_names: Vec<String> = Vec::with_capacity(num_parameters as usize);
     let mut parameter_signatures: Vec<String> = Vec::with_capacity(num_parameters as usize);
 
     for parameter_index in 0..num_parameters {
-        let parameter = env.get_object_array_element(*parameters, parameter_index)?;
-        let parameter_name = env.get_string(
-            env.call_method(parameter, "getName", "()Ljava/lang/String;", &[])?
-                .l()?
-                .into(),
-        )?;
+        let parameter = env.get_object_array_element(&parameters, parameter_index)?;
+        let name = env
+            .call_method(&parameter, "getName", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
+
+        let parameter_name = env.get_string(&name)?;
         let parameter_type = env
-            .call_method(parameter, "getType", "()Ljava/lang/Class;", &[])?
+            .call_method(&parameter, "getType", "()Ljava/lang/Class;", &[])?
             .l()?;
-        let parameter_signature = env.get_string(
-            env.call_static_method(
+        let descriptor = env
+            .call_static_method(
                 "org/objectweb/asm/Type",
                 "getDescriptor",
                 "(Ljava/lang/Class;)Ljava/lang/String;",
-                &[JValue::Object(parameter_type)],
+                &[JValue::Object(&parameter_type)],
             )?
             .l()?
-            .into(),
-        )?;
+            .into();
+        let parameter_signature = env.get_string(&descriptor)?;
 
         parameter_names.push(java_str_to_valid_rust_argument_name(&parameter_name)?);
         parameter_signatures.push(java_str_to_string(&parameter_signature)?);

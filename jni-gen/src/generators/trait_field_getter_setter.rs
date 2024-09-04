@@ -5,11 +5,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use crate::{class_name::*, errors::*, utils::*};
-use jni::{objects::JValue, JNIEnv};
+use jni::{
+    objects::{JObjectArray, JValue},
+    JNIEnv,
+};
 
 use super::method;
 
-pub fn is_interface(env: &JNIEnv, class: &ClassName) -> Result<bool> {
+pub fn is_interface(env: &mut JNIEnv, class: &ClassName) -> Result<bool> {
     let class = env.find_class(class.path())?;
     Ok(env.call_method(class, "isInterface", "()Z", &[])?.z()?)
 }
@@ -19,7 +22,7 @@ pub fn is_interface(env: &JNIEnv, class: &ClassName) -> Result<bool> {
 ///
 /// Such fields are translated from Scala to Java as methods
 pub fn generate_field_getter_setter_for_trait(
-    env: &JNIEnv,
+    env: &mut JNIEnv,
     class: &ClassName,
     field_name: &str,
 ) -> Result<String> {
@@ -44,44 +47,44 @@ pub fn generate_field_getter_setter_for_trait(
         return Err(ErrorKind::NoField(class.full_name(), field_name.into()).into());
     }
 
-    let setter_parameters = env
+    let setter_parameters: JObjectArray<'_> = env
         .call_method(
             setter_method,
             "getParameters",
             "()[Ljava/lang/reflect/Parameter;",
             &[],
         )?
-        .l()?;
-    let setter_num_parameters = env.get_array_length(*setter_parameters)?;
+        .l()?
+        .into();
+    let setter_num_parameters = env.get_array_length(&setter_parameters)?;
 
     // Check setter has 1 parameter, it has the name "x$1" and it returns a void
     if setter_num_parameters != 1 {
         return Err(ErrorKind::NoField(class.full_name(), field_name.into()).into());
     }
 
-    let setter_parameter = env.get_object_array_element(*setter_parameters, 0)?;
-    let setter_parameter_name = java_str_to_string(
-        &env.get_string(
-            env.call_method(setter_parameter, "getName", "()Ljava/lang/String;", &[])?
-                .l()?
-                .into(),
-        )?,
-    )?;
+    let setter_parameter = env.get_object_array_element(&setter_parameters, 0)?;
+    let name = &env
+        .call_method(&setter_parameter, "getName", "()Ljava/lang/String;", &[])?
+        .l()?
+        .into();
+    let setter_parameter_name = java_str_to_string(&env.get_string(&name)?)?;
 
     if setter_parameter_name != "x$1" {
         return Err(ErrorKind::NoField(class.full_name(), field_name.into()).into());
     }
 
     // Check getter has 0 parameters
-    let getter_parameters = env
+    let getter_parameters: JObjectArray<'_> = env
         .call_method(
             getter_method,
             "getParameters",
             "()[Ljava/lang/reflect/Parameter;",
             &[],
         )?
-        .l()?;
-    let getter_num_parameters = env.get_array_length(*getter_parameters)?;
+        .l()?
+        .into();
+    let getter_num_parameters = env.get_array_length(&getter_parameters)?;
 
     if getter_num_parameters != 0 {
         return Err(ErrorKind::NoField(class.full_name(), field_name.into()).into());
@@ -91,18 +94,17 @@ pub fn generate_field_getter_setter_for_trait(
     let setter_parameter_type = env
         .call_method(setter_parameter, "getType", "()Ljava/lang/Class;", &[])?
         .l()?;
-    let setter_parameter_signature = java_str_to_string(
-        &env.get_string(
-            env.call_static_method(
-                "org/objectweb/asm/Type",
-                "getDescriptor",
-                "(Ljava/lang/Class;)Ljava/lang/String;",
-                &[JValue::Object(setter_parameter_type)],
-            )?
-            .l()?
-            .into(),
-        )?,
-    )?;
+
+    let descriptor = env
+        .call_static_method(
+            "org/objectweb/asm/Type",
+            "getDescriptor",
+            "(Ljava/lang/Class;)Ljava/lang/String;",
+            &[JValue::Object(&setter_parameter_type)],
+        )?
+        .l()?
+        .into();
+    let setter_parameter_signature = java_str_to_string(&env.get_string(&descriptor)?)?;
 
     let getter_return_signature = get_return_signature(&getter_method_signature);
 

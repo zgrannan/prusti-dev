@@ -52,14 +52,14 @@ impl Viper {
             // maximum heap size
             .option(&format!("-Xmx{heap_size}m"))
             // stack size
-            .option("-Xss512m");
-        //.option("-Xdebug")
-        //.option("-verbose:gc")
-        //.option("-Xcheck:jni")
-        //.option("-XX:+CheckJNICalls")
-        //.option("-Djava.security.debug=all")
-        //.option("-verbose:jni")
-        //.option("-XX:+TraceJNICalls")
+            .option("-Xss512m")
+            .option("-Xdebug")
+            .option("-verbose:gc")
+            .option("-Xcheck:jni")
+            .option("-XX:+CheckJNICalls")
+            .option("-Djava.security.debug=all")
+            .option("-verbose:jni");
+            // .option("-XX:+TraceJNICalls");
         let jvm_args = java_args
             .into_iter()
             .fold(init_args, |curr_args, opt| curr_args.option(&opt))

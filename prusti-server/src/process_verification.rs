@@ -23,7 +23,7 @@ pub fn process_verification_request<'v, 't: 'v>(
     request: VerificationRequest,
     cache: impl Cache,
 ) -> viper::VerificationResult {
-    eprintln!("process_verification_request {:?}", request);
+    // eprintln!("process_verification_request {:?}", request);
 
     let hash = request.get_hash();
     info!(

@@ -6,13 +6,13 @@
 
 use crate::{class_name::*, errors::*, utils::*};
 use jni::{
-    objects::{JObject, JValue},
+    objects::{JObject, JObjectArray, JValue},
     JNIEnv,
 };
 use std::collections::BTreeMap;
 
 pub fn generate_method(
-    env: &JNIEnv,
+    env: &mut JNIEnv,
     class: &ClassName,
     method_name: &str,
     target_signature: Option<String>,
@@ -24,39 +24,42 @@ pub fn generate_method(
         is_static,
     } = find_method(env, class, method_name, target_signature)?;
 
-    let parameters = env
+    let parameters: JObjectArray<'_> = env
         .call_method(
             method,
             "getParameters",
             "()[Ljava/lang/reflect/Parameter;",
             &[],
         )?
-        .l()?;
-    let num_parameters = env.get_array_length(*parameters)?;
+        .l()?
+        .into();
+    let num_parameters = env.get_array_length(&parameters)?;
 
     let mut parameter_names: Vec<String> = Vec::with_capacity(num_parameters as usize);
     let mut parameter_signatures: Vec<String> = Vec::with_capacity(num_parameters as usize);
 
     for parameter_index in 0..num_parameters {
-        let parameter = env.get_object_array_element(*parameters, parameter_index)?;
-        let parameter_name = env.get_string(
-            env.call_method(parameter, "getName", "()Ljava/lang/String;", &[])?
-                .l()?
-                .into(),
-        )?;
+        let parameter = env.get_object_array_element(&parameters, parameter_index)?;
+        let name = env
+            .call_method(&parameter, "getName", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
+
+        let parameter_name = env.get_string(&name)?;
         let parameter_type = env
-            .call_method(parameter, "getType", "()Ljava/lang/Class;", &[])?
+            .call_method(&parameter, "getType", "()Ljava/lang/Class;", &[])?
             .l()?;
-        let parameter_signature = env.get_string(
-            env.call_static_method(
+
+        let descriptor = env
+            .call_static_method(
                 "org/objectweb/asm/Type",
                 "getDescriptor",
                 "(Ljava/lang/Class;)Ljava/lang/String;",
-                &[JValue::Object(parameter_type)],
+                &[JValue::Object(&parameter_type)],
             )?
             .l()?
-            .into(),
-        )?;
+            .into();
+        let parameter_signature = env.get_string(&descriptor)?;
 
         parameter_names.push(java_str_to_valid_rust_argument_name(&parameter_name)?);
         parameter_signatures.push(java_str_to_string(&parameter_signature)?);
@@ -365,44 +368,43 @@ pub struct MethodInfo<'a> {
     pub is_static: bool,
 }
 
-pub fn find_method<'a>(
-    env: &'a JNIEnv<'a>,
-    class: &'a ClassName,
-    method_name: &'a str,
+pub fn find_method<'env, 'a, 'name, 'class>(
+    env: &'env mut JNIEnv<'a>,
+    class: &'class ClassName,
+    method_name: &'name str,
     target_signature: Option<String>,
 ) -> Result<MethodInfo<'a>> {
     let clazz = env.find_class(class.path())?;
 
-    let methods = env
+    let methods: JObjectArray<'_> = env
         .call_method(clazz, "getMethods", "()[Ljava/lang/reflect/Method;", &[])?
-        .l()?;
-    let num_methods = env.get_array_length(*methods)?;
+        .l()?
+        .into();
+    let num_methods = env.get_array_length(&methods)?;
 
     let mut indexed_methods = BTreeMap::new();
 
     for method_index in 0..num_methods {
-        let method = env.get_object_array_element(*methods, method_index)?;
+        let method = env.get_object_array_element(&methods, method_index)?;
 
-        let method_name = java_str_to_string(
-            &env.get_string(
-                env.call_method(method, "getName", "()Ljava/lang/String;", &[])?
-                    .l()?
-                    .into(),
-            )?,
-        )?;
+        let name = env
+            .call_method(&method, "getName", "()Ljava/lang/String;", &[])?
+            .l()?
+            .into();
 
-        let method_signature = java_str_to_string(
-            &env.get_string(
-                env.call_static_method(
-                    "org/objectweb/asm/Type",
-                    "getMethodDescriptor",
-                    "(Ljava/lang/reflect/Method;)Ljava/lang/String;",
-                    &[JValue::Object(method)],
-                )?
-                .l()?
-                .into(),
-            )?,
-        )?;
+        let method_name = java_str_to_string(&env.get_string(&name)?)?;
+
+        let descriptor = &env
+            .call_static_method(
+                "org/objectweb/asm/Type",
+                "getMethodDescriptor",
+                "(Ljava/lang/reflect/Method;)Ljava/lang/String;",
+                &[JValue::Object(&method)],
+            )?
+            .l()?
+            .into();
+
+        let method_signature = java_str_to_string(&env.get_string(&descriptor)?)?;
 
         match indexed_methods.remove(&method_name) {
             None => {
@@ -437,8 +439,8 @@ pub fn find_method<'a>(
             }
             matching_methods.pop_first().unwrap()
         }
-        Some(sign) => match matching_methods.get(&sign) {
-            Some(constr) => (sign, *constr),
+        Some(sign) => match matching_methods.remove(&sign) {
+            Some(constr) => (sign, constr),
             None => {
                 return Err(ErrorKind::NoMatchingMethod(
                     class.full_name(),
@@ -450,7 +452,7 @@ pub fn find_method<'a>(
         },
     };
 
-    let method_modifier = env.call_method(method, "getModifiers", "()I", &[])?.i()?;
+    let method_modifier = env.call_method(&method, "getModifiers", "()I", &[])?.i()?;
 
     let is_static = env
         .call_static_method(

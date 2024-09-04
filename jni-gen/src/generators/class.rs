@@ -16,25 +16,25 @@ use crate::{
 use jni::JNIEnv;
 use log::warn;
 
-pub struct ClassGenerator<'a> {
-    env: &'a JNIEnv<'a>,
+pub struct ClassGenerator<'env, 'a> {
+    env: &'env mut JNIEnv<'a>,
     class: ClassName,
     items: Vec<ItemWrapperSpec>,
 }
 
-impl<'a> ClassGenerator<'a> {
-    pub fn new(env: &'a JNIEnv<'a>, class: ClassName, items: Vec<ItemWrapperSpec>) -> Self {
+impl<'env, 'a> ClassGenerator<'env, 'a> {
+    pub fn new(env: &'env mut JNIEnv<'a>, class: ClassName, items: Vec<ItemWrapperSpec>) -> Self {
         ClassGenerator { env, class, items }
     }
 
-    fn check(&self) -> Result<()> {
+    fn check(&mut self) -> Result<()> {
         self.env
             .find_class(self.class.path())
             .map(|_| ())
             .chain_err(|| ErrorKind::NoClass(self.class.full_name()))
     }
 
-    pub fn generate(&self) -> Result<String> {
+    pub fn generate(&mut self) -> Result<String> {
         self.check()?;
 
         let mut code: Vec<String> = vec![];
@@ -104,7 +104,7 @@ impl<'a> ClassGenerator<'a> {
         format!("}} // end of impl {}\n", self.class.rust_name())
     }
 
-    fn generate_items(&self) -> Result<String> {
+    fn generate_items(&mut self) -> Result<String> {
         let mut gen_items: Vec<String> = vec![];
 
         if self.items.is_empty() {

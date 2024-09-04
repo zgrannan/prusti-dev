@@ -57,16 +57,15 @@ impl WrapperGenerator {
     pub fn generate(&mut self, out_dir: &Path) -> LocalResult<()> {
         let classpath_separator = if cfg!(windows) { ";" } else { ":" };
 
+        let class_path = format!("-Djava.class.path={}", self.jars.join(classpath_separator));
+
         let jvm_args = InitArgsBuilder::new()
             .version(JNIVersion::V8)
-            .option(&format!(
-                "-Djava.class.path={}",
-                self.jars.join(classpath_separator)
-            ))
+            .option(&class_path)
             .build()?;
 
-        let jvm = JavaVM::new(jvm_args)?;
-        let env = jvm.attach_current_thread()?;
+        let jvm = JavaVM::new(jvm_args).unwrap();
+        let mut env = jvm.attach_current_thread()?;
 
         //remove_dir_all(out_dir)?;
         create_dir_all(out_dir)?;
@@ -96,8 +95,8 @@ impl WrapperGenerator {
                 create_dir_all(parent_path)?;
             }
 
-            let class_generator =
-                ClassGenerator::new(&env, class_name.to_owned(), class.get_items().to_vec());
+            let mut class_generator =
+                ClassGenerator::new(&mut env, class_name.to_owned(), class.get_items().to_vec());
             let class_code = class_generator.generate()?;
             save_file_atomic(&class_code, out_dir, &class_path)?;
         }
