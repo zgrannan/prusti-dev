@@ -14,7 +14,7 @@ fn main() {
 }
 
 fn setup_command(current_executable_dir: &PathBuf, args: Vec<String>) -> Command {
-    let miri = true;
+    let miri = false;
 
     if miri {
         let mut cmd = Command::new("./x.py");

@@ -7,6 +7,8 @@
 use prusti_utils::launch;
 use std::{env, io::Write, path::PathBuf, process::Command};
 
+const USE_MIRI: bool = false;
+
 fn main() {
     if let Err(code) = process(std::env::args().skip(1).collect()) {
         std::process::exit(code);
@@ -37,7 +39,17 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
     let compiler_bin = prusti_sysroot.join("bin");
     let compiler_lib = prusti_sysroot.join("lib");
 
-    let mut cmd = Command::new(&prusti_driver_path);
+    let mut cmd = if USE_MIRI {
+        let mut cmd = Command::new("./x.py");
+        cmd.arg("miri")
+            .arg("run")
+            .arg("--bin")
+            .arg("prusti-driver")
+            .arg("--");
+        cmd
+    } else {
+        Command::new(&prusti_driver_path)
+    };
     cmd.arg("--cfg=prusti");
 
     launch::add_to_loader_path(vec![compiler_lib, compiler_bin, libjvm_path], &mut cmd);

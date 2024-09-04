@@ -14,6 +14,10 @@ pub struct AstUtils<'a> {
     jni: JniUtils<'a>,
 }
 
+pub trait JNILocalFrameReturnable {}
+
+impl JNILocalFrameReturnable for () {}
+
 impl<'a> AstUtils<'a> {
     pub fn new(env: &'a JNIEnv) -> Self {
         let jni = JniUtils::new(env);
@@ -52,8 +56,7 @@ impl<'a> AstUtils<'a> {
         self.jni.to_string(program.to_jobject())
     }
 
-    /// Important: the result of the `f` call must not contain Java objects. Use carefully.
-    pub fn with_local_frame<T>(&self, capacity: i32, f: impl FnOnce() -> T) -> T {
+    pub fn with_local_frame<T: JNILocalFrameReturnable>(&self, capacity: i32, f: impl FnOnce() -> T) -> T {
         self.jni.unwrap_result(self.env.push_local_frame(capacity));
         let result = f();
         self.jni

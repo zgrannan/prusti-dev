@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{silicon_counterexample::SiliconCounterexample, JavaException};
+use crate::{silicon_counterexample::SiliconCounterexample, JNILocalFrameReturnable, JavaException};
 
 /// The result of a verification request on a Viper program.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -18,6 +18,8 @@ pub enum VerificationResult {
     /// The verification raised a Java exception.
     JavaException(JavaException),
 }
+
+impl JNILocalFrameReturnable for VerificationResult {}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ConsistencyError {

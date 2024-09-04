@@ -169,10 +169,6 @@ pub fn init_vcx<'tcx>(vcx: VirCtxt<'tcx>) {
     VCTX.replace(Some(unsafe { std::mem::transmute(vcx) }));
 }
 
-pub(crate) fn replace_vcx<'tcx>(vcx: VirCtxt<'tcx>) -> Option<VirCtxt<'tcx>> {
-    unsafe { std::mem::transmute(VCTX.replace(Some(std::mem::transmute(vcx)))) }
-}
-
 /// Perform an action with the VIR context.
 pub fn with_vcx<'vir, 'tcx: 'vir, F, R>(f: F) -> R
 where

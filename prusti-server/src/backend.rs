@@ -13,6 +13,7 @@ impl<'a> Backend<'a> {
     pub fn verify(&mut self, program: vir::ProgramRef) -> VerificationResult {
         match self {
             Backend::Viper(viper, context) => {
+                eprintln!("verify {:?}", program);
                 let mut stopwatch =
                     Stopwatch::start("prusti-server backend", "construction of JVM objects");
 
