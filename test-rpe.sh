@@ -22,7 +22,7 @@ if [[ "$pcs" == true ]]; then
 else
     ./x.py build --all --release || exit 1
     killall prusti-server-driver
-    target/release/prusti-server -p 3000 &
+    ./x.py run --release --bin prusti-server -- -p 3000 &
     PRUSTI_SERVER_PID=$!
     export PRUSTI_SERVER_ADDRESS=localhost:3000
     sleep 2
