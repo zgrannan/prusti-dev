@@ -142,7 +142,7 @@ lazy_static::lazy_static! {
         settings.set_default::<Option<String>>("execute_only_failing_trace", None).unwrap();
         settings.set_default::<Option<String>>("dump_fold_unfold_state_of_blocks", None).unwrap();
         settings.set_default("print_hash", false).unwrap();
-        settings.set_default("enable_cache", true).unwrap();
+        settings.set_default("enable_cache", false).unwrap();
 
         settings.set_default("cargo_path", "cargo").unwrap();
         settings.set_default("cargo_command", "check").unwrap();

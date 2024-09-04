@@ -165,7 +165,6 @@ thread_local! {
 /// Initialises the VIR context. Should only be called once, when the type
 /// context is available.
 pub fn init_vcx<'tcx>(vcx: VirCtxt<'tcx>) {
-    eprintln!("INIT VCX");
     VCTX.replace(Some(unsafe { std::mem::transmute(vcx) }));
 }
 

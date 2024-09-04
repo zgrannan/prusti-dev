@@ -63,11 +63,6 @@ fn process(args: Vec<String>) -> Result<(), i32> {
 
     launch::set_environment_settings(&mut cmd, &current_executable_dir, &java_home);
 
-    eprintln!(
-        "Running prusti-server-driver with args: {:?}",
-        cmd.get_args()
-    );
-
     cmd.stderr(std::process::Stdio::inherit());
     cmd.stdout(std::process::Stdio::inherit());
 

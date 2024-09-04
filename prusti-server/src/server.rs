@@ -55,11 +55,10 @@ where
 
     let cache_data = PersistentCache::load_cache(config::cache_path());
     let cache = Arc::new(Mutex::new(cache_data));
-    vir::init_vcx(vir::VirCtxt::new_without_tcx());
     fn init_vcx<T>(data: T) -> T {
         // initialise a new arena every time, so the data from previous
         // verification runs is deallocated
-        // vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
         data
     }
     let build_verification_request_handler = |viper_arc: Arc<Lazy<Viper, _>>, cache| {
