@@ -507,19 +507,19 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         })
     }
 
-    fn encode_loop_invariant_assumption<'heap, 'mir: 'heap>(
+    fn encode_loop_invariant<'heap, 'mir: 'heap>(
         def_id: DefId,
-        block: mir::BasicBlock,
-        heap: &mut SymbolicHeap<'heap, 'mir, 'sym, 'tcx, Self::SymValSynthetic>,
+        loop_head: mir::BasicBlock,
+        mut heap_data: HeapData<'sym, 'tcx, Self::SymValSynthetic>,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
     ) -> Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
         let arena = sym_ex.arena;
         let tcx = sym_ex.tcx;
-        let body = heap.body();
-        let procedure = Procedure::new(heap.tcx(), def_id, body.clone());
-        let spec_blocks = get_loop_spec_blocks(&procedure, block);
+        let body = sym_ex.body;
+        let procedure = Procedure::new(tcx, def_id, body.clone());
+        let spec_blocks = get_loop_spec_blocks(&procedure, loop_head);
         for bbi in spec_blocks {
-            for stmt in &body[bbi].statements {
+            for (i, stmt) in body[bbi].statements.iter().enumerate() {
                 if let mir::StatementKind::Assign(box (
                     _,
                     agg @ mir::Rvalue::Aggregate(
@@ -528,7 +528,9 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     ),
                 )) = &stmt.kind
                 {
+                    eprintln!("loop spec block {:?}", bbi);
                     return with_def_spec(|def_spec| {
+                        let mut heap = SymbolicHeap::new(&mut heap_data, tcx, body, arena);
                         let loop_spec = def_spec.get_loop_spec(&cl_def_id).unwrap();
                         let encoded = SymPureEnc::encode(
                             arena,
@@ -547,16 +549,29 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                                 arena.alloc_slice(
                                     &operands
                                         .iter()
-                                        .map(|op| sym_ex.encode_operand(heap, op))
+                                        .map(|op| sym_ex.encode_operand(&mut heap, op))
                                         .collect::<Vec<_>>(),
                                 ),
                             ),
                             Mutability::Not,
                         );
                         let substs = Substs::singleton(0, subst);
-                        let encoded = encoded.subst(heap.arena(), &substs);
-                        return encoded.paths;
+                        let encoded = encoded.subst(arena, &substs);
+                        encoded.paths
                     });
+                } else {
+                    let mut heap = SymbolicHeap::new(&mut heap_data, tcx, body, arena);
+                    let rhs = sym_ex.handle_stmt_rhs(&stmt, &mut heap);
+                    let mut heap = SymbolicHeap::new(&mut heap_data, tcx, body, arena);
+                    sym_ex.handle_stmt_lhs(
+                        &stmt,
+                        &mut heap,
+                        mir::Location {
+                            block: bbi,
+                            statement_index: i,
+                        },
+                        rhs,
+                    );
                 }
             }
         }

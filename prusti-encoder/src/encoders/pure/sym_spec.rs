@@ -90,7 +90,11 @@ pub fn mk_conj<'sym, 'tcx>(
     let mut iter = sym_values.into_iter();
     if let Some(value) = iter.next() {
         iter.fold(value, |acc, val| {
-            arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::And(acc, val)))
+            if val.kind.is_true(tcx) {
+                acc
+            } else {
+                arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::And(acc, val)))
+            }
         })
     } else {
         return arena.mk_constant(Constant::from_bool(tcx, true));

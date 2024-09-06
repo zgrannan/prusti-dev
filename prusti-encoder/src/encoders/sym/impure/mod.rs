@@ -21,7 +21,7 @@ use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
-    results::{ResultPath, SymbolicExecutionResult},
+    results::{ResultAssertion, ResultPath, SymbolicExecutionResult},
     value::{BackwardsFn, Substs, SymValueData, SymValueKind, SymVar},
     Assertion, SymExParams,
 };
@@ -286,7 +286,12 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
 
-            for (path, pcs, assertion) in symbolic_execution.assertions.iter() {
+            for ResultAssertion {
+                path,
+                pcs,
+                assertion,
+            } in symbolic_execution.assertions.iter()
+            {
                 stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "Assertion for path: {:?}", path)));
                 match visitor.encode_pc_assertion(pcs, assertion) {
                     Ok(assertion) => {

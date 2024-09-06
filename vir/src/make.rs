@@ -305,8 +305,12 @@ impl<'tcx> VirCtxt<'tcx> {
         rhs: ExprGen<'vir, Curr, Next>,
     ) -> ExprGen<'vir, Curr, Next> {
         if kind == BinOpKind::And {
-            assert_eq!(lhs.ty(), &TypeData::Bool);
-            assert_eq!(rhs.ty(), &TypeData::Bool);
+            if let ExprKindGenData::Const(ConstData::Bool(true)) = &lhs.kind {
+                return rhs;
+            }
+            if let ExprKindGenData::Const(ConstData::Bool(true)) = &rhs.kind {
+                return lhs;
+            }
         }
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::BinOp(
             self.alloc(BinOpGenData { kind, lhs, rhs }),
