@@ -67,7 +67,7 @@ pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     pub arena: &'sym SymExContext<'tcx>,
     old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
-    symvars: Vec<vir::Expr<'vir>>,
+    substs: BTreeMap<SymVar, vir::Expr<'vir>>,
     def_id: DefId,
 }
 
@@ -99,7 +99,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             old_values,
             arena: self.arena,
             vcx: self.vcx,
-            symvars: self.symvars.clone(),
+            substs: self.substs.clone(),
             def_id: self.def_id,
         }
     }
@@ -107,14 +107,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         vcx: &'vir vir::VirCtxt<'tcx>,
         arena: &'sym SymExContext<'tcx>,
         old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
-        symvars: Vec<vir::Expr<'vir>>,
+        substs: BTreeMap<SymVar, vir::Expr<'vir>>,
         def_id: DefId,
     ) -> Self {
         Self {
             vcx,
             arena,
             old_values,
-            symvars,
+            substs,
             def_id,
         }
     }
@@ -129,14 +129,11 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     {
         // let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
-            SymValueKind::Var(SymVar::Normal(idx), ..) => self
-                .symvars
-                .get(*idx)
+            SymValueKind::Var(var, ..) => self
+                .substs
+                .get(var)
                 .cloned()
-                .ok_or_else(|| format!("No symvar at idx {}.", *idx)),
-            SymValueKind::Var(SymVar::ReservedBackwardsFnResult, ..) => Err(format!(
-                "Backwards function result is not a valid expression"
-            )),
+                .ok_or_else(|| format!("No symvar {:?}.", var)),
             SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),
@@ -470,7 +467,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 post_values,
             } => {
                 let args = post_values.iter().copied().chain(std::iter::once(pc.expr));
-                let arg_substs = self.arena.alloc(Substs::from_iter(args.enumerate()));
+                let arg_substs = self.arena.alloc(Substs::from_iter(
+                    args.enumerate().map(|(i, v)| (SymVar::nth_input(i), v)),
+                ));
                 let encoded_posts = deps
                     .require_local::<SymSpecEnc>((*def_id, substs, None))
                     .unwrap()

@@ -207,9 +207,12 @@ impl TaskEncoder for SymImpureEnc {
                 ),
             );
 
-            let backwards_fn_idents = (0..arg_count)
-                .flat_map(|idx| {
-                    if symbolic_execution.symvars[idx].ref_mutability() == Some(Mutability::Mut) {
+            let backwards_fn_idents = body
+                .body
+                .args_iter()
+                .flat_map(|local| {
+                    if body.body.local_decls[local].ty.ref_mutability() == Some(Mutability::Mut) {
+                        let idx = local.as_usize() - 1;
                         let ident =
                             vir::vir_format_identifier!(vcx, "backwards_{}_{}", method_name, idx);
                         Some((
@@ -217,7 +220,7 @@ impl TaskEncoder for SymImpureEnc {
                             BackwardsFnRef(vir::FunctionIdent::new(
                                 ident,
                                 backwards_fn_arity,
-                                fb_shared.symvar_locals[idx].ty,
+                                fb_shared.symvars[&SymVar::nth_input(idx)].1.ty,
                             )),
                         ))
                     } else {
@@ -245,24 +248,17 @@ impl TaskEncoder for SymImpureEnc {
                 encoder: SymExprEncoder::new(
                     vcx,
                     &arena,
-                    BTreeMap::from_iter(
-                        (0..arg_count)
-                            .map(|idx| {
-                                (
-                                    Local::from_usize(idx + 1),
-                                    arena.mk_var(
-                                        SymVar::Normal(idx),
-                                        symbolic_execution.symvars[idx],
-                                    ),
-                                )
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
+                    BTreeMap::from_iter(body.body.args_iter().map(|local| {
+                        (
+                            local,
+                            arena.mk_var(SymVar::Input(local), body.body.local_decls[local].ty),
+                        )
+                    })),
                     fb_shared
-                        .symvar_locals
+                        .symvars
                         .iter()
-                        .map(|local| vcx.mk_local_ex(local.name, local.ty))
-                        .collect::<Vec<_>>(),
+                        .map(|(var, (_, local))| (*var, vcx.mk_local_ex(local.name, local.ty)))
+                        .collect(),
                     def_id,
                 ),
                 arena: &arena,
@@ -322,21 +318,25 @@ impl TaskEncoder for SymImpureEnc {
                         // Therefore, the symbolic value at argument `body.arg_count`
                         // corresponds to the spec's symbolic input argument.
                         let substs = arena.alloc(Substs::from_iter(
-                            (0..arg_count)
-                                .flat_map(|idx| {
-                                    if symbolic_execution.symvars[idx].ref_mutability()
+                            body.body
+                                .args_iter()
+                                .flat_map(|local| {
+                                    if body.body.local_decls[local].ty.ref_mutability()
                                         == Some(Mutability::Mut)
                                     {
                                         // TODO: Should this always be gettable?
                                         heap.get(&MaybeOldPlace::Current {
-                                            place: Local::from_usize(idx + 1).into(),
+                                            place: local.into(),
                                         })
-                                        .map(|expr| (idx, expr))
+                                        .map(|expr| (SymVar::Input(local), expr))
                                     } else {
                                         None
                                     }
                                 })
-                                .chain(std::iter::once((arg_count, *result))),
+                                .chain(std::iter::once((
+                                    SymVar::nth_input(arg_count),
+                                    *result,
+                                ))),
                         ));
 
                         // Generate assertions ensuring that `expr` satisfies each
@@ -399,7 +399,6 @@ impl TaskEncoder for SymImpureEnc {
                     def_id,
                     substs,
                     caller_def_id,
-                    symvars: &symbolic_execution.symvars,
                     shared: &fb_shared,
                 },
                 &visitor.encoder,
@@ -490,9 +489,12 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         match assertion {
             Assertion::False => vec![self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>())],
             Assertion::Precondition(def_id, substs, args) => {
-                let arg_substs = self
-                    .arena
-                    .alloc(Substs::from_iter(args.iter().copied().enumerate()));
+                let arg_substs = self.arena.alloc(Substs::from_iter(
+                    args.iter()
+                        .copied()
+                        .enumerate()
+                        .map(|(i, v)| (SymVar::nth_input(i), v)),
+                ));
                 let encoded_pres = self
                     .deps
                     .require_local::<SymSpecEnc>((*def_id, substs, None))

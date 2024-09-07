@@ -595,7 +595,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             ),
                             Mutability::Not,
                         );
-                        let substs = Substs::singleton(0, subst);
+                        let substs = Substs::singleton(SymVar::nth_input(0), subst);
                         eprintln!(
                             "encoded1 {}",
                             encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)

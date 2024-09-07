@@ -14,12 +14,13 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
+use rustc_type_ir::InferTy::FreshFloatTy;
 use std::hash::{Hash, Hasher};
 use symbolic_execution::{
     context::SymExContext,
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditions},
     results::{ResultPath, SymbolicExecutionResult},
-    value::{Substs, SymValueData, SymValueKind},
+    value::{Substs, SymValueData, SymValueKind, SymVar},
     Assertion,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
@@ -74,20 +75,33 @@ use crate::encoders::{
 
 use super::SymImpureEnc;
 pub struct ForwardBackwardsShared<'vir, 'tcx> {
-    pub symvar_locals: Vec<vir::Local<'vir>>,
+    pub symvars: BTreeMap<SymVar, (ty::Ty<'tcx>, vir::Local<'vir>)>,
     pub ty_args: &'vir [LiftedGeneric<'vir>],
     pub result_local: vir::Local<'vir>,
     pub type_assertion_stmts: Vec<vir::Stmt<'vir>>,
     pub decl_stmts: Vec<vir::Stmt<'vir>>,
     pub arg_count: usize,
-    pub symvars: Vec<ty::Ty<'tcx>>,
     /// The result type of the *forwards* function
     pub result_ty: ty::Ty<'tcx>,
 }
 
 impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
-    pub fn arg_locals(&self) -> &[vir::Local<'vir>] {
-        &self.symvar_locals[..self.arg_count]
+    pub fn symvar_ty(&self, symvar: SymVar) -> ty::Ty<'tcx> {
+        self.symvars.get(&symvar).unwrap().0
+    }
+
+    pub fn nth_input_ty(&self, i: usize) -> ty::Ty<'tcx> {
+        self.symvars.get(&SymVar::nth_input(i)).unwrap().0
+    }
+
+    pub fn symvar_locals(&self) -> Vec<vir::Local<'vir>> {
+        self.symvars.values().map(|(_, l)| *l).collect()
+    }
+
+    pub fn arg_locals(&self) -> Vec<vir::Local<'vir>> {
+        (0..self.arg_count)
+            .map(|i| self.symvars.get(&SymVar::nth_input(i)).unwrap().1)
+            .collect::<Vec<_>>()
     }
 
     pub fn ty_and_arg_decls(&self) -> Vec<vir::LocalDecl<'vir>> {
@@ -115,29 +129,47 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
         'tcx: 'vir,
     {
         vir::with_vcx(|vcx| {
-            let symvar_locals = symex_result
-                .symvars
+            let input_symvars = body
+                .args_iter()
+                .map(|local| {
+                    let ty = body.local_decls[local].ty;
+                    (
+                        SymVar::Input(local),
+                        (
+                            ty,
+                            vcx.mk_local(
+                                vir_format!(vcx, "i{}", local.as_usize()),
+                                deps.require_ref::<RustTySnapshotsEnc>(ty)
+                                    .unwrap()
+                                    .generic_snapshot
+                                    .snapshot,
+                            ),
+                        ),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            let fresh_symvars = symex_result
+                .fresh_symvars
                 .iter()
                 .enumerate()
                 .map(|(idx, ty)| {
-                    vcx.mk_local(
-                        vir_format!(vcx, "s{}", idx),
-                        deps.require_ref::<RustTySnapshotsEnc>(*ty)
-                            .unwrap()
-                            .generic_snapshot
-                            .snapshot,
+                    (
+                        SymVar::Fresh(idx),
+                        (
+                            *ty,
+                            vcx.mk_local(
+                                vir_format!(vcx, "f{}", idx),
+                                deps.require_ref::<RustTySnapshotsEnc>(*ty)
+                                    .unwrap()
+                                    .generic_snapshot
+                                    .snapshot,
+                            ),
+                        ),
                     )
                 })
-                .collect::<Vec<_>>();
+                .collect::<BTreeMap<_, _>>();
             let ty_args = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
             let mut type_assertion_stmts = vec![];
-            for (local, symvar) in symvar_locals.iter().zip(symex_result.symvars.iter()) {
-                if let Some(expr) =
-                    mk_type_assertion(vcx, deps, vcx.mk_local_ex(local.name, local.ty), *symvar)
-                {
-                    type_assertion_stmts.push(vcx.mk_inhale_stmt(expr));
-                }
-            }
             let result_local = vcx.mk_local(
                 "res",
                 deps.require_ref::<RustTySnapshotsEnc>(body.local_decls.iter().next().unwrap().ty)
@@ -154,19 +186,28 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
                 vcx.mk_local_decl_stmt(vcx.mk_local_decl(result_local.name, result_local.ty), None),
             );
 
-            for local in symvar_locals.iter() {
+            let symvars = input_symvars
+                .into_iter()
+                .chain(fresh_symvars.into_iter())
+                .collect::<BTreeMap<_, _>>();
+
+            for (_, (ty, local)) in symvars.iter() {
                 decl_stmts
                     .push(vcx.mk_local_decl_stmt(vcx.mk_local_decl(local.name, local.ty), None));
+                if let Some(expr) =
+                    mk_type_assertion(vcx, deps, vcx.mk_local_ex(local.name, local.ty), *ty)
+                {
+                    type_assertion_stmts.push(vcx.mk_inhale_stmt(expr));
+                }
             }
             Self {
                 arg_count: body.arg_count,
                 ty_args,
-                symvar_locals,
                 type_assertion_stmts,
                 decl_stmts,
                 result_local,
                 result_ty: body.local_decls.iter().next().unwrap().ty,
-                symvars: symex_result.symvars.clone(),
+                symvars,
             }
         })
     }

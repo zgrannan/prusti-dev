@@ -219,8 +219,8 @@ impl TaskEncoder for SymFunctionEnc {
                 let expr = partial_eq_expr(
                     &arena,
                     vcx.tcx(),
-                    arena.mk_var(SymVar::Normal(0), inputs[0]),
-                    arena.mk_var(SymVar::Normal(1), inputs[1]),
+                    arena.mk_var(SymVar::nth_input(0), inputs[0]),
+                    arena.mk_var(SymVar::nth_input(1), inputs[1]),
                 );
                 expr.map(|expr| {
                     let expr = if vcx.tcx().def_path_str(def_id) == "std::cmp::PartialEq::ne" {
@@ -240,18 +240,22 @@ impl TaskEncoder for SymFunctionEnc {
                     .map(|i| {
                         (
                             mir::Local::from_usize(i + 1),
-                            arena.mk_var(SymVar::Normal(i), inputs[i]),
+                            arena.mk_var(SymVar::nth_input(i), inputs[i]),
                         )
                     })
                     .collect(),
-                symvars,
+                symvars
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| (SymVar::nth_input(i), v))
+                    .collect(),
                 def_id,
             );
 
             // The postcondition of the function may refer to the result, the symvar after the
             // symvars for the function arguments is this result
             let postcondition_substs = PrustiSubsts::singleton(
-                inputs.len(),
+                SymVar::nth_input(inputs.len()),
                 arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Result(output))),
             );
 
