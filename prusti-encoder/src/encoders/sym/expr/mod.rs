@@ -1,5 +1,4 @@
 use prusti_rustc_interface::{
-    target::abi::{VariantIdx, FIRST_VARIANT},
     abi,
     index::IndexVec,
     middle::{
@@ -7,6 +6,7 @@ use prusti_rustc_interface::{
         ty::{self, GenericArgs, TyKind},
     },
     span::def_id::{DefId, LocalDefId},
+    target::abi::{VariantIdx, FIRST_VARIANT},
 };
 use symbolic_execution::{
     context::SymExContext,
@@ -71,29 +71,22 @@ pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     def_id: DefId,
 }
 
-struct Transformer<'sym, 'tcx>(BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>);
-impl<'sym, 'tcx>
-    SymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>, InputPlace<'tcx>>
-    for Transformer<'sym, 'tcx>
-{
-    fn transform_var(
+pub trait PrustiSymValueTransformer<'sym, 'tcx: 'sym> {
+    fn transform_old(
         &mut self,
         arena: &'sym SymExContext<'tcx>,
         var: InputPlace<'tcx>,
-        _ty: ty::Ty<'tcx>,
+        ty: ty::Ty<'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
-        let base = self.0.get(&var.local()).unwrap();
-        var.projection()
-            .iter()
-            .fold(base, |base, proj| arena.mk_projection(*proj, base))
+        arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Old(var, ty)))
     }
 
     fn transform_synthetic(
         &mut self,
-        _arena: &'sym SymExContext<'tcx>,
-        _s: PrustiSymValSynthetic<'sym, 'tcx>,
+        arena: &'sym SymExContext<'tcx>,
+        s: PrustiSymValSynthetic<'sym, 'tcx>,
     ) -> PrustiSymValue<'sym, 'tcx> {
-        todo!()
+        arena.mk_synthetic(s)
     }
 }
 
@@ -134,7 +127,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     where
         T: 'vir,
     {
-        let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
+        // let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
             SymValueKind::Var(SymVar::Normal(idx), ..) => self
                 .symvars
@@ -182,7 +175,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 Ok(viper_fn.apply(self.vcx, &[expr]))
             }
             SymValueKind::Aggregate(kind, exprs) => {
-                if let AggregateKind::PCS(ty, _) = kind && ty.is_ref() {
+                if let AggregateKind::PCS(ty, _) = kind
+                    && ty.is_ref()
+                {
                     let mutability = match ty.kind() {
                         TyKind::Ref(_, _, mutability) => *mutability,
                         _ => unreachable!("AggregateKind::PCS with non-reference type: {:?}", ty),
@@ -381,22 +376,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
             }
-            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(value)) => {
-                self.encode_sym_value(
-                    deps,
-                    value.apply_transformer(self.arena, &mut Transformer(self.old_values.clone())),
-                )
-                // todo!()
-                // self
-                // .encode_sym_value(
-                //     deps,
-                //     value.subst(
-                //         &self.arena,
-                //         &Substs::from_iter(
-                //             self.old_values.iter().map(|(k, v)| (k.as_usize() - 1, *v)),
-                //         ),
-                //     ),
-                // ),
+            SymValueKind::Synthetic(PrustiSymValSyntheticData::Old(place, ty)) => {
+                let base = *self.old_values.get(&place.local()).unwrap();
+                let expr = place
+                    .projection()
+                    .iter()
+                    .fold(base, |base, proj| self.arena.mk_projection(*proj, base));
+                self.encode_sym_value(deps, expr)
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::Result(ty)) => {
                 let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();

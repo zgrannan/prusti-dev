@@ -305,7 +305,7 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
             for path in symbolic_execution.paths.iter() {
-                stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path)));
+                stmts.push(vcx.mk_comment_stmt(vir_format!(vcx, "path: {:?}", path.path())));
 
                 match path {
                     ResultPath::Return {
