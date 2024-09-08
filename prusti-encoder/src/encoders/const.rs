@@ -134,7 +134,7 @@ impl TaskEncoder for ConstEnc {
                     Self::encode_const_value(evaluated, ty, deps)
                 }
             })?,
-            mir::Const::Ty(_) => todo!("ConstantKind::Ty"),
+            mir::Const::Ty(..) => todo!("ConstantKind::Ty"),
         };
         Ok((res, ()))
     }

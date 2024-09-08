@@ -105,7 +105,7 @@ impl CrossCrateSpecs {
         let mut data = Vec::new();
         let mut file = fs::File::open(path)?;
         file.read_to_end(&mut data)?;
-        let mut decoder = DefSpecsDecoder::new(env.tcx(), &data, path.clone(), crate_name);
+        // let mut decoder = DefSpecsDecoder::new(env.tcx(), &data, path.clone(), crate_name);
 
         // todo!();
         // let proc_specs = FxHashMap::decode(&mut decoder);

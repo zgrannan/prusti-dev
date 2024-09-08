@@ -102,6 +102,7 @@ pub fn has_prusti_attr(attrs: &[ast::Attribute], name: &str) -> bool {
                     },
                 args: _,
                 tokens: _,
+                ..
             } = &normal_attr.item;
             segments.len() == 2
                 && segments[0].ident.as_str() == "prusti"
@@ -159,6 +160,7 @@ pub fn read_prusti_attrs<T: Borrow<ast::Attribute>>(attr_name: &str, attrs: &[T]
                     },
                 args: ast::AttrArgs::Eq(_, ast::AttrArgsEq::Hir(token_lit)),
                 tokens: _,
+                ..
             } = &normal_attr.item
             {
                 // Skip attributes whose path don't match with "prusti::<attr_name>"

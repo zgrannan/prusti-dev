@@ -24,7 +24,7 @@ pub struct DefSpecsDecoder<'a, 'tcx> {
 impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, data: &'a [u8], specs_file: PathBuf, crate_name: &str) -> Self {
         DefSpecsDecoder {
-            opaque: opaque::MemDecoder::new(data, 0),
+            opaque: opaque::MemDecoder::new(data, 0).unwrap(),
             tcx,
             ty_rcache: Default::default(),
             specs_file,

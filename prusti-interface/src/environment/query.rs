@@ -147,8 +147,8 @@ impl<'tcx> EnvQuery<'tcx> {
         self.tcx
             .fn_sig(def_id.into_param())
             .instantiate_identity()
-            .unsafety()
-            == prusti_rustc_interface::hir::Unsafety::Unsafe
+            .safety()
+            == prusti_rustc_interface::hir::Safety::Unsafe
     }
 
     /// Computes the signature of the function with subst applied.

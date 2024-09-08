@@ -137,19 +137,6 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
                 .unwrap()),
-            SymValueKind::CheckedBinaryOp(res_ty, op, lhs, rhs) => {
-                let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
-                let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
-                let lhs = self.encode_sym_value(deps, lhs)?;
-                let rhs = self.encode_sym_value(deps, rhs)?;
-                let viper_fn = deps
-                    .require_ref::<MirBuiltinEnc>(MirBuiltinEncTask::CheckedBinOp(
-                        *res_ty, *op, l_ty, r_ty,
-                    ))
-                    .unwrap()
-                    .function;
-                Ok(viper_fn.apply(self.vcx, &[lhs, rhs]))
-            }
             SymValueKind::BinaryOp(res_ty, op, lhs, rhs) => {
                 let l_ty = lhs.ty(self.vcx.tcx()).rust_ty();
                 let r_ty = rhs.ty(self.vcx.tcx()).rust_ty();
