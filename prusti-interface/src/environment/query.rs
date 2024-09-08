@@ -336,7 +336,7 @@ impl<'tcx> EnvQuery<'tcx> {
             let param_env = self.tcx.param_env(caller_def_id.into_param());
             let instance = self
                 .tcx
-                .resolve_instance(param_env.and((called_def_id, clean_substs)))
+                .resolve_instance_raw(param_env.and((called_def_id, clean_substs)))
                 .ok()??;
             let resolved_def_id = instance.def_id();
             let resolved_substs = if resolved_def_id == called_def_id {
