@@ -3,17 +3,17 @@ use prusti_interface::environment::Procedure;
 use prusti_rustc_interface::{
     ast,
     ast::Local,
-    hir::Mutability,
+    hir::{self, intravisit, Mutability},
     index::IndexVec,
     middle::{
         mir::{self, PlaceElem, VarDebugInfo},
         ty::{self, GenericArgsRef, TyCtxt, TyKind},
     },
-    span::def_id::DefId,
-    target::abi::FIRST_VARIANT,
+    span::{def_id::DefId, symbol::Ident, Span},
+    target::abi::{FieldIdx, FIRST_VARIANT},
 };
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     marker::PhantomData,
 };
 use symbolic_execution::{
@@ -25,7 +25,7 @@ use symbolic_execution::{
     results::ResultPath,
     semantics::VerifierSemantics,
     terminator::{FunctionCallEffects, FunctionCallResult},
-    transform::{BaseSymValueTransformer, SymValueTransformer, SyntheticSymValueTransformer},
+    transform::{BaseSymValueTransformer, SymValueTransformer},
     value::{
         AggregateKind, CanSubst, Substs, SymValue, SymValueData, SymValueKind, SymVar,
         SyntheticSymValue, Ty,
@@ -40,10 +40,7 @@ use crate::{
     encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc},
 };
 
-use super::{
-    mir_base::MirBaseEnc, mir_pure::PureKind, spec::with_def_spec,
-    sym::expr::PrustiSymValueTransformer,
-};
+use super::{mir_base::MirBaseEnc, mir_pure::PureKind, spec::with_def_spec};
 
 pub struct SymPureEnc;
 
@@ -181,7 +178,7 @@ pub enum PrustiSymValSyntheticData<'sym, 'tcx, V = SymVar> {
     ),
     Result(ty::Ty<'tcx>),
     VirLocal(&'sym str, ty::Ty<'tcx>),
-    Old(InputPlace<'tcx>, ty::Ty<'tcx>),
+    Old(PrustiSymValue<'sym, 'tcx, V>),
 }
 
 impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
@@ -214,8 +211,8 @@ impl<'sym, 'tcx> VisFormat for &'sym PrustiSymValSyntheticData<'sym, 'tcx> {
             }),
             PrustiSymValSyntheticData::Result(_ty) => "result".to_string(),
             PrustiSymValSyntheticData::VirLocal(name, _) => name.to_string(),
-            PrustiSymValSyntheticData::Old(value, _) => {
-                format!("old({:?})", value)
+            PrustiSymValSyntheticData::Old(value) => {
+                format!("old({})", value.to_vis_string(tcx, debug_info, mode))
             }
         }
     }
@@ -293,7 +290,7 @@ impl<'sym, 'tcx, V> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym
             ),
             PrustiSymValSyntheticData::Result(ty) => Ty::new(*ty, None),
             PrustiSymValSyntheticData::VirLocal(_, ty) => Ty::new(*ty, None),
-            PrustiSymValSyntheticData::Old(val, ty) => Ty::new(*ty, None),
+            PrustiSymValSyntheticData::Old(val) => val.ty(tcx),
         }
     }
 
@@ -336,70 +333,135 @@ pub type PrustiSymValue<'sym, 'tcx, V = SymVar> =
     SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, V>, V>;
 pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
-struct StructTermTransformer;
-
-impl<'sym, 'tcx>
-    SymValueTransformer<
-        'sym,
-        'tcx,
-        PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
-        InputPlace<'tcx>,
-        SymVar,
-        PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
-    > for StructTermTransformer
-{
+struct SpanFinder<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    target_span: Span,
+    found_expr: Option<&'tcx hir::Expr<'tcx>>, // Store the found expression
 }
 
-impl<'sym, 'tcx>
-    BaseSymValueTransformer<
-        'sym,
-        'tcx,
-        PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
-        InputPlace<'tcx>,
-        SymVar,
-        PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
-    > for StructTermTransformer
-{
-    fn transform_var(
-        &mut self,
-        arena: &'sym SymExContext<'tcx>,
-        v: InputPlace<'tcx>,
-        ty: ty::Ty<'tcx>,
-    ) -> PrustiSymValue<'sym, 'tcx> {
-        arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Old(v, ty)))
+impl<'tcx> intravisit::Visitor<'tcx> for SpanFinder<'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
+        // Compare the span of this expression with the target span
+        if expr.span == self.target_span {
+            self.found_expr = Some(expr);
+        }
+        // Continue traversing the expression tree
+        intravisit::walk_expr(self, expr);
     }
 }
-impl<'sym, 'tcx>
-    SyntheticSymValueTransformer<
-        'sym,
-        'tcx,
-        PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
-        SymVar,
-        PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
-    > for StructTermTransformer
-{
-    fn transform_synthetic(
-        &mut self,
-        arena: &'sym SymExContext<'tcx>,
-        s: PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
-    ) -> PrustiSymValue<'sym, 'tcx> {
-        match s {
-            PrustiSymValSyntheticData::And(_, _) => todo!(),
-            PrustiSymValSyntheticData::If(_, _, _) => todo!(),
-            PrustiSymValSyntheticData::PureFnCall(def_id, substs, args) => {
-                let args = args
-                    .iter()
-                    .map(|arg| arg.apply_transformer(arena, &mut StructTermTransformer))
-                    .collect::<Vec<_>>();
-                return arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::PureFnCall(
-                    *def_id,
-                    substs,
-                    arena.alloc_slice(&args),
-                )));
+
+fn find_node_by_span<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &'tcx hir::Body<'tcx>,
+    target_span: Span,
+) -> Option<&'tcx hir::Expr<'tcx>> {
+    // Create the SpanFinder visitor
+    let mut visitor = SpanFinder {
+        tcx,
+        target_span,
+        found_expr: None,
+    };
+
+    // Start walking the body of the function (HIR tree)
+    intravisit::walk_body(&mut visitor, body);
+
+    // Return the found node, if any
+    visitor.found_expr
+}
+
+fn hir_node_to_sym_expr<'sym, 'tcx>(
+    arena: &'sym SymExContext<'tcx>,
+    input_idents: &HashMap<Ident, (usize, ty::Ty<'tcx>)>,
+    node: hir::Expr<'tcx>,
+) -> PrustiSymValue<'sym, 'tcx, SymVar> {
+    match node.kind {
+        hir::ExprKind::Unary(hir::UnOp::Deref, expr) => arena.mk_projection(
+            mir::ProjectionElem::Deref,
+            hir_node_to_sym_expr(arena, input_idents, *expr),
+        ),
+        hir::ExprKind::Path(hir::QPath::Resolved(_, path)) => {
+            assert!(path.segments.len() == 1);
+            let segment = path.segments[0];
+            let (index, ty) = input_idents.get(&segment.ident).unwrap();
+            arena.mk_var(SymVar::nth_input(*index), *ty)
+        }
+        hir::ExprKind::Field(expr, field) => {
+            let base = hir_node_to_sym_expr(arena, input_idents, *expr);
+            match base.ty(arena.tcx).rust_ty().kind() {
+                rustc_type_ir::TyKind::Adt(def, substs) => {
+                    let variant = def.variant(FIRST_VARIANT);
+                    let field_index = variant
+                        .fields
+                        .iter()
+                        .position(|variant_field| variant_field.name == field.name)
+                        .unwrap();
+                    let field_index = FieldIdx::from_usize(field_index);
+                    let field = &variant.fields[field_index];
+                    arena.mk_projection(
+                        mir::ProjectionElem::Field(field_index, field.ty(arena.tcx, substs)),
+                        base,
+                    )
+                }
+                rustc_type_ir::TyKind::Tuple(tys) => {
+                    let field_idx = field.name.as_str().parse::<usize>().unwrap();
+                    arena.mk_projection(
+                        mir::ProjectionElem::Field(FieldIdx::from_usize(field_idx), tys[field_idx]),
+                        base,
+                    )
+                }
+                _ => todo!(),
             }
-            PrustiSymValSyntheticData::Result(_) => todo!(),
-            PrustiSymValSyntheticData::VirLocal(_, _) => todo!(),
-            PrustiSymValSyntheticData::Old(..) => todo!(),
+        }
+        hir::ExprKind::Binary(op, e1, e2) => {
+            let e1 = hir_node_to_sym_expr(arena, input_idents, *e1);
+            let e2 = hir_node_to_sym_expr(arena, input_idents, *e2);
+            let (op, ty) = match op.node {
+                hir::BinOpKind::Add => (
+                    mir::BinOp::Add,
+                    arena
+                        .tcx
+                        .mk_ty_from_kind(ty::TyKind::Tuple(arena.tcx.mk_type_list_from_iter(
+                            vec![e1.ty(arena.tcx).rust_ty(), arena.tcx.types.bool].into_iter(),
+                        ))),
+                ),
+                _ => todo!(),
+            };
+            arena.mk_projection(
+                mir::ProjectionElem::Field(FieldIdx::from_usize(0), e1.ty(arena.tcx).rust_ty()),
+                arena.mk_checked_bin_op(ty, op, e1, e2),
+            )
+        }
+        hir::ExprKind::Call(func, args) => {
+            let args = args
+                .iter()
+                .map(|arg| hir_node_to_sym_expr(arena, input_idents, *arg))
+                .collect::<Vec<_>>();
+            let def_id = match func.kind {
+                hir::ExprKind::Path(hir::QPath::Resolved(ty, path)) => match path.res {
+                    hir::def::Res::Def(_, def_id) => def_id,
+                    hir::def::Res::PrimTy(_) => todo!(),
+                    hir::def::Res::SelfTyParam { trait_ } => todo!(),
+                    hir::def::Res::SelfTyAlias {
+                        alias_to,
+                        forbid_generic,
+                        is_trait_impl,
+                    } => todo!(),
+                    hir::def::Res::SelfCtor(_) => todo!(),
+                    hir::def::Res::Local(_) => todo!(),
+                    hir::def::Res::ToolMod => todo!(),
+                    hir::def::Res::NonMacroAttr(_) => todo!(),
+                    hir::def::Res::Err => todo!(),
+                },
+                _ => todo!(),
+            };
+            arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::PureFnCall(
+                def_id,
+                ty::GenericArgs::identity_for_item(arena.tcx, def_id),
+                arena.alloc_slice(&args),
+            )))
+        }
+        other => {
+            panic!("Unsupported expression kind: {:?}", other);
         }
     }
 }
@@ -408,7 +470,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, SymVar>;
     type OldMapSymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>;
     fn encode_fn_call<'mir>(
-        _location: mir::Location,
+        span: Span,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
@@ -421,17 +483,39 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
             let fn_name = vcx.tcx().def_path_str(def_id);
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
             if fn_name == "prusti_contracts::old" {
-                let value: PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>> = old_map
-                    .get(&args[0].place().unwrap().into(), sym_ex.arena)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "old value not found for {:?} in {:?}",
-                            args[0].place().unwrap(),
-                            old_map
+                eprintln!("def_id: {:?}", def_id);
+                let (_, _, body_id) = vcx
+                    .tcx()
+                    .hir_node_by_def_id(sym_ex.def_id)
+                    .expect_item()
+                    .expect_fn();
+                let thir_body = vcx.tcx().thir_body(sym_ex.def_id);
+                panic!("thir_body: {:?}", thir_body.unwrap().0.borrow());
+                let body = vcx.tcx().hir().body(body_id);
+                let input_idents = body
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        (
+                            p.pat.simple_ident().unwrap(),
+                            (i, sym_ex.body.local_decls[mir::Local::from_usize(i + 1)].ty),
                         )
-                    });
-                let value: PrustiSymValue<'sym, 'tcx> =
-                    value.apply_transformer(sym_ex.arena, &mut StructTermTransformer);
+                    })
+                    .collect::<HashMap<_, _>>();
+                let node = find_node_by_span(vcx.tcx(), &body, span).unwrap();
+                let arg = match node.kind {
+                    hir::ExprKind::Call(_, args) => args[0],
+                    _ => {
+                        unreachable!()
+                    }
+                };
+                let value =
+                    sym_ex
+                        .arena
+                        .mk_synthetic(sym_ex.arena.alloc(PrustiSymValSyntheticData::Old(
+                            hir_node_to_sym_expr(sym_ex.arena, &input_idents, arg),
+                        )));
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {
                         value,
@@ -601,23 +685,18 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
                         );
                         let encoded = encoded.subst(arena, &substs);
-                        let mut transformer = OldTransformer(
-                            operands
-                                .iter()
-                                .enumerate()
-                                .flat_map(|(i, op)| {
-                                    let place = op.place().unwrap();
-                                    let t = path.old_map.get(&place.into(), arena)?;
-                                    Some((i, t))
-                                })
-                                .collect(),
-                        );
+                        // let mut transformer = OldTransformer(
+                        //     operands
+                        //         .iter()
+                        //         .enumerate()
+                        //         .flat_map(|(i, op)| {
+                        //             let place = op.place().unwrap();
+                        //             let t = path.old_map.get(&place.into(), arena)?;
+                        //             Some((i, t))
+                        //         })
+                        //         .collect(),
+                        // );
                         eprintln!("old map {:?}", path.old_map);
-                        let encoded = encoded.apply_transformer(arena, &mut transformer);
-                        eprintln!(
-                            "encoded2 {}",
-                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
-                        );
                         encoded.paths
                     });
                 } else {
@@ -662,62 +741,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 struct OldTransformer<'sym, 'tcx>(
     HashMap<usize, StructureTerm<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>>>,
 );
-
-impl<'sym, 'tcx> SymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>
-    for OldTransformer<'sym, 'tcx>
-{
-}
-impl<'sym, 'tcx> BaseSymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>
-    for OldTransformer<'sym, 'tcx>
-{
-    fn transform_var(
-        &mut self,
-        arena: &'sym SymExContext<'tcx>,
-        var: SymVar,
-        ty: ty::Ty<'tcx>,
-    ) -> PrustiSymValue<'sym, 'tcx> {
-        arena.mk_var(var, ty)
-    }
-}
-
-impl<'sym, 'tcx: 'sym> SyntheticSymValueTransformer<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>
-    for OldTransformer<'sym, 'tcx>
-{
-    fn transform_synthetic(
-        &mut self,
-        arena: &'sym SymExContext<'tcx>,
-        s: PrustiSymValSynthetic<'sym, 'tcx>,
-    ) -> PrustiSymValue<'sym, 'tcx> {
-        match s {
-            PrustiSymValSyntheticData::Old(place, ty) => {
-                assert!(place.local().as_usize() == 1);
-                assert!(place.projection()[0] == mir::ProjectionElem::Deref);
-                match place.projection()[1] {
-                    mir::ProjectionElem::Field(idx, _) => {
-                        eprintln!("idx {:?}", idx.as_usize());
-                        eprintln!("self.0 {:?}", self.0);
-                        let input = self.0[&idx.as_usize()]
-                            .apply_transformer(arena, &mut StructTermTransformer);
-                        eprintln!("input {:?}", input);
-                        return place.projection()[2..].iter().fold(input, |acc, elem| {
-                            arena.mk_projection(*elem, acc)
-                        });
-                        // return input;
-                        // return arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::Old(
-                        //     InputPlace::new(
-                        //         Place::new(input.local(), &place.projection()[2..]).into(),
-                        //     ),
-                        //     *ty,
-                        // )));
-                    }
-                    _ => todo!(),
-                }
-                todo!()
-            },
-            _ => arena.mk_synthetic(s), // TODO
-        }
-    }
-}
 
 fn get_loop_spec_blocks(procedure: &Procedure, loop_head: mir::BasicBlock) -> Vec<mir::BasicBlock> {
     let mut res = vec![];

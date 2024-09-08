@@ -256,7 +256,7 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                 for (idx, expr) in backwards_facts.0.iter() {
                     let expr = expr.subst(encoder.arena, &backwards_substs);
                     let expr = encoder.arena.mk_ref(expr, Mutability::Mut);
-                    let expr = encoder.encode_sym_value(deps, expr)?;
+                    let expr = encoder.encode_sym_value(deps, expr, false)?;
                     let back_local = get_back_result(*idx);
                     path_stmts.push(vcx.mk_inhale_stmt(vcx.mk_eq_expr(back_local, expr)));
                 }

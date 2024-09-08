@@ -53,7 +53,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .iter()
             .copied()
             .chain(std::iter::once(backwards_fn.return_snapshot))
-            .map(|arg| self.encode_sym_value(deps, arg))
+            .map(|arg| self.encode_sym_value(deps, arg, false))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(back_fn.apply(ty_args, encoded_args))
     }
@@ -93,7 +93,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .zip(args.iter())
             .map(|(expected_ty, arg)| {
                 let base = self
-                    .encode_sym_value(deps, arg)
+                    .encode_sym_value(deps, arg, false)
                     .map_err(|e| EncodeFullError::EncodingError(e, None))?;
                 let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
                 let caster = deps
