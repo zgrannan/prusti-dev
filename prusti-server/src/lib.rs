@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #![warn(clippy::disallowed_types)]
+#![feature(rustc_private)]
 
 use log::info;
 use prusti_utils::{config, Stopwatch};

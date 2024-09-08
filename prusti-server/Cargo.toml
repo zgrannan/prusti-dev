@@ -9,6 +9,7 @@ description = "Server-side logic & handling for Prusti"
 [lib]
 test = true # we have unit tests
 doctest = false # but no doc tests
+crate-type=["rlib"]
 
 [[bin]]
 name = "prusti-server-driver"
