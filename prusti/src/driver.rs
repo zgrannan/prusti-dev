@@ -64,10 +64,10 @@ fn init_loggers() -> Option<FlushGuard> {
         None
     };
 
-    let error_handler = EarlyDiagCtxt::new(session::config::ErrorOutputType::HumanReadable(
-        errors::emitter::HumanReadableErrorType::Default(errors::emitter::ColorConfig::Auto),
-    ));
-    prusti_rustc_interface::driver::init_rustc_env_logger(&error_handler);
+    // let error_handler = EarlyDiagCtxt::new(session::config::ErrorOutputType::HumanReadable(
+    //     errors::emitter::HumanReadableErrorType::Default(errors::emitter::ColorConfig::Auto),
+    // ));
+    // prusti_rustc_interface::driver::init_rustc_env_logger(&error_handler);
     guard
 }
 

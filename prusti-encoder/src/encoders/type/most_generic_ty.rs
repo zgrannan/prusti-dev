@@ -60,7 +60,7 @@ impl<'tcx> MostGenericTy<'tcx> {
             TyKind::Foreign(_) => todo!(),
             TyKind::Slice(_) => todo!(),
             TyKind::FnDef(_, _) => todo!(),
-            TyKind::FnPtr(_) => String::from("FnPtr"),
+            TyKind::FnPtr(..) => String::from("FnPtr"),
             TyKind::Dynamic(_, _, _) => todo!(),
             TyKind::Coroutine(..) => todo!(),
             TyKind::CoroutineWitness(..) => todo!(),
@@ -138,7 +138,7 @@ impl<'tcx> MostGenericTy<'tcx> {
                 | TyKind::Never
                 | TyKind::Param(_)
                 | TyKind::Uint(_) => Vec::new(),
-                TyKind::FnPtr(_) => vec![], // TODO
+                TyKind::FnPtr(..) => vec![], // TODO
                 other => todo!("generics for {:?}", other),
             }
         })
@@ -220,7 +220,7 @@ pub fn extract_type_params<'tcx>(
         }
         TyKind::Foreign(_) => todo!(),
         TyKind::FnDef(_, _) => todo!(),
-        TyKind::FnPtr(_) => (MostGenericTy::Ty(ty), Vec::new()), // TODO,
+        TyKind::FnPtr(..) => (MostGenericTy::Ty(ty), Vec::new()), // TODO,
         TyKind::Dynamic(_, _, _) => todo!(),
         TyKind::Coroutine(..) => todo!(),
         TyKind::CoroutineWitness(..) => todo!(),

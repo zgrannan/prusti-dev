@@ -3,6 +3,7 @@ name = "prusti"
 version = "0.2.2"
 authors = ["Prusti Devs <prusti_developers@sympa.ethz.ch>"]
 edition = "2021"
+crate-type=["dylib", "rlib"]
 
 [[bin]]
 name = "prusti-driver"

@@ -325,7 +325,7 @@ impl TaskEncoder for DomainEnc {
                     let specifics = enc.mk_struct_specifics(vec![]);
                     Ok((Some(enc.finalize(task_key)), specifics))
                 }
-                &TyKind::FnPtr(_) => {
+                &TyKind::FnPtr(..) => {
                     let mut enc = DomainEncData::new(vcx, task_key, vec![], deps);
                     enc.deps
                         .emit_output_ref(*task_key, enc.output_ref(base_name))?;

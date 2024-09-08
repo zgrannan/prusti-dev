@@ -3,3 +3,6 @@ bindeps = true
 
 [registries.crates-io]
 protocol = "sparse"
+
+[build]
+rustflags = ["-C", "prefer-dynamic"]
