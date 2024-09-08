@@ -5,7 +5,6 @@ authors = ["Prusti Devs <prusti_developers@sympa.ethz.ch>"]
 edition = "2021"
 license = "MPL-2.0"
 description = "Server-side logic & handling for Prusti"
-crate-type=["rlib"]
 
 [lib]
 test = true # we have unit tests
