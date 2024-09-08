@@ -52,7 +52,7 @@ impl CrossCrateSpecs {
         // to get dependency crates, which doesn't ignore unused ones? Maybe:
         // https://doc.rust-lang.org/stable/nightly-rustc/rustc_metadata/creader/struct.CrateMetadataRef.html#method.dependencies
         for crate_num in env.tcx().crates(()) {
-            if let Some(extern_crate) = env.tcx().extern_crate(crate_num.as_def_id()) {
+            if let Some(extern_crate) = env.tcx().extern_crate(*crate_num) {
                 if extern_crate.is_direct() {
                     let crate_name = env.tcx().crate_name(*crate_num);
                     let crate_source = env.tcx().used_crate_source(*crate_num);
