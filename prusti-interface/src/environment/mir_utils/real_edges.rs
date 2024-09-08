@@ -75,5 +75,6 @@ fn real_targets(terminator: &mir::Terminator) -> Vec<mir::BasicBlock> {
         TerminatorKind::InlineAsm { .. } => todo!(),
         TerminatorKind::UnwindResume => vec![],
         TerminatorKind::UnwindTerminate(_) => vec![],
+        _ => todo!(),
     }
 }

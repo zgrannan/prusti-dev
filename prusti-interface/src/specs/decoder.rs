@@ -24,7 +24,7 @@ pub struct DefSpecsDecoder<'a, 'tcx> {
 impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>, data: &'a [u8], specs_file: PathBuf, crate_name: &str) -> Self {
         DefSpecsDecoder {
-            opaque: opaque::MemDecoder::new(data, 0),
+            opaque: opaque::MemDecoder::new(data, 0).unwrap(),
             tcx,
             ty_rcache: Default::default(),
             specs_file,
@@ -34,7 +34,8 @@ impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
 
     fn def_path_hash_to_def_id(&self, hash: DefPathHash) -> DefId {
         self.tcx
-            .def_path_hash_to_def_id(hash, &"DefPathHash not found in the local crate")
+            .def_path_hash_to_def_id(hash)
+            .unwrap()
         // // Sanity check let cstore = std::panic::AssertUnwindSafe(self.tcx.cstore_untracked());
         // let result = std::panic::catch_unwind(|| {
         //     cstore.stable_crate_id_to_crate_num(hash.stable_crate_id())

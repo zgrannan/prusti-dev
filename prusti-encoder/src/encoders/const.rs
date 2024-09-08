@@ -42,7 +42,7 @@ impl ConstEnc {
             }
             ConstValue::Scalar(Scalar::Ptr(ptr, _)) => vir::with_vcx(|vcx| {
                 match vcx.tcx().global_alloc(ptr.provenance.alloc_id()) {
-                    GlobalAlloc::Function(_) => todo!(),
+                    GlobalAlloc::Function { .. } => todo!(),
                     GlobalAlloc::VTable(_, _) => todo!(),
                     GlobalAlloc::Static(_) => todo!(),
                     GlobalAlloc::Memory(_mem) => {
@@ -134,7 +134,7 @@ impl TaskEncoder for ConstEnc {
                     Self::encode_const_value(evaluated, ty, deps)
                 }
             })?,
-            mir::Const::Ty(_) => todo!("ConstantKind::Ty"),
+            mir::Const::Ty(..) => todo!("ConstantKind::Ty"),
         };
         Ok((res, ()))
     }

@@ -415,21 +415,11 @@ fn hir_node_to_sym_expr<'sym, 'tcx>(
         hir::ExprKind::Binary(op, e1, e2) => {
             let e1 = hir_node_to_sym_expr(arena, input_idents, *e1);
             let e2 = hir_node_to_sym_expr(arena, input_idents, *e2);
-            let (op, ty) = match op.node {
-                hir::BinOpKind::Add => (
-                    mir::BinOp::Add,
-                    arena
-                        .tcx
-                        .mk_ty_from_kind(ty::TyKind::Tuple(arena.tcx.mk_type_list_from_iter(
-                            vec![e1.ty(arena.tcx).rust_ty(), arena.tcx.types.bool].into_iter(),
-                        ))),
-                ),
+            let op = match op.node {
+                hir::BinOpKind::Add => mir::BinOp::Add,
                 _ => todo!(),
             };
-            arena.mk_projection(
-                mir::ProjectionElem::Field(FieldIdx::from_usize(0), e1.ty(arena.tcx).rust_ty()),
-                arena.mk_checked_bin_op(ty, op, e1, e2),
-            )
+            arena.mk_bin_op(e1.ty(arena.tcx).rust_ty(), op, e1, e2)
         }
         hir::ExprKind::Call(func, args) => {
             let args = args

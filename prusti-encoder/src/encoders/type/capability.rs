@@ -58,14 +58,14 @@ struct RegionRenumberVisitor<'tcx> {
     map: FxHashMap<ty::Region<'tcx>, ty::RegionVid>,
 }
 
-impl<'tcx> ty::TypeFolder<ty::TyCtxt<'tcx>> for RegionRenumberVisitor<'tcx> {
-    fn interner(&self) -> ty::TyCtxt<'tcx> {
-        self.tcx
-    }
+// impl<'tcx> ty::TypeFolder<ty::TyCtxt<'tcx>> for RegionRenumberVisitor<'tcx> {
+//     fn interner(&self) -> ty::TyCtxt<'tcx> {
+//         self.tcx
+//     }
 
-    fn fold_region(&mut self, r: ty::Region<'tcx>) -> ty::Region<'tcx> {
-        let len = self.map.len();
-        let v = *self.map.entry(r).or_insert_with(|| ty::RegionVid::from_usize(len));
-        ty::Region::new_var(self.tcx, v)
-    }
-}
+//     fn fold_region(&mut self, r: ty::Region<'tcx>) -> ty::Region<'tcx> {
+//         let len = self.map.len();
+//         let v = *self.map.entry(r).or_insert_with(|| ty::RegionVid::from_usize(len));
+//         ty::Region::new_var(self.tcx, v)
+//     }
+// }

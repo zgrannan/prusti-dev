@@ -30,6 +30,7 @@ impl From<mir::UnOp> for UnOpKind {
         match value {
             mir::UnOp::Not => UnOpKind::Not,
             mir::UnOp::Neg => UnOpKind::Neg,
+            mir::UnOp::PtrMetadata => todo!(),
         }
     }
 }
@@ -64,6 +65,9 @@ pub enum BinOpKind {
 impl From<mir::BinOp> for BinOpKind {
     fn from(value: mir::BinOp) -> Self {
         match value {
+            mir::BinOp::AddWithOverflow => BinOpKind::Add,
+            mir::BinOp::SubWithOverflow => BinOpKind::Sub,
+            mir::BinOp::MulWithOverflow => BinOpKind::Mul,
             mir::BinOp::Add => BinOpKind::Add,
             mir::BinOp::AddUnchecked => todo!(),
             mir::BinOp::Sub => BinOpKind::Sub,
