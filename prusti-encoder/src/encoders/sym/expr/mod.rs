@@ -10,7 +10,6 @@ use prusti_rustc_interface::{
 };
 use symbolic_execution::{
     context::SymExContext,
-    path::InputPlace,
     path_conditions::{PathConditionAtom, PathConditionPredicate},
     transform::SymValueTransformer,
     value::{AggregateKind, BackwardsFn, Substs, SymValueKind, SymVar},

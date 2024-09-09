@@ -21,7 +21,7 @@ use symbolic_execution::{
     context::SymExContext,
     encoder::Encoder,
     heap::{HeapData, SymbolicHeap},
-    path::{InputPlace, OldMap, OldMapEncoder, Path, StructureTerm},
+    path::Path,
     path_conditions::PathConditions,
     results::ResultPath,
     semantics::VerifierSemantics,
@@ -465,17 +465,14 @@ fn thir_node_to_sym_expr<'sym, 'tcx>(
 
 impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, SymVar>;
-    type OldMapSymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>;
     fn encode_fn_call<'mir>(
         span: Span,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
         def_id: DefId,
         substs: GenericArgsRef<'tcx>,
         heap: &mut HeapData<'sym, 'tcx, Self::SymValSynthetic>,
-        old_map: &mut OldMap<'sym, 'tcx, Self::OldMapSymValSynthetic>,
         args: &Vec<&mir::Operand<'tcx>>,
-    ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic, Self::OldMapSymValSynthetic>>
-    {
+    ) -> Option<FunctionCallEffects<'sym, 'tcx, Self::SymValSynthetic>> {
         vir::with_vcx(|vcx| {
             let fn_name = vcx.tcx().def_path_str(def_id);
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
@@ -509,7 +506,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {
                         value,
-                        old_map_value: None,
                         postcondition: None,
                     },
                     precondition_assertion: None,
@@ -520,15 +516,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 .iter()
                 .map(|arg| sym_ex.encode_operand(&mut heap, arg))
                 .collect();
-            let old_map_encoded_args: Vec<PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>>> = args
-                .iter()
-                .map(|arg| {
-                    let encoder = sym_ex.old_map_encoder();
-                    encoder.encode_operand(old_map, arg)
-                })
-                .collect();
-            let old_map_encoded_args: &'sym [PrustiSymValue<'sym, 'tcx, InputPlace<'tcx>>] =
-                sym_ex.arena.alloc_slice(&old_map_encoded_args);
             let args = sym_ex.arena.alloc_slice(&encoded_args);
             match fn_name.as_str() {
                 "prusti_contracts::before_expiry" => {
@@ -536,7 +523,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                         precondition_assertion: None,
                         result: FunctionCallResult::Value {
                             value: args[0],
-                            old_map_value: None,
                             postcondition: None,
                         },
                         snapshot: None,
@@ -558,7 +544,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     return Some(FunctionCallEffects {
                         precondition_assertion: None,
                         result: FunctionCallResult::Value {
-                            old_map_value: None,
                             value: sym_ex.arena.mk_aggregate(
                                 AggregateKind::Rust(
                                     mir::AggregateKind::Adt(
@@ -587,30 +572,16 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                 fn_name == "std::cmp::PartialEq::eq" || fn_name == "std::cmp::PartialEq::ne",
             );
             if is_pure {
-                let old_map_value: SymValue<
-                    'sym,
-                    'tcx,
-                    PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
-                    InputPlace<'tcx>,
-                > = sym_ex
-                    .arena
-                    .mk_synthetic(sym_ex.alloc(PrustiSymValSyntheticData::PureFnCall(
-                        def_id,
-                        substs,
-                        old_map_encoded_args,
-                    )));
                 let result: FunctionCallResult<
                     'sym,
                     'tcx,
                     PrustiSymValSynthetic<'sym, 'tcx, SymVar>,
-                    PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>,
                 > = FunctionCallResult::Value {
                     value: sym_ex.arena.mk_synthetic(
                         sym_ex
                             .arena
                             .alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
                     ),
-                    old_map_value: Some(old_map_value),
                     postcondition: None,
                 };
                 return Some(FunctionCallEffects {
@@ -626,7 +597,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
 
     fn encode_loop_invariant<'heap, 'mir: 'heap>(
         loop_head: mir::BasicBlock,
-        mut path: Path<'sym, 'tcx, Self::SymValSynthetic, Self::OldMapSymValSynthetic>,
+        mut path: Path<'sym, 'tcx, Self::SymValSynthetic>,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
     ) -> Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
         let arena = sym_ex.arena;
@@ -686,7 +657,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                         //         })
                         //         .collect(),
                         // );
-                        eprintln!("old map {:?}", path.old_map);
                         encoded.paths
                     });
                 } else {
@@ -702,35 +672,12 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                         },
                         rhs,
                     );
-                    let structure_encoder = sym_ex.old_map_encoder();
-                    match &stmt.kind {
-                        mir::StatementKind::Assign(box (place, rvalue)) => {
-                            let encoded_place: StructureTerm<
-                                'sym,
-                                'tcx,
-                                Self::OldMapSymValSynthetic,
-                            > = <OldMapEncoder<'mir, 'sym, 'tcx> as Encoder<
-                                'mir,
-                                'sym,
-                                'tcx,
-                                Self::OldMapSymValSynthetic,
-                            >>::encode_rvalue(
-                                &structure_encoder, &mut path.old_map, rvalue
-                            );
-                            path.old_map.insert((*place).into(), encoded_place);
-                        }
-                        _ => {}
-                    }
                 }
             }
         }
         vec![]
     }
 }
-
-struct OldTransformer<'sym, 'tcx>(
-    HashMap<usize, StructureTerm<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, InputPlace<'tcx>>>>,
-);
 
 fn get_loop_spec_blocks(procedure: &Procedure, loop_head: mir::BasicBlock) -> Vec<mir::BasicBlock> {
     let mut res = vec![];
