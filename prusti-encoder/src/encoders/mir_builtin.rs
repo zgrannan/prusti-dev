@@ -203,7 +203,8 @@ impl MirBuiltinEnc {
                 let wrapped_prim_val =
                     Self::get_wrapped_val(vcx, prim_val, prim_res_ty.prim_type, rvalue_pure_ty);
                 let wrapped_snap_val = prim_res_ty.prim_to_snap.apply(vcx, [wrapped_prim_val]);
-                let overflowed = vcx.mk_bin_op_expr(vir::BinOpKind::CmpNe, wrapped_prim_val, prim_val);
+                let overflowed =
+                    vcx.mk_bin_op_expr(vir::BinOpKind::CmpNe, wrapped_prim_val, prim_val);
                 let overflowed_snap = bool_cons.apply(vcx, [overflowed]);
                 let ty_caster = deps
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
@@ -235,7 +236,15 @@ impl MirBuiltinEnc {
             // the RHS will be masked to the bit width.
             Add | Sub | Mul | Shl | Shr => (
                 Vec::new(),
-                Self::get_wrapped_val(vcx, snap_val, prim_res_ty.prim_type, res_ty),
+                prim_res_ty.prim_to_snap.apply(
+                    vcx,
+                    [Self::get_wrapped_val(
+                        vcx,
+                        prim_val,
+                        prim_res_ty.prim_type,
+                        res_ty,
+                    )],
+                ),
             ),
             // Undefined behavior to overflow (need precondition)
             AddUnchecked | SubUnchecked | MulUnchecked => {
@@ -315,7 +324,12 @@ impl MirBuiltinEnc {
             }
             mir::BinOp::Cmp => todo!(),
             // Cannot overflow and no undefined behavior
-            BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset => (Vec::new(), snap_val),
+            BitXor | BitAnd | BitOr | Eq | Lt | Le | Ne | Ge | Gt | Offset => {
+                if op == mir::BinOp::Ge {
+                    assert!(res_ty.is_bool());
+                }
+                (Vec::new(), snap_val)
+            }
         };
         vcx.mk_function(
             name.to_str(),

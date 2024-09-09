@@ -1,15 +1,16 @@
 use pcs::{combined_pcs::BodyWithBorrowckFacts, utils::Place};
-use prusti_interface::environment::Procedure;
+use prusti_interface::environment::{mir_storage, Procedure};
 use prusti_rustc_interface::{
     ast,
     ast::Local,
-    hir::{self, intravisit, Mutability},
+    hir::{self, Mutability},
     index::IndexVec,
     middle::{
         mir::{self, PlaceElem, VarDebugInfo},
+        thir::{self, Thir},
         ty::{self, GenericArgsRef, TyCtxt, TyKind},
     },
-    span::{def_id::DefId, symbol::Ident, Span},
+    span::{def_id::DefId, symbol::Ident, Span, Symbol},
     target::abi::{FieldIdx, FIRST_VARIANT},
 };
 use std::{
@@ -333,122 +334,128 @@ pub type PrustiSymValue<'sym, 'tcx, V = SymVar> =
     SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, V>, V>;
 pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
-struct SpanFinder<'tcx> {
+fn find_node_by_span<'thir, 'tcx>(
     tcx: TyCtxt<'tcx>,
+    body: &'thir Thir<'tcx>,
     target_span: Span,
-    found_expr: Option<&'tcx hir::Expr<'tcx>>, // Store the found expression
+) -> Option<&'thir thir::Expr<'tcx>> {
+    body.exprs.iter().find(|expr| expr.span == target_span)
 }
 
-impl<'tcx> intravisit::Visitor<'tcx> for SpanFinder<'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr<'tcx>) {
-        // Compare the span of this expression with the target span
-        if expr.span == self.target_span {
-            self.found_expr = Some(expr);
-        }
-        // Continue traversing the expression tree
-        intravisit::walk_expr(self, expr);
-    }
-}
-
-fn find_node_by_span<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &'tcx hir::Body<'tcx>,
-    target_span: Span,
-) -> Option<&'tcx hir::Expr<'tcx>> {
-    // Create the SpanFinder visitor
-    let mut visitor = SpanFinder {
-        tcx,
-        target_span,
-        found_expr: None,
-    };
-
-    // Start walking the body of the function (HIR tree)
-    intravisit::walk_body(&mut visitor, body);
-
-    // Return the found node, if any
-    visitor.found_expr
-}
-
-fn hir_node_to_sym_expr<'sym, 'tcx>(
+fn thir_node_to_sym_expr<'sym, 'tcx>(
     arena: &'sym SymExContext<'tcx>,
-    input_idents: &HashMap<Ident, (usize, ty::Ty<'tcx>)>,
-    node: hir::Expr<'tcx>,
+    thir: &Thir<'tcx>,
+    input_idents: &HashMap<Symbol, (usize, ty::Ty<'tcx>)>,
+    node: &thir::Expr<'tcx>,
 ) -> PrustiSymValue<'sym, 'tcx, SymVar> {
-    match node.kind {
-        hir::ExprKind::Unary(hir::UnOp::Deref, expr) => arena.mk_projection(
+    match &node.kind {
+        thir::ExprKind::Deref { arg } => arena.mk_projection(
             mir::ProjectionElem::Deref,
-            hir_node_to_sym_expr(arena, input_idents, *expr),
+            thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]),
         ),
-        hir::ExprKind::Path(hir::QPath::Resolved(_, path)) => {
-            assert!(path.segments.len() == 1);
-            let segment = path.segments[0];
-            let (index, ty) = input_idents.get(&segment.ident).unwrap();
+        thir::ExprKind::VarRef { id } => {
+            let hir_node = arena.tcx.hir_node(id.0);
+            let ident = match hir_node {
+                hir::Node::Param(_) => todo!(),
+                hir::Node::Item(_) => todo!(),
+                hir::Node::ForeignItem(_) => todo!(),
+                hir::Node::TraitItem(_) => todo!(),
+                hir::Node::ImplItem(_) => todo!(),
+                hir::Node::Variant(_) => todo!(),
+                hir::Node::Field(_) => todo!(),
+                hir::Node::AnonConst(_) => todo!(),
+                hir::Node::ConstBlock(_) => todo!(),
+                hir::Node::ConstArg(_) => todo!(),
+                hir::Node::Expr(_) => todo!(),
+                hir::Node::ExprField(_) => todo!(),
+                hir::Node::Stmt(_) => todo!(),
+                hir::Node::PathSegment(_) => todo!(),
+                hir::Node::Ty(_) => todo!(),
+                hir::Node::AssocItemConstraint(_) => todo!(),
+                hir::Node::TraitRef(_) => todo!(),
+                hir::Node::Pat(pat) => match pat.kind {
+                    hir::PatKind::Path(hir::QPath::Resolved(_, path)) => {
+                        assert!(path.segments.len() == 1);
+                        path.segments[0].ident.name
+                    }
+                    hir::PatKind::Binding(_, _, ident, _) => ident.name,
+                    _ => todo!("{:?}", pat.kind),
+                },
+                hir::Node::PatField(_) => todo!(),
+                hir::Node::Arm(_) => todo!(),
+                hir::Node::Block(_) => todo!(),
+                hir::Node::LetStmt(_) => todo!(),
+                hir::Node::Ctor(_) => todo!(),
+                hir::Node::Lifetime(_) => todo!(),
+                hir::Node::GenericParam(_) => todo!(),
+                hir::Node::Crate(_) => todo!(),
+                hir::Node::Infer(_) => todo!(),
+                hir::Node::WhereBoundPredicate(_) => todo!(),
+                hir::Node::ArrayLenInfer(_) => todo!(),
+                hir::Node::PreciseCapturingNonLifetimeArg(_) => todo!(),
+                hir::Node::Synthetic => todo!(),
+                hir::Node::Err(_) => todo!(),
+            };
+            let (index, ty) = input_idents.get(&ident).unwrap();
             arena.mk_var(SymVar::nth_input(*index), *ty)
         }
-        hir::ExprKind::Field(expr, field) => {
-            let base = hir_node_to_sym_expr(arena, input_idents, *expr);
+        thir::ExprKind::Field {
+            lhs,
+            variant_index,
+            name,
+        } => {
+            let base = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*lhs]);
             match base.ty(arena.tcx).rust_ty().kind() {
                 rustc_type_ir::TyKind::Adt(def, substs) => {
-                    let variant = def.variant(FIRST_VARIANT);
-                    let field_index = variant
-                        .fields
-                        .iter()
-                        .position(|variant_field| variant_field.name == field.name)
-                        .unwrap();
-                    let field_index = FieldIdx::from_usize(field_index);
-                    let field = &variant.fields[field_index];
+                    let variant = def.variant(*variant_index);
+                    let field = &variant.fields[*name];
                     arena.mk_projection(
-                        mir::ProjectionElem::Field(field_index, field.ty(arena.tcx, substs)),
+                        mir::ProjectionElem::Field(*name, field.ty(arena.tcx, substs)),
                         base,
                     )
                 }
-                rustc_type_ir::TyKind::Tuple(tys) => {
-                    let field_idx = field.name.as_str().parse::<usize>().unwrap();
-                    arena.mk_projection(
-                        mir::ProjectionElem::Field(FieldIdx::from_usize(field_idx), tys[field_idx]),
-                        base,
-                    )
-                }
+                rustc_type_ir::TyKind::Tuple(tys) => arena.mk_projection(
+                    mir::ProjectionElem::Field(*name, tys[name.as_usize()]),
+                    base,
+                ),
                 _ => todo!(),
             }
         }
-        hir::ExprKind::Binary(op, e1, e2) => {
-            let e1 = hir_node_to_sym_expr(arena, input_idents, *e1);
-            let e2 = hir_node_to_sym_expr(arena, input_idents, *e2);
-            let op = match op.node {
-                hir::BinOpKind::Add => mir::BinOp::Add,
-                _ => todo!(),
+        thir::ExprKind::Binary { op, lhs, rhs } => {
+            let lhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*lhs]);
+            let rhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*rhs]);
+            let ty = match op {
+                mir::BinOp::Eq
+                | mir::BinOp::Lt
+                | mir::BinOp::Le
+                | mir::BinOp::Ne
+                | mir::BinOp::Ge
+                | mir::BinOp::Gt => arena.tcx.types.bool,
+                _ => lhs.ty(arena.tcx).rust_ty(),
             };
-            arena.mk_bin_op(e1.ty(arena.tcx).rust_ty(), op, e1, e2)
+            arena.mk_bin_op(ty, *op, lhs, rhs)
         }
-        hir::ExprKind::Call(func, args) => {
+        thir::ExprKind::Call { fun, args, ty, .. } => {
             let args = args
                 .iter()
-                .map(|arg| hir_node_to_sym_expr(arena, input_idents, *arg))
+                .map(|arg| thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]))
                 .collect::<Vec<_>>();
-            let def_id = match func.kind {
-                hir::ExprKind::Path(hir::QPath::Resolved(ty, path)) => match path.res {
-                    hir::def::Res::Def(_, def_id) => def_id,
-                    hir::def::Res::PrimTy(_) => todo!(),
-                    hir::def::Res::SelfTyParam { trait_ } => todo!(),
-                    hir::def::Res::SelfTyAlias {
-                        alias_to,
-                        forbid_generic,
-                        is_trait_impl,
-                    } => todo!(),
-                    hir::def::Res::SelfCtor(_) => todo!(),
-                    hir::def::Res::Local(_) => todo!(),
-                    hir::def::Res::ToolMod => todo!(),
-                    hir::def::Res::NonMacroAttr(_) => todo!(),
-                    hir::def::Res::Err => todo!(),
-                },
+            let (def_id, substs) = match ty.kind() {
+                ty::TyKind::FnDef(def_id, substs) => (*def_id, substs),
                 _ => todo!(),
             };
             arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::PureFnCall(
                 def_id,
-                ty::GenericArgs::identity_for_item(arena.tcx, def_id),
+                substs,
                 arena.alloc_slice(&args),
             )))
+        }
+        thir::ExprKind::Scope { value, .. } => {
+            thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*value])
+        }
+        thir::ExprKind::Borrow { borrow_kind, arg } => {
+            let arg = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]);
+            arena.mk_ref(arg, borrow_kind.mutability())
         }
         other => {
             panic!("Unsupported expression kind: {:?}", other);
@@ -474,28 +481,21 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
             if fn_name == "prusti_contracts::old" {
                 eprintln!("def_id: {:?}", def_id);
-                let (_, _, body_id) = vcx
-                    .tcx()
-                    .hir_node_by_def_id(sym_ex.def_id)
-                    .expect_item()
-                    .expect_fn();
-                let thir_body = vcx.tcx().thir_body(sym_ex.def_id);
-                panic!("thir_body: {:?}", thir_body.unwrap().0.borrow());
-                let body = vcx.tcx().hir().body(body_id);
+                let body = mir_storage::retrieve_thir_body(vcx.tcx(), sym_ex.def_id);
                 let input_idents = body
                     .params
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
                         (
-                            p.pat.simple_ident().unwrap(),
+                            p.pat.as_ref().unwrap().simple_ident().unwrap(),
                             (i, sym_ex.body.local_decls[mir::Local::from_usize(i + 1)].ty),
                         )
                     })
                     .collect::<HashMap<_, _>>();
                 let node = find_node_by_span(vcx.tcx(), &body, span).unwrap();
-                let arg = match node.kind {
-                    hir::ExprKind::Call(_, args) => args[0],
+                let arg = match &node.kind {
+                    thir::ExprKind::Call { args, .. } => body.exprs.get(args[0]).unwrap(),
                     _ => {
                         unreachable!()
                     }
@@ -504,7 +504,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     sym_ex
                         .arena
                         .mk_synthetic(sym_ex.arena.alloc(PrustiSymValSyntheticData::Old(
-                            hir_node_to_sym_expr(sym_ex.arena, &input_idents, arg),
+                            thir_node_to_sym_expr(sym_ex.arena, &body, &input_idents, arg),
                         )));
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {

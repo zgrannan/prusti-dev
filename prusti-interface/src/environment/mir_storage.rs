@@ -10,6 +10,7 @@ use prusti_rustc_interface::{
     borrowck::consumers::BodyWithBorrowckFacts,
     data_structures::fx::FxHashMap,
     hir::def_id::LocalDefId,
+    middle::thir::Thir,
     middle::{mir, ty::TyCtxt},
 };
 use std::{cell::RefCell, rc::Rc, thread_local};
@@ -23,6 +24,31 @@ thread_local! {
     pub static SHARED_STATE_WITHOUT_FACTS:
         RefCell<FxHashMap<LocalDefId, mir::Body<'static>>> =
         RefCell::new(FxHashMap::default());
+    pub static THIR_BODIES: RefCell<FxHashMap<LocalDefId, Thir<'static>>> =
+        RefCell::new(FxHashMap::default());
+}
+
+pub unsafe fn store_thir_body<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    def_id: LocalDefId,
+    body: Thir<'tcx>,
+) {
+    let body: Thir<'static> = unsafe { std::mem::transmute(body) };
+    THIR_BODIES.with(|state| {
+        let mut map = state.borrow_mut();
+        assert!(map.insert(def_id, body).is_none());
+    });
+}
+
+pub fn retrieve_thir_body<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    def_id: LocalDefId,
+) -> Thir<'tcx> {
+    let body: Thir<'static> = THIR_BODIES.with(|state| {
+        let mut map = state.borrow_mut();
+        map.get(&def_id).unwrap().clone()
+    });
+    unsafe { std::mem::transmute(body) }
 }
 
 /// # Safety
