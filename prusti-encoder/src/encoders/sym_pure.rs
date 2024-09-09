@@ -353,26 +353,9 @@ fn thir_node_to_sym_expr<'sym, 'tcx>(
             mir::ProjectionElem::Deref,
             thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]),
         ),
-        thir::ExprKind::VarRef { id } => {
-            let hir_node = arena.tcx.hir_node(id.0);
+        thir::ExprKind::UpvarRef { var_hir_id, .. } => {
+            let hir_node = arena.tcx.hir_node(var_hir_id.0);
             let ident = match hir_node {
-                hir::Node::Param(_) => todo!(),
-                hir::Node::Item(_) => todo!(),
-                hir::Node::ForeignItem(_) => todo!(),
-                hir::Node::TraitItem(_) => todo!(),
-                hir::Node::ImplItem(_) => todo!(),
-                hir::Node::Variant(_) => todo!(),
-                hir::Node::Field(_) => todo!(),
-                hir::Node::AnonConst(_) => todo!(),
-                hir::Node::ConstBlock(_) => todo!(),
-                hir::Node::ConstArg(_) => todo!(),
-                hir::Node::Expr(_) => todo!(),
-                hir::Node::ExprField(_) => todo!(),
-                hir::Node::Stmt(_) => todo!(),
-                hir::Node::PathSegment(_) => todo!(),
-                hir::Node::Ty(_) => todo!(),
-                hir::Node::AssocItemConstraint(_) => todo!(),
-                hir::Node::TraitRef(_) => todo!(),
                 hir::Node::Pat(pat) => match pat.kind {
                     hir::PatKind::Path(hir::QPath::Resolved(_, path)) => {
                         assert!(path.segments.len() == 1);
@@ -381,20 +364,23 @@ fn thir_node_to_sym_expr<'sym, 'tcx>(
                     hir::PatKind::Binding(_, _, ident, _) => ident.name,
                     _ => todo!("{:?}", pat.kind),
                 },
-                hir::Node::PatField(_) => todo!(),
-                hir::Node::Arm(_) => todo!(),
-                hir::Node::Block(_) => todo!(),
-                hir::Node::LetStmt(_) => todo!(),
-                hir::Node::Ctor(_) => todo!(),
-                hir::Node::Lifetime(_) => todo!(),
-                hir::Node::GenericParam(_) => todo!(),
-                hir::Node::Crate(_) => todo!(),
-                hir::Node::Infer(_) => todo!(),
-                hir::Node::WhereBoundPredicate(_) => todo!(),
-                hir::Node::ArrayLenInfer(_) => todo!(),
-                hir::Node::PreciseCapturingNonLifetimeArg(_) => todo!(),
-                hir::Node::Synthetic => todo!(),
-                hir::Node::Err(_) => todo!(),
+                _ => todo!("{:?}", hir_node),
+            };
+            let (index, ty) = input_idents.get(&ident).unwrap();
+            arena.mk_var(SymVar::nth_input(*index), node.ty)
+        }
+        thir::ExprKind::VarRef { id } => {
+            let hir_node = arena.tcx.hir_node(id.0);
+            let ident = match hir_node {
+                hir::Node::Pat(pat) => match pat.kind {
+                    hir::PatKind::Path(hir::QPath::Resolved(_, path)) => {
+                        assert!(path.segments.len() == 1);
+                        path.segments[0].ident.name
+                    }
+                    hir::PatKind::Binding(_, _, ident, _) => ident.name,
+                    _ => todo!("{:?}", pat.kind),
+                },
+                _ => todo!("{:?}", hir_node),
             };
             let (index, ty) = input_idents.get(&ident).unwrap();
             arena.mk_var(SymVar::nth_input(*index), *ty)
@@ -424,16 +410,8 @@ fn thir_node_to_sym_expr<'sym, 'tcx>(
         thir::ExprKind::Binary { op, lhs, rhs } => {
             let lhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*lhs]);
             let rhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*rhs]);
-            let ty = match op {
-                mir::BinOp::Eq
-                | mir::BinOp::Lt
-                | mir::BinOp::Le
-                | mir::BinOp::Ne
-                | mir::BinOp::Ge
-                | mir::BinOp::Gt => arena.tcx.types.bool,
-                _ => lhs.ty(arena.tcx).rust_ty(),
-            };
-            arena.mk_bin_op(ty, *op, lhs, rhs)
+            let op = *op;
+            arena.mk_bin_op(node.ty, op, lhs, rhs)
         }
         thir::ExprKind::Call { fun, args, ty, .. } => {
             let args = args
@@ -478,14 +456,28 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
             if fn_name == "prusti_contracts::old" {
                 eprintln!("def_id: {:?}", def_id);
+                eprintln!("sym_ex.def_id: {:?}", sym_ex.def_id);
                 let body = mir_storage::retrieve_thir_body(vcx.tcx(), sym_ex.def_id);
-                let input_idents = body
+                let body_for_params = if vcx.tcx().is_closure_like(sym_ex.def_id.to_def_id()) {
+                    let def_id = vcx
+                        .tcx()
+                        .parent(sym_ex.def_id.to_def_id())
+                        .as_local()
+                        .unwrap();
+                    &mir_storage::retrieve_thir_body(vcx.tcx(), def_id)
+                } else {
+                    &body
+                };
+                let input_idents = body_for_params
                     .params
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
+                        let pat = p.pat.as_ref().unwrap_or_else(|| {
+                            panic!("Parameter {:?} has no pattern", p);
+                        });
                         (
-                            p.pat.as_ref().unwrap().simple_ident().unwrap(),
+                            pat.simple_ident().unwrap(),
                             (i, sym_ex.body.local_decls[mir::Local::from_usize(i + 1)].ty),
                         )
                     })
@@ -646,17 +638,10 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
                         );
                         let encoded = encoded.subst(arena, &substs);
-                        // let mut transformer = OldTransformer(
-                        //     operands
-                        //         .iter()
-                        //         .enumerate()
-                        //         .flat_map(|(i, op)| {
-                        //             let place = op.place().unwrap();
-                        //             let t = path.old_map.get(&place.into(), arena)?;
-                        //             Some((i, t))
-                        //         })
-                        //         .collect(),
-                        // );
+                        eprintln!(
+                            "encoded2 {}",
+                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
+                        );
                         encoded.paths
                     });
                 } else {

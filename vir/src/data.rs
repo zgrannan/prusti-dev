@@ -69,7 +69,7 @@ impl From<mir::BinOp> for BinOpKind {
             mir::BinOp::SubWithOverflow => BinOpKind::Sub,
             mir::BinOp::MulWithOverflow => BinOpKind::Mul,
             mir::BinOp::Add => BinOpKind::Add,
-            mir::BinOp::AddUnchecked => todo!(),
+            mir::BinOp::AddUnchecked => BinOpKind::Add,
             mir::BinOp::Sub => BinOpKind::Sub,
             mir::BinOp::SubUnchecked => todo!(),
             mir::BinOp::Mul => BinOpKind::Mul,

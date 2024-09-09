@@ -250,10 +250,10 @@ impl MirBuiltinEnc {
             AddUnchecked | SubUnchecked | MulUnchecked => {
                 let min = vcx.get_min_int(prim_res_ty.prim_type, res_ty.kind());
                 // `(arg1 op arg2) >= -iN::MIN`
-                let lower_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpGe, snap_val, min);
+                let lower_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpGe, prim_val, min);
                 let max = vcx.get_max_int(prim_res_ty.prim_type, res_ty.kind());
                 // `(arg1 op arg2) <= iN::MAX`
-                let upper_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, snap_val, max);
+                let upper_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, prim_val, max);
                 (vec![lower_bound, upper_bound], snap_val)
             }
             // Overflow is well defined as wrapping (implicit), but shifting by
