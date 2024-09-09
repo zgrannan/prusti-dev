@@ -135,6 +135,13 @@ impl<'vir, Curr: 'vir, Next: 'vir> ExprGenData<'vir, Curr, Next> {
             debug_info: with_vcx(DebugInfo::new),
         }
     }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self.kind {
+            ExprKindGenData::Const(ConstData::Bool(b)) => Some(*b),
+            _ => None,
+        }
+    }
 }
 
 #[derive(VirHash, VirSerde)]

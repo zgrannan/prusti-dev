@@ -277,7 +277,7 @@ impl TaskEncoder for SymImpureEnc {
                     Err(err) => {
                         stmts
                             .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
-                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
                     }
                 }
             }
@@ -296,7 +296,7 @@ impl TaskEncoder for SymImpureEnc {
                     Err(err) => {
                         stmts
                             .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
-                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
                     }
                 }
             }
@@ -361,7 +361,7 @@ impl TaskEncoder for SymImpureEnc {
                                     p, def_id, path, err
                                 )
                             ),
-                            vcx.mk_exhale_stmt(vcx.mk_bool::<false>())
+                            vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>())
                             ]
                         })
                     })
@@ -381,7 +381,7 @@ impl TaskEncoder for SymImpureEnc {
                                         vcx.alloc(format!("Encoding err: {err:?}")),
                                     ),
                                 );
-                                stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                                stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
                             }
                             None => stmts.extend(assertions),
                         }
@@ -487,7 +487,7 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         assertion: &PrustiAssertion<'sym, 'tcx>,
     ) -> Vec<vir::Stmt<'vir>> {
         match assertion {
-            Assertion::False => vec![self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>())],
+            Assertion::False => vec![self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>())],
             Assertion::Precondition(def_id, substs, args) => {
                 let arg_substs = self.arena.alloc(Substs::from_iter(
                     args.iter()
@@ -529,7 +529,7 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
                                 self.vcx
                                     .alloc(format!("Error when encoding the assertion: {err:?}")),
                             ),
-                            self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false>()),
+                            self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
                         ]
                     }
                 }

@@ -122,7 +122,7 @@ impl TaskEncoder for GenericEnc {
 
             // unreachable_to_snap
             let name = unreachable_to_snap.name_str();
-            let false_ = vcx.alloc_slice(&[vcx.mk_bool::<false>()]);
+            let false_ = vcx.alloc_slice(&[vcx.mk_bool::<false, !, !>()]);
             let unreachable_to_snap =
                 vcx
                     .mk_function(name, &[], &SNAPSHOT_PARAM_DOMAIN, false_, false_, None);

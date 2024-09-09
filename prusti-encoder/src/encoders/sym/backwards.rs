@@ -277,7 +277,7 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                             "Error: {}",
                             err
                         )));
-                        body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false>()));
+                        body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
                     }
                     Some(Ok(condition)) => {
                         body_stmts.push(vcx.mk_if_stmt(

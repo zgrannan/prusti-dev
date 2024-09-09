@@ -10,7 +10,7 @@ use prusti_rustc_interface::{
 };
 use symbolic_execution::{
     context::SymExContext,
-    path_conditions::{PathConditionAtom, PathConditionPredicate},
+    path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditionPredicateAtom},
     transform::SymValueTransformer,
     value::{AggregateKind, BackwardsFn, Substs, SymValueKind, SymVar},
 };
@@ -393,9 +393,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             SymValueKind::Constant(c) => {
                 if let Some(b) = c.as_bool(self.vcx.tcx()) {
                     if b {
-                        return Ok(self.vcx.mk_bool::<true>());
+                        return Ok(self.vcx.mk_bool::<true, !, !>());
                     } else {
-                        return Ok(self.vcx.mk_bool::<false>());
+                        return Ok(self.vcx.mk_bool::<false, !, !>());
                     }
                 }
             }
@@ -412,15 +412,34 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr, false)?;
         Ok(snap_to_prim.apply(self.vcx, [expr]))
     }
-
     fn encode_pc_atom<T: TaskEncoder<EncodingError = String>>(
         &self,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir, String> {
+        match &pc {
+            PathConditionAtom::Predicate(pc) => self.encode_pc_predicate_atom(deps, pc),
+            PathConditionAtom::Not(pc) => match self.encode_path_condition(deps, pc) {
+                Some(Ok(pc)) => Ok(EncodedPCAtom::singleton(
+                    self
+                        .vcx
+                        .mk_unary_op_expr(vir::UnOpKind::Not, pc.to_expr(self.vcx)),
+                    self.vcx,
+                )),
+                Some(Err(err)) => Err(err),
+                None => Ok(EncodedPCAtom::false_(self.vcx)),
+            },
+        }
+    }
+
+    fn encode_pc_predicate_atom<T: TaskEncoder<EncodingError = String>>(
+        &self,
+        deps: &mut TaskEncoderDependencies<'vir, T>,
+        pc: &PathConditionPredicateAtom<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
+    ) -> EncodePCAtomResult<'vir, String> {
         let result = match &pc.predicate {
             PathConditionPredicate::ImpliedBy(pcs) => {
-                if let Some(pcs) = self.encode_path_condition(deps, pcs) {
+                if let Some(pcs) = self.encode_path_condition(deps, &pcs) {
                     let pcs = pcs.unwrap();
                     let expr = self.vcx.mk_implies_expr(
                         pcs.to_expr(self.vcx),
@@ -565,7 +584,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                         if let Some(b) = c.as_bool(self.vcx.tcx()) {
                             if b {
                                 // TODO: Perhaps this kills some well-formedness check of the LHS?
-                                return Ok::<vir::Expr<'vir>, String>(self.vcx.mk_bool::<true>());
+                                return Ok::<vir::Expr<'vir>, String>(self.vcx.mk_bool::<true, !, !>());
                             } else {
                                 if let Some(pc) = self.encode_path_condition(deps, &pc) {
                                     return Ok::<vir::Expr<'vir>, String>(
@@ -576,7 +595,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                                     );
                                 } else {
                                     return Ok::<vir::Expr<'vir>, String>(
-                                        self.vcx.mk_bool::<false>(),
+                                        self.vcx.mk_bool::<false, !, !>(),
                                     );
                                 }
                             }
@@ -629,6 +648,11 @@ impl<'vir> EncodedPCAtom<'vir> {
     pub fn singleton(clause: vir::Expr<'vir>, vcx: &'vir vir::VirCtxt<'_>) -> Self {
         Self {
             clauses: vcx.alloc_slice(&[clause]),
+        }
+    }
+    pub fn false_(vcx: &'vir vir::VirCtxt<'_>) -> Self {
+        Self {
+            clauses: vcx.alloc_slice(&[vcx.mk_bool::<false, !, !>()]),
         }
     }
     pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {

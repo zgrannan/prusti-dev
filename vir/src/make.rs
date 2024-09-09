@@ -236,6 +236,21 @@ impl<'tcx> VirCtxt<'tcx> {
         kind: UnOpKind,
         expr: ExprGen<'vir, Curr, Next>,
     ) -> ExprGen<'vir, Curr, Next> {
+        if kind == UnOpKind::Not {
+            if let Some(true) = expr.as_bool() {
+                return self.mk_bool::<false, Curr, Next>();
+            }
+            if let Some(false) = expr.as_bool() {
+                return self.mk_bool::<true, Curr, Next>();
+            }
+            if let ExprKindGenData::UnOp(UnOpGenData {
+                kind: UnOpKind::Not,
+                expr: inner,
+            }) = expr.kind
+            {
+                return inner;
+            }
+        }
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::UnOp(
             self.alloc(UnOpGenData { kind, expr }),
         ))))
@@ -328,6 +343,9 @@ impl<'tcx> VirCtxt<'tcx> {
         lhs: ExprGen<'vir, Curr, Next>,
         rhs: ExprGen<'vir, Curr, Next>,
     ) -> ExprGen<'vir, Curr, Next> {
+        if let Some(false) = rhs.as_bool() {
+            return self.mk_unary_op_expr(UnOpKind::Not, lhs);
+        }
         self.mk_bin_op_expr(BinOpKind::Implies, lhs, rhs)
     }
 
@@ -375,7 +393,9 @@ impl<'tcx> VirCtxt<'tcx> {
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::Todo(msg))))
     }
 
-    pub const fn mk_bool<'vir, const VALUE: bool>(&'vir self) -> Expr<'vir> {
+    pub const fn mk_bool<'vir, const VALUE: bool, Curr, Next>(
+        &'vir self,
+    ) -> ExprGen<'vir, Curr, Next> {
         const_expr!(&ExprKindGenData::Const(&ConstData::Bool(VALUE)))
     }
 
@@ -729,7 +749,7 @@ impl<'tcx> VirCtxt<'tcx> {
                 rest.iter()
                     .rfold(*last, |acc, e| self.mk_bin_op_expr(BinOpKind::And, *e, acc))
             })
-            .unwrap_or_else(|| self.mk_bool::<true>())
+            .unwrap_or_else(|| self.mk_bool::<true, !, !>())
     }
 
     pub fn mk_disj<'vir>(&'vir self, elems: &[Expr<'vir>]) -> Expr<'vir> {
@@ -739,7 +759,7 @@ impl<'tcx> VirCtxt<'tcx> {
                 rest.iter()
                     .rfold(*last, |acc, e| self.mk_bin_op_expr(BinOpKind::Or, *e, acc))
             })
-            .unwrap_or_else(|| self.mk_bool::<false>())
+            .unwrap_or_else(|| self.mk_bool::<false, !, !>())
     }
 
     fn get_int_data(rust_ty: &ty::TyKind) -> (u32, bool) {
