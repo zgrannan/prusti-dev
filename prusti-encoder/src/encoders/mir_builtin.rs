@@ -107,7 +107,7 @@ impl MirBuiltinEnc {
         // before in debug mode. We should still produce the correct result in
         // release mode, which the code under this branch does.
         if op == mir::UnOp::Neg && ty.is_signed() {
-            let bound = vcx.get_min_int(prim_res_ty.prim_type, ty.kind());
+            let bound = vcx.get_min_int(ty.kind());
             // `snap_to_prim(arg) == -iN::MIN`
             let cond = vcx.mk_bin_op_expr(vir::BinOpKind::CmpEq, prim_arg, bound);
             // `snap_to_prim(arg) == -iN::MIN ? arg :
@@ -200,11 +200,23 @@ impl MirBuiltinEnc {
                     .unwrap()
                     .generic_snapshot;
                 let bool_cons = e_bool.specifics.expect_primitive().prim_to_snap;
-                let wrapped_prim_val =
-                    Self::get_wrapped_val(vcx, prim_val, prim_res_ty.prim_type, rvalue_pure_ty);
+                let wrapped_prim_val = Self::get_wrapped_val(vcx, op, prim_val, rvalue_pure_ty);
                 let wrapped_snap_val = prim_res_ty.prim_to_snap.apply(vcx, [wrapped_prim_val]);
-                let overflowed =
-                    vcx.mk_bin_op_expr(vir::BinOpKind::CmpNe, wrapped_prim_val, prim_val);
+                let overflowed_max = vcx.mk_bin_op_expr(
+                    vir::BinOpKind::CmpGt,
+                    prim_val,
+                    vcx.get_max_int(rvalue_pure_ty.kind()),
+                );
+                let overflowed = if res_ty.is_signed() {
+                    let overflowed_min = vcx.mk_bin_op_expr(
+                        vir::BinOpKind::CmpLt,
+                        prim_val,
+                        vcx.get_min_int(rvalue_pure_ty.kind()),
+                    );
+                    vcx.mk_bin_op_expr(vir::BinOpKind::Or, overflowed_max, overflowed_min)
+                } else {
+                    overflowed_max
+                };
                 let overflowed_snap = bool_cons.apply(vcx, [overflowed]);
                 let ty_caster = deps
                     .require_local::<AggregateSnapArgsCastEnc>(AggregateSnapArgsCastEncTask {
@@ -236,22 +248,16 @@ impl MirBuiltinEnc {
             // the RHS will be masked to the bit width.
             Add | Sub | Mul | Shl | Shr => (
                 Vec::new(),
-                prim_res_ty.prim_to_snap.apply(
-                    vcx,
-                    [Self::get_wrapped_val(
-                        vcx,
-                        prim_val,
-                        prim_res_ty.prim_type,
-                        res_ty,
-                    )],
-                ),
+                prim_res_ty
+                    .prim_to_snap
+                    .apply(vcx, [Self::get_wrapped_val(vcx, op, prim_val, res_ty)]),
             ),
             // Undefined behavior to overflow (need precondition)
             AddUnchecked | SubUnchecked | MulUnchecked => {
-                let min = vcx.get_min_int(prim_res_ty.prim_type, res_ty.kind());
+                let min = vcx.get_min_int(res_ty.kind());
                 // `(arg1 op arg2) >= -iN::MIN`
                 let lower_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpGe, prim_val, min);
-                let max = vcx.get_max_int(prim_res_ty.prim_type, res_ty.kind());
+                let max = vcx.get_max_int(res_ty.kind());
                 // `(arg1 op arg2) <= iN::MAX`
                 let upper_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, prim_val, max);
                 (vec![lower_bound, upper_bound], snap_val)
@@ -267,7 +273,7 @@ impl MirBuiltinEnc {
                 let upper_bound = vcx.mk_bin_op_expr(vir::BinOpKind::CmpLt, rhs, max);
                 (
                     vec![lower_bound, upper_bound],
-                    Self::get_wrapped_val(vcx, snap_val, prim_res_ty.prim_type, res_ty),
+                    Self::get_wrapped_val(vcx, op, snap_val, res_ty),
                 )
             }
             // Could divide by zero or overflow if divisor is `-1`
@@ -277,7 +283,7 @@ impl MirBuiltinEnc {
                 let mut pres = vec![pre];
                 let mut val = snap_val;
                 if res_ty.is_signed() {
-                    let min = vcx.get_min_int(prim_res_ty.prim_type, res_ty.kind());
+                    let min = vcx.get_min_int(res_ty.kind());
                     // `arg1 != -iN::MIN`
                     let arg1_cond = vcx.mk_bin_op_expr(vir::BinOpKind::CmpNe, lhs, min);
                     // `-1 != arg2 `
@@ -349,16 +355,38 @@ impl MirBuiltinEnc {
     /// is `iN::MIN..=iN::MAX` and the value is wrapped using two's complement.
     fn get_wrapped_val<'vir, 'tcx>(
         vcx: &'vir vir::VirCtxt<'tcx>,
+        op: mir::BinOp,
         mut exp: &'vir vir::ExprData<'vir>,
-        ty: vir::Type,
         rust_ty: ty::Ty,
     ) -> &'vir vir::ExprData<'vir> {
+        match op {
+            mir::BinOp::AddWithOverflow => {
+                if !rust_ty.is_signed() {
+                    exp = vcx.mk_ternary_expr(
+                        vcx.mk_bin_op_expr(
+                            vir::BinOpKind::CmpGt,
+                            exp,
+                            vcx.get_max_int(rust_ty.kind()),
+                        ),
+                        vcx.mk_bin_op_expr(
+                            vir::BinOpKind::Sub,
+                            exp,
+                            vcx.get_modulo_int(rust_ty.kind()),
+                        ),
+                        exp,
+                    );
+                    return exp;
+                }
+            }
+            _ => {}
+        };
+
         // TODO
-        let shift_amount = vcx.get_signed_shift_int(ty, rust_ty.kind());
+        let shift_amount = vcx.get_signed_shift_int(rust_ty.kind());
         if let Some(half) = shift_amount {
             exp = vcx.mk_bin_op_expr(vir::BinOpKind::Add, exp, half);
         }
-        let modulo_val = vcx.get_modulo_int(ty, rust_ty.kind());
+        let modulo_val = vcx.get_modulo_int(rust_ty.kind());
         exp = vcx.mk_bin_op_expr(vir::BinOpKind::Mod, exp, modulo_val);
         if let Some(half) = shift_amount {
             exp = vcx.mk_bin_op_expr(vir::BinOpKind::Sub, exp, half);

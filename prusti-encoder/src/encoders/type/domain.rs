@@ -975,7 +975,7 @@ impl<'vir> DomainDataPrim<'vir> {
             ref int @ vir::TypeData::Int { .. } => {
                 let rust_ty = ty.kind();
                 Some(vir::with_vcx(|vcx| {
-                    (vcx.get_min_int(int, rust_ty), vcx.get_max_int(int, rust_ty))
+                    (vcx.get_min_int(rust_ty), vcx.get_max_int(rust_ty))
                 }))
             }
             ref k => todo!("{k:?}"),

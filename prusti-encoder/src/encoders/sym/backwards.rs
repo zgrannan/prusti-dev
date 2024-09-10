@@ -271,7 +271,7 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                     }
                 }
                 match encoder.encode_path_condition(deps, &path.pcs()) {
-                    Some(Err(err)) => {
+                    Err(err) => {
                         body_stmts.push(vcx.mk_comment_stmt(vir::vir_format!(
                             vcx,
                             "Error: {}",
@@ -279,15 +279,8 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
                         )));
                         body_stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
                     }
-                    Some(Ok(condition)) => {
-                        body_stmts.push(vcx.mk_if_stmt(
-                            condition.to_expr(vcx),
-                            vcx.alloc_slice(&path_stmts),
-                            &[],
-                        ));
-                    }
-                    None => {
-                        body_stmts.extend(path_stmts);
+                    Ok(condition) => {
+                        body_stmts.extend(condition.conditionalize_stmts(vcx, path_stmts));
                     }
                 }
             }

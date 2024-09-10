@@ -780,7 +780,7 @@ impl<'tcx> VirCtxt<'tcx> {
             _ => unreachable!("{:?}", rust_ty),
         }
     }
-    pub fn get_min_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
+    pub fn get_min_int<'vir>(&'vir self, rust_ty: &ty::TyKind) -> Expr<'vir> {
         match Self::get_int_data(rust_ty) {
             (_, false) => self.mk_uint::<0>(),
             (i8::BITS, true) => self.mk_int::<{ i8::MIN as i128 }>(),
@@ -791,7 +791,7 @@ impl<'tcx> VirCtxt<'tcx> {
             (_, true) => unreachable!(),
         }
     }
-    pub fn get_max_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
+    pub fn get_max_int<'vir>(&'vir self, rust_ty: &ty::TyKind) -> Expr<'vir> {
         match Self::get_int_data(rust_ty) {
             (u8::BITS, false) => self.mk_uint::<{ u8::MAX as u128 }>(),
             (u16::BITS, false) => self.mk_uint::<{ u16::MAX as u128 }>(),
@@ -806,7 +806,7 @@ impl<'tcx> VirCtxt<'tcx> {
             _ => unreachable!(),
         }
     }
-    pub fn get_modulo_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
+    pub fn get_modulo_int<'vir>(&'vir self, rust_ty: &ty::TyKind) -> Expr<'vir> {
         match Self::get_int_data(rust_ty) {
             (u8::BITS, _) => self.mk_uint::<{ 1_u128 << u8::BITS }>(),
             (u16::BITS, _) => self.mk_uint::<{ 1_u128 << u16::BITS }>(),
@@ -820,11 +820,7 @@ impl<'tcx> VirCtxt<'tcx> {
             _ => unreachable!(),
         }
     }
-    pub fn get_signed_shift_int<'vir>(
-        &'vir self,
-        ty: Type,
-        rust_ty: &ty::TyKind,
-    ) -> Option<Expr<'vir>> {
+    pub fn get_signed_shift_int<'vir>(&'vir self, rust_ty: &ty::TyKind) -> Option<Expr<'vir>> {
         let int = match Self::get_int_data(rust_ty) {
             (_, false) => return None,
             (u8::BITS, true) => self.mk_uint::<{ 1_u128 << (u8::BITS - 1) }>(),

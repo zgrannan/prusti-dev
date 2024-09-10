@@ -35,6 +35,8 @@ use crate::encoders::{
 };
 use std::collections::BTreeMap;
 
+use super::assertion::AssertionEncoder;
+
 mod r#ref;
 mod fn_call;
 mod old;
@@ -412,22 +414,26 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr, false)?;
         Ok(snap_to_prim.apply(self.vcx, [expr]))
     }
+
     fn encode_pc_atom<T: TaskEncoder<EncodingError = String>>(
         &self,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         pc: &PrustiPathConditionAtom<'sym, 'tcx>,
     ) -> EncodePCAtomResult<'vir, String> {
         match &pc {
+            PathConditionAtom::Assertion(a) => {
+                let encoder = AssertionEncoder::new(self.vcx, &self);
+                let clauses = encoder.encode_assertion_clauses(deps, a);
+                Ok(EncodedPCAtom::new(self.vcx.alloc_slice(&clauses)))
+            }
             PathConditionAtom::Predicate(pc) => self.encode_pc_predicate_atom(deps, pc),
             PathConditionAtom::Not(pc) => match self.encode_path_condition(deps, pc) {
-                Some(Ok(pc)) => Ok(EncodedPCAtom::singleton(
-                    self
-                        .vcx
+                Ok(pc) => Ok(EncodedPCAtom::singleton(
+                    self.vcx
                         .mk_unary_op_expr(vir::UnOpKind::Not, pc.to_expr(self.vcx)),
                     self.vcx,
                 )),
-                Some(Err(err)) => Err(err),
-                None => Ok(EncodedPCAtom::false_(self.vcx)),
+                Err(err) => Err(err),
             },
         }
     }
@@ -439,19 +445,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     ) -> EncodePCAtomResult<'vir, String> {
         let result = match &pc.predicate {
             PathConditionPredicate::ImpliedBy(pcs) => {
-                if let Some(pcs) = self.encode_path_condition(deps, &pcs) {
-                    let pcs = pcs.unwrap();
-                    let expr = self.vcx.mk_implies_expr(
-                        pcs.to_expr(self.vcx),
-                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
-                    );
-                    Ok(EncodedPCAtom::singleton(expr, self.vcx))
-                } else {
-                    Ok(EncodedPCAtom::singleton(
-                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
+                let pcs = self.encode_path_condition(deps, &pcs).unwrap();
+                Ok(EncodedPCAtom::singleton(
+                    pcs.conditionalize_expr(
                         self.vcx,
-                    ))
-                }
+                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
+                    ),
+                    self.vcx,
+                ))
             }
             PathConditionPredicate::Postcondition {
                 def_id,
@@ -552,16 +553,18 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         ))
         .unwrap()
     }
+
+    // TODO: Should this include WF conditions?
     pub fn encode_pure_body<T: TaskEncoder<EncodingError = String>>(
         &self,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         spec: &SymPureEncResult<'sym, 'tcx>,
     ) -> EncodePureSpecResult<'vir, String> {
-        let mut iter = spec.iter();
+        let mut iter = spec.paths.iter();
         let mut expr = self.encode_sym_value(deps, &iter.next().unwrap().1, false)?;
         while let Some((pc, value)) = iter.next() {
             let encoded_value = self.encode_sym_value(deps, &value, false).unwrap();
-            let pc = self.encode_path_condition(deps, pc).unwrap()?;
+            let pc = self.encode_path_condition(deps, pc).unwrap();
             expr = self
                 .vcx
                 .mk_ternary_expr(pc.to_expr(self.vcx), encoded_value, expr);
@@ -576,44 +579,35 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         spec: SymPureEncResult<'sym, 'tcx>,
     ) -> EncodePureSpecResult<'vir, String> {
-        let clauses = spec
+        let path_clauses = spec
+            .paths
             .into_iter()
             .map(|(pc, value)| {
-                match &value.kind {
-                    SymValueKind::Constant(c) => {
-                        if let Some(b) = c.as_bool(self.vcx.tcx()) {
-                            if b {
-                                // TODO: Perhaps this kills some well-formedness check of the LHS?
-                                return Ok::<vir::Expr<'vir>, String>(self.vcx.mk_bool::<true, !, !>());
-                            } else {
-                                if let Some(pc) = self.encode_path_condition(deps, &pc) {
-                                    return Ok::<vir::Expr<'vir>, String>(
-                                        self.vcx.mk_unary_op_expr(
-                                            vir::UnOpKind::Not,
-                                            pc.unwrap().to_expr(self.vcx),
-                                        ),
-                                    );
-                                } else {
-                                    return Ok::<vir::Expr<'vir>, String>(
-                                        self.vcx.mk_bool::<false, !, !>(),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-                let encoded_value: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, value)?;
-                if let Some(pc) = self.encode_path_condition(deps, &pc) {
-                    let impl_expr = self
-                        .vcx
-                        .mk_implies_expr(pc.unwrap().to_expr(self.vcx), encoded_value);
-                    Ok::<vir::Expr<'vir>, String>(impl_expr)
-                } else {
-                    Ok::<vir::Expr<'vir>, String>(encoded_value)
-                }
+                let encoded_value: vir::Expr<'vir> =
+                    self.encode_sym_value_as_prim(deps, value).unwrap();
+                self.encode_path_condition(deps, &pc)
+                    .unwrap()
+                    .conditionalize_expr(self.vcx, encoded_value)
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
+        let well_formed_clauses = spec
+            .well_formed
+            .into_iter()
+            .map(|ra| {
+                let pcs = self.encode_path_condition(deps, &ra.pcs).unwrap();
+                let assertion_encoder = AssertionEncoder::new(self.vcx, &self);
+                pcs.conditionalize_expr(
+                    self.vcx,
+                    self.vcx.mk_disj(self.vcx.alloc_slice(
+                        &assertion_encoder.encode_assertion_clauses(deps, &ra.assertion),
+                    )),
+                )
+            })
+            .collect::<Vec<_>>();
+        let clauses = path_clauses
+            .into_iter()
+            .chain(well_formed_clauses.into_iter())
+            .collect::<Vec<_>>();
         Ok(EncodedPureSpec { clauses })
     }
 
@@ -621,23 +615,20 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         &self,
         deps: &mut TaskEncoderDependencies<'vir, T>,
         pc: &PrustiPathConditions<'sym, 'tcx>,
-    ) -> Option<EncodePCResult<'vir, String>> {
-        if pc.atoms.is_empty() {
-            return None;
-        }
+    ) -> EncodePCResult<'vir, String> {
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
             let encoded = self.encode_pc_atom(deps, atom);
             match encoded {
                 Ok(encoded) => exprs.push(encoded),
-                Err(err) => return Some(Err(err)),
+                Err(err) => return Err(err),
             }
         }
-        Some(Ok(EncodedPC { atoms: exprs }))
+        Ok(EncodedPC { atoms: exprs })
     }
 }
 
-struct EncodedPCAtom<'vir> {
+pub struct EncodedPCAtom<'vir> {
     clauses: &'vir [vir::Expr<'vir>],
 }
 
@@ -661,10 +652,14 @@ impl<'vir> EncodedPCAtom<'vir> {
 }
 
 pub struct EncodedPC<'vir> {
-    atoms: Vec<EncodedPCAtom<'vir>>,
+    pub atoms: Vec<EncodedPCAtom<'vir>>,
 }
 
 impl<'vir> EncodedPC<'vir> {
+    pub fn is_true(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
     pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
         vcx.mk_conj(
             &self
@@ -674,5 +669,28 @@ impl<'vir> EncodedPC<'vir> {
                 .copied()
                 .collect::<Vec<_>>(),
         )
+    }
+
+    pub fn conditionalize_expr(
+        &self,
+        vcx: &'vir vir::VirCtxt<'_>,
+        expr: vir::Expr<'vir>,
+    ) -> vir::Expr<'vir> {
+        if self.is_true() {
+            expr
+        } else {
+            vcx.mk_implies_expr(self.to_expr(vcx), expr)
+        }
+    }
+
+    pub fn conditionalize_stmts(
+        &self,
+        vcx: &'vir vir::VirCtxt<'_>,
+        stmts: Vec<vir::Stmt<'vir>>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        if self.is_true() {
+            return stmts;
+        }
+        vec![vcx.mk_if_stmt(self.to_expr(vcx), vcx.alloc_slice(&stmts), &[])]
     }
 }

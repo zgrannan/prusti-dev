@@ -102,12 +102,13 @@ use super::{
         FunctionCallTaskDescription, MirBuiltinEncTask, PureFunctionEnc, SpecEnc, SpecEncTask,
         SymFunctionEnc, SymPureEnc, SymPureEncTask,
     },
+    assertion::AssertionEncoder,
     backwards::{mk_backwards_fn_axioms, BackwardsFnContext},
 };
 
 pub mod forward_backwards_shared;
 
-type PrustiAssertion<'sym, 'tcx> = Assertion<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
+pub type PrustiAssertion<'sym, 'tcx> = Assertion<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
 
 impl TaskEncoder for SymImpureEnc {
     task_encoder::encoder_cache!(SymImpureEnc);
@@ -333,10 +334,7 @@ impl TaskEncoder for SymImpureEnc {
                                         None
                                     }
                                 })
-                                .chain(std::iter::once((
-                                    SymVar::nth_input(arg_count),
-                                    *result,
-                                ))),
+                                .chain(std::iter::once((SymVar::nth_input(arg_count), *result))),
                         ));
 
                         // Generate assertions ensuring that `expr` satisfies each
@@ -366,25 +364,11 @@ impl TaskEncoder for SymImpureEnc {
                         })
                     })
                     .collect();
-                        match visitor.encoder.encode_path_condition(visitor.deps, pcs) {
-                            Some(Ok(pc)) => {
-                                let if_stmt = vcx.mk_if_stmt(
-                                    pc.to_expr(vcx),
-                                    vcx.alloc_slice(&assertions),
-                                    &[],
-                                );
-                                stmts.push(if_stmt);
-                            }
-                            Some(Err(err)) => {
-                                stmts.push(
-                                    vcx.mk_comment_stmt(
-                                        vcx.alloc(format!("Encoding err: {err:?}")),
-                                    ),
-                                );
-                                stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
-                            }
-                            None => stmts.extend(assertions),
-                        }
+                        let encoded_pc = visitor
+                            .encoder
+                            .encode_path_condition(visitor.deps, pcs)
+                            .unwrap();
+                        stmts.extend(encoded_pc.conditionalize_stmts(vcx, assertions));
                     }
                     ResultPath::Loop { path: _, pcs: _ } => {
                         // TODO
@@ -482,76 +466,14 @@ impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'_, 'vir, 'vir, 'enc> {
 }
 
 impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
-    fn encode_assertion(
-        &'slf mut self,
-        assertion: &PrustiAssertion<'sym, 'tcx>,
-    ) -> Vec<vir::Stmt<'vir>> {
-        match assertion {
-            Assertion::False => vec![self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>())],
-            Assertion::Precondition(def_id, substs, args) => {
-                let arg_substs = self.arena.alloc(Substs::from_iter(
-                    args.iter()
-                        .copied()
-                        .enumerate()
-                        .map(|(i, v)| (SymVar::nth_input(i), v)),
-                ));
-                let encoded_pres = self
-                    .deps
-                    .require_local::<SymSpecEnc>((*def_id, substs, None))
-                    .unwrap()
-                    .pres
-                    .into_iter()
-                    .map(|p| {
-                        self.encoder
-                            .encode_pure_spec(self.deps, p.subst(self.arena, arg_substs))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
-                encoded_pres
-                    .into_iter()
-                    .flat_map(|e| e.clauses)
-                    .map(|expr| self.vcx.mk_exhale_stmt(expr))
-                    .collect()
-            }
-            Assertion::Eq(expr, val) => {
-                match self.encoder.encode_sym_value_as_prim(self.deps, expr) {
-                    Ok(expr) => {
-                        let expr: vir::Expr<'vir> = if *val {
-                            expr
-                        } else {
-                            self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr)
-                        };
-                        vec![self.vcx.mk_exhale_stmt(expr)]
-                    }
-                    Err(err) => {
-                        vec![
-                            self.vcx.mk_comment_stmt(
-                                self.vcx
-                                    .alloc(format!("Error when encoding the assertion: {err:?}")),
-                            ),
-                            self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
-                        ]
-                    }
-                }
-            }
-        }
-    }
-
     fn encode_pc_assertion(
         &mut self,
         pc: &PrustiPathConditions<'sym, 'tcx>,
         assertion: &PrustiAssertion<'sym, 'tcx>,
     ) -> Result<Vec<vir::Stmt<'vir>>, EncodeFullError<'vir, SymImpureEnc>> {
-        if let Some(pc_expr) = self.encoder.encode_path_condition(self.deps, pc) {
-            Ok(vec![self.vcx.mk_if_stmt(
-                pc_expr
-                    .map(|e| e.to_expr(self.vcx))
-                    .map_err(|e| EncodeFullError::EncodingError(e, None))?,
-                self.vcx.alloc_slice(&self.encode_assertion(assertion)),
-                &[],
-            )])
-        } else {
-            Ok(self.encode_assertion(assertion))
-        }
+        let encoded_pc = self.encoder.encode_path_condition(self.deps, pc).unwrap();
+        let assertion_encoder = AssertionEncoder::new(self.vcx, &self.encoder);
+        let encoded_assertion = assertion_encoder.encode_assertion(self.deps, assertion);
+        Ok(encoded_pc.conditionalize_stmts(self.vcx, encoded_assertion))
     }
 }

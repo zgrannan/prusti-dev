@@ -23,7 +23,7 @@ use symbolic_execution::{
     heap::{HeapData, SymbolicHeap},
     path::Path,
     path_conditions::PathConditions,
-    results::ResultPath,
+    results::{ResultAssertion, ResultAssertions, ResultPath},
     semantics::VerifierSemantics,
     terminator::{FunctionCallEffects, FunctionCallResult},
     transform::{BaseSymValueTransformer, SymValueTransformer},
@@ -32,7 +32,7 @@ use symbolic_execution::{
         SyntheticSymValue, Ty,
     },
     visualization::{OutputMode, VisFormat},
-    SymExParams, SymbolicExecution,
+    Assertion, SymExParams, SymbolicExecution,
 };
 use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
@@ -41,7 +41,9 @@ use crate::{
     encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc},
 };
 
-use super::{mir_base::MirBaseEnc, mir_pure::PureKind, spec::with_def_spec};
+use super::{
+    mir_base::MirBaseEnc, mir_pure::PureKind, spec::with_def_spec, sym::impure::PrustiAssertion,
+};
 
 pub struct SymPureEnc;
 
@@ -71,6 +73,7 @@ pub struct SymPureEncTask<'tcx> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymPureEncResult<'sym, 'tcx> {
+    pub well_formed: ResultAssertions<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
     pub paths: Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)>,
     pub debug_id: Option<String>,
 }
@@ -99,21 +102,10 @@ impl<'sym, 'tcx> VisFormat for SymPureEncResult<'sym, 'tcx> {
 impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
     pub fn from_sym_value(value: PrustiSymValue<'sym, 'tcx>) -> Self {
         Self {
+            well_formed: ResultAssertions::new(),
             paths: vec![(PathConditions::new(), value)].into_iter().collect(),
             debug_id: None,
         }
-    }
-
-    pub fn into_iter(
-        self,
-    ) -> impl Iterator<Item = (PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
-        self.paths.into_iter()
-    }
-
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = &(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
-        self.paths.iter()
     }
 
     pub fn apply_transformer(
@@ -132,6 +124,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
             })
             .collect();
         Self {
+            well_formed: self.well_formed,
             paths,
             debug_id: self.debug_id,
         }
@@ -142,6 +135,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         arena: &'sym SymExContext<'tcx>,
         substs: &'substs PrustiSubsts<'sym, 'tcx>,
     ) -> Self {
+        let well_formed = self.well_formed.subst(arena, substs);
         let paths = self
             .paths
             .into_iter()
@@ -153,6 +147,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
             })
             .collect();
         Self {
+            well_formed,
             paths,
             debug_id: self.debug_id,
         }
@@ -591,7 +586,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
         loop_head: mir::BasicBlock,
         mut path: Path<'sym, 'tcx, Self::SymValSynthetic>,
         sym_ex: &mut SymbolicExecution<'mir, 'sym, 'tcx, Self>,
-    ) -> Vec<(PrustiPathConditions<'sym, 'tcx>, PrustiSymValue<'sym, 'tcx>)> {
+    ) -> Vec<PrustiAssertion<'sym, 'tcx>> {
         let arena = sym_ex.arena;
         let tcx = sym_ex.tcx;
         let body = sym_ex.body;
@@ -637,12 +632,28 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             "encoded1 {}",
                             encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
                         );
-                        let encoded = encoded.subst(arena, &substs);
+                        let mut encoded = encoded.subst(arena, &substs);
                         eprintln!(
                             "encoded2 {}",
                             encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
                         );
-                        encoded.paths
+                        let assertions = encoded
+                            .paths
+                            .into_iter()
+                            .map(|(pc, v)| {
+                                Assertion::implication(
+                                    Assertion::from_path_conditions(pc),
+                                    Assertion::from_value(v),
+                                )
+                            })
+                            .chain(encoded.well_formed.into_iter().map(|ra| {
+                                Assertion::implication(
+                                    Assertion::from_path_conditions(ra.pcs),
+                                    ra.assertion,
+                                )
+                            }))
+                            .collect();
+                        return assertions;
                     });
                 } else {
                     let mut heap = SymbolicHeap::new(&mut path.heap, tcx, body, arena);
@@ -732,6 +743,7 @@ impl SymPureEnc {
             //     def_id
             // );
             SymPureEncResult {
+                well_formed: symbolic_execution.assertions,
                 paths: symbolic_execution
                     .paths
                     .into_iter()
