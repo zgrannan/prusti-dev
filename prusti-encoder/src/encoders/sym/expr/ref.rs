@@ -24,8 +24,9 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         deps: &mut TaskEncoderDependencies<'vir, T>,
         e: PrustiSymValue<'sym, 'tcx>,
         mutability: Mutability,
+        in_old: bool,
     ) -> EncodeSymValueResult<'vir, String> {
-        let base = self.encode_sym_value(deps, e, false)?;
+        let base = self.encode_sym_value(deps, e, in_old)?;
         let inner_ty = e.ty(self.vcx.tcx()).rust_ty();
         let cast = deps
             .require_local::<RustTyCastersEnc<CastTypePure>>(inner_ty)

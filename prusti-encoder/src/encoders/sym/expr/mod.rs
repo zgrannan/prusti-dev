@@ -13,6 +13,7 @@ use symbolic_execution::{
     path_conditions::{PathConditionAtom, PathConditionPredicate, PathConditionPredicateAtom},
     transform::SymValueTransformer,
     value::{AggregateKind, BackwardsFn, Substs, SymValueKind, SymVar},
+    visualization::{OutputMode, VisFormat},
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 
@@ -111,7 +112,6 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     where
         T: 'vir,
     {
-        // let sym_value = sym_value.optimize(self.arena, self.vcx.tcx());
         match &sym_value.kind {
             SymValueKind::Var(var, ..) => {
                 if in_old {
@@ -126,7 +126,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 self.substs
                     .get(var)
                     .cloned()
-                    .ok_or_else(|| format!("No symvar {:?}.", var))
+                    .ok_or_else(|| panic!("No symvar {:?} {:?}.", var, in_old))
             }
             SymValueKind::Constant(c) => Ok(deps
                 .require_local::<ConstEnc>((c.literal(), 0, self.def_id))
@@ -160,7 +160,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                         TyKind::Ref(_, _, mutability) => *mutability,
                         _ => unreachable!("AggregateKind::PCS with non-reference type: {:?}", ty),
                     };
-                    return self.encode_ref(deps, exprs[0], mutability);
+                    return self.encode_ref(deps, exprs[0], mutability, in_old);
                 }
                 let vir_exprs = exprs
                     .iter()
@@ -320,7 +320,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                     other => panic!("discriminant of {:?}", other),
                 }
             }
-            SymValueKind::Ref(e, mutability) => self.encode_ref(deps, e, *mutability),
+            SymValueKind::Ref(e, mutability) => self.encode_ref(deps, e, *mutability, in_old),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::VirLocal(name, ty)) => {
                 let ty = deps.require_local::<RustTySnapshotsEnc>(*ty).unwrap();
                 Ok(self.vcx.mk_local_ex(
@@ -332,10 +332,10 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 fn_def_id,
                 substs,
                 args,
-            )) => self.encode_fn_call(deps, *fn_def_id, substs, args),
+            )) => self.encode_fn_call(deps, *fn_def_id, substs, args, in_old),
             SymValueKind::Synthetic(PrustiSymValSyntheticData::And(lhs, rhs)) => {
-                let lhs = self.encode_sym_value_as_prim(deps, lhs)?;
-                let rhs = self.encode_sym_value_as_prim(deps, rhs)?;
+                let lhs = self.encode_sym_value_as_prim(deps, lhs, in_old)?;
+                let rhs = self.encode_sym_value_as_prim(deps, rhs, in_old)?;
                 let raw = self.vcx.mk_bin_op_expr(vir::BinOpKind::And, lhs, rhs);
                 if let domain::DomainEncSpecifics::Primitive(dd) = deps
                     .require_local::<RustTySnapshotsEnc>(self.vcx.tcx().types.bool)
@@ -349,7 +349,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 }
             }
             SymValueKind::Synthetic(PrustiSymValSyntheticData::If(cond, lhs, rhs)) => {
-                let cond: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, cond)?;
+                let cond: vir::Expr<'vir> = self.encode_sym_value_as_prim(deps, cond, in_old)?;
                 let lhs: vir::Expr<'vir> = self.encode_sym_value(deps, lhs, in_old)?;
                 let rhs: vir::Expr<'vir> = self.encode_sym_value(deps, rhs, in_old)?;
                 Ok(self.vcx.mk_ternary_expr(cond, lhs, rhs))
@@ -362,7 +362,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 Ok(self.vcx.mk_result(ty.generic_snapshot.snapshot))
             }
             SymValueKind::Cast(_, operand, ty) => {
-                let prim_val = self.encode_sym_value_as_prim(deps, operand)?;
+                let prim_val = self.encode_sym_value_as_prim(deps, operand, in_old)?;
                 if let domain::DomainEncSpecifics::Primitive(dd) = deps
                     .require_local::<RustTySnapshotsEnc>(*ty)
                     .unwrap()
@@ -386,6 +386,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         &'slf self,
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         expr: PrustiSymValue<'sym, 'tcx>,
+        in_old: bool,
     ) -> EncodeSymValueResult<'vir, String>
     where
         T: 'vir,
@@ -411,7 +412,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             domain::DomainEncSpecifics::Primitive(dd) => dd.snap_to_prim,
             _ => unreachable!(),
         };
-        let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr, false)?;
+        let expr: vir::Expr<'vir> = self.encode_sym_value(deps, expr, in_old)?;
         Ok(snap_to_prim.apply(self.vcx, [expr]))
     }
 
@@ -449,7 +450,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 Ok(EncodedPCAtom::singleton(
                     pcs.conditionalize_expr(
                         self.vcx,
-                        self.encode_sym_value_as_prim(deps, &pc.expr)?,
+                        self.encode_sym_value_as_prim(deps, &pc.expr, false)?,
                     ),
                     self.vcx,
                 ))
@@ -488,7 +489,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             PathConditionPredicate::Eq(target, ty) => {
                 // Optimization for booleans
                 if *ty == self.vcx.tcx().types.bool {
-                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr)?;
+                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr, false)?;
                     if *target == 0 {
                         Ok(EncodedPCAtom::singleton(
                             self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr),
@@ -508,7 +509,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             }
             PathConditionPredicate::Ne(targets, ty) => {
                 if *ty == self.vcx.tcx().types.bool {
-                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr)?;
+                    let expr = self.encode_sym_value_as_prim(deps, &pc.expr, false)?;
                     if targets[0] == 1 {
                         return Ok(EncodedPCAtom::singleton(
                             self.vcx.mk_unary_op_expr(vir::UnOpKind::Not, expr),
@@ -584,12 +585,13 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .into_iter()
             .map(|(pc, value)| {
                 let encoded_value: vir::Expr<'vir> =
-                    self.encode_sym_value_as_prim(deps, value).unwrap();
-                self.encode_path_condition(deps, &pc)
+                    self.encode_sym_value_as_prim(deps, value, false)?;
+                Ok(self
+                    .encode_path_condition(deps, &pc)
                     .unwrap()
-                    .conditionalize_expr(self.vcx, encoded_value)
+                    .conditionalize_expr(self.vcx, encoded_value))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, String>>()?;
         let well_formed_clauses = spec
             .well_formed
             .into_iter()
@@ -621,7 +623,10 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             let encoded = self.encode_pc_atom(deps, atom);
             match encoded {
                 Ok(encoded) => exprs.push(encoded),
-                Err(err) => return Err(err),
+                Err(err) => {
+                    panic!("Error when encoding path condition {:#?} : {:?}", atom, err);
+                    // return Ok(EncodedPC { atoms: vec![] });
+                }
             }
         }
         Ok(EncodedPC { atoms: exprs })

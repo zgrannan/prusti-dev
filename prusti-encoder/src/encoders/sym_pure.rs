@@ -38,7 +38,10 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 // TODO: replace uses of `CapabilityEnc` with `SnapshotEnc`
 use crate::{
     debug::fn_debug_name,
-    encoders::{CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc},
+    encoders::{
+        sym::old::{find_node_by_span, thir_node_to_sym_expr}, CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc,
+        ViperTupleEnc,
+    },
 };
 
 use super::{
@@ -293,33 +296,6 @@ impl<'sym, 'tcx, V> SyntheticSymValue<'sym, 'tcx> for PrustiSymValSynthetic<'sym
     fn optimize(self, _arena: &'sym SymExContext<'tcx>, _tcx: ty::TyCtxt<'tcx>) -> Self {
         // TODO
         self
-        // match &self {
-        //     PrustiSymValSyntheticData::And(lhs, rhs) => arena.alloc(
-        //         PrustiSymValSyntheticData::And(lhs.optimize(arena, tcx), rhs.optimize(arena, tcx)),
-        //     ),
-        //     PrustiSymValSyntheticData::If(cond, then_expr, else_expr) => {
-        //         arena.alloc(PrustiSymValSyntheticData::If(
-        //             cond.optimize(arena, tcx),
-        //             then_expr.optimize(arena, tcx),
-        //             else_expr.optimize(arena, tcx),
-        //         ))
-        //     }
-        //     PrustiSymValSyntheticData::PureFnCall(def_id, ty_substs, args) => {
-        //         arena.alloc(PrustiSymValSyntheticData::PureFnCall(
-        //             *def_id,
-        //             ty_substs,
-        //             arena.alloc_slice(
-        //                 &(args
-        //                     .iter()
-        //                     .map(|arg| arg.optimize(arena, tcx))
-        //                     .collect::<Vec<_>>()),
-        //             ),
-        //         ))
-        //     }
-        //     PrustiSymValSyntheticData::Result(_) => self,
-        //     PrustiSymValSyntheticData::VirLocal(_, _) => self,
-        //     PrustiSymValSyntheticData::Old(_) => self,
-        // }
     }
 }
 
@@ -328,113 +304,6 @@ pub type PrustiPathConditions<'sym, 'tcx> =
 pub type PrustiSymValue<'sym, 'tcx, V = SymVar> =
     SymValue<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx, V>, V>;
 pub type PrustiSubsts<'sym, 'tcx> = Substs<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>;
-
-fn find_node_by_span<'thir, 'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &'thir Thir<'tcx>,
-    target_span: Span,
-) -> Option<&'thir thir::Expr<'tcx>> {
-    body.exprs.iter().find(|expr| expr.span == target_span)
-}
-
-fn thir_node_to_sym_expr<'sym, 'tcx>(
-    arena: &'sym SymExContext<'tcx>,
-    thir: &Thir<'tcx>,
-    input_idents: &HashMap<Symbol, (usize, ty::Ty<'tcx>)>,
-    node: &thir::Expr<'tcx>,
-) -> PrustiSymValue<'sym, 'tcx, SymVar> {
-    match &node.kind {
-        thir::ExprKind::Deref { arg } => arena.mk_projection(
-            mir::ProjectionElem::Deref,
-            thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]),
-        ),
-        thir::ExprKind::UpvarRef { var_hir_id, .. } => {
-            let hir_node = arena.tcx.hir_node(var_hir_id.0);
-            let ident = match hir_node {
-                hir::Node::Pat(pat) => match pat.kind {
-                    hir::PatKind::Path(hir::QPath::Resolved(_, path)) => {
-                        assert!(path.segments.len() == 1);
-                        path.segments[0].ident.name
-                    }
-                    hir::PatKind::Binding(_, _, ident, _) => ident.name,
-                    _ => todo!("{:?}", pat.kind),
-                },
-                _ => todo!("{:?}", hir_node),
-            };
-            let (index, ty) = input_idents.get(&ident).unwrap();
-            arena.mk_var(SymVar::nth_input(*index), node.ty)
-        }
-        thir::ExprKind::VarRef { id } => {
-            let hir_node = arena.tcx.hir_node(id.0);
-            let ident = match hir_node {
-                hir::Node::Pat(pat) => match pat.kind {
-                    hir::PatKind::Path(hir::QPath::Resolved(_, path)) => {
-                        assert!(path.segments.len() == 1);
-                        path.segments[0].ident.name
-                    }
-                    hir::PatKind::Binding(_, _, ident, _) => ident.name,
-                    _ => todo!("{:?}", pat.kind),
-                },
-                _ => todo!("{:?}", hir_node),
-            };
-            let (index, ty) = input_idents.get(&ident).unwrap();
-            arena.mk_var(SymVar::nth_input(*index), *ty)
-        }
-        thir::ExprKind::Field {
-            lhs,
-            variant_index,
-            name,
-        } => {
-            let base = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*lhs]);
-            match base.ty(arena.tcx).rust_ty().kind() {
-                rustc_type_ir::TyKind::Adt(def, substs) => {
-                    let variant = def.variant(*variant_index);
-                    let field = &variant.fields[*name];
-                    arena.mk_projection(
-                        mir::ProjectionElem::Field(*name, field.ty(arena.tcx, substs)),
-                        base,
-                    )
-                }
-                rustc_type_ir::TyKind::Tuple(tys) => arena.mk_projection(
-                    mir::ProjectionElem::Field(*name, tys[name.as_usize()]),
-                    base,
-                ),
-                _ => todo!(),
-            }
-        }
-        thir::ExprKind::Binary { op, lhs, rhs } => {
-            let lhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*lhs]);
-            let rhs = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*rhs]);
-            let op = *op;
-            arena.mk_bin_op(node.ty, op, lhs, rhs)
-        }
-        thir::ExprKind::Call { fun, args, ty, .. } => {
-            let args = args
-                .iter()
-                .map(|arg| thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]))
-                .collect::<Vec<_>>();
-            let (def_id, substs) = match ty.kind() {
-                ty::TyKind::FnDef(def_id, substs) => (*def_id, substs),
-                _ => todo!(),
-            };
-            arena.mk_synthetic(arena.alloc(PrustiSymValSyntheticData::PureFnCall(
-                def_id,
-                substs,
-                arena.alloc_slice(&args),
-            )))
-        }
-        thir::ExprKind::Scope { value, .. } => {
-            thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*value])
-        }
-        thir::ExprKind::Borrow { borrow_kind, arg } => {
-            let arg = thir_node_to_sym_expr(arena, thir, input_idents, &thir.exprs[*arg]);
-            arena.mk_ref(arg, borrow_kind.mutability())
-        }
-        other => {
-            panic!("Unsupported expression kind: {:?}", other);
-        }
-    }
-}
 
 impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
     type SymValSynthetic = PrustiSymValSynthetic<'sym, 'tcx, SymVar>;
@@ -488,7 +357,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     sym_ex
                         .arena
                         .mk_synthetic(sym_ex.arena.alloc(PrustiSymValSyntheticData::Old(
-                            thir_node_to_sym_expr(sym_ex.arena, &body, &input_idents, arg),
+                            thir_node_to_sym_expr(sym_ex.arena, sym_ex.body, &body, &input_idents, arg),
                         )));
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {
@@ -628,15 +497,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             Mutability::Not,
                         );
                         let substs = Substs::singleton(SymVar::nth_input(0), subst);
-                        eprintln!(
-                            "encoded1 {}",
-                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
-                        );
                         let mut encoded = encoded.subst(arena, &substs);
-                        eprintln!(
-                            "encoded2 {}",
-                            encoded.to_vis_string(Some(tcx), &[], OutputMode::Text)
-                        );
                         let assertions = encoded
                             .paths
                             .into_iter()

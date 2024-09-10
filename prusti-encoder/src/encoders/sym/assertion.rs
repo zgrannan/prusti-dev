@@ -34,7 +34,10 @@ impl<'sym, 'tcx, 'vir, 'enc> AssertionEncoder<'sym, 'tcx, 'vir, 'enc> {
         let arena = self.encoder.arena;
         match assertion {
             Assertion::Value(val) => {
-                vec![self.encoder.encode_sym_value_as_prim(deps, val).unwrap()]
+                vec![self
+                    .encoder
+                    .encode_sym_value_as_prim(deps, val, false)
+                    .unwrap()]
             }
             Assertion::Precondition(def_id, substs, args) => {
                 let arg_substs = arena.alloc(Substs::from_iter(

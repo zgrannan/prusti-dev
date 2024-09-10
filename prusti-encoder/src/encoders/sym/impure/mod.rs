@@ -471,7 +471,19 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         pc: &PrustiPathConditions<'sym, 'tcx>,
         assertion: &PrustiAssertion<'sym, 'tcx>,
     ) -> Result<Vec<vir::Stmt<'vir>>, EncodeFullError<'vir, SymImpureEnc>> {
-        let encoded_pc = self.encoder.encode_path_condition(self.deps, pc).unwrap();
+        let encoded_pc = match self.encoder.encode_path_condition(self.deps, pc) {
+            Ok(pc) => pc,
+            Err(err) => {
+                panic!("Error when encoding path condition {:?}: {:?}", pc, err);
+                // return Ok(vec![
+                //     self.vcx.mk_comment_stmt(
+                //         self.vcx
+                //             .alloc(format!("Error when encoding path condition: {:?}", err)),
+                //     ),
+                //     self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
+                // ])
+            }
+        };
         let assertion_encoder = AssertionEncoder::new(self.vcx, &self.encoder);
         let encoded_assertion = assertion_encoder.encode_assertion(self.deps, assertion);
         Ok(encoded_pc.conditionalize_stmts(self.vcx, encoded_assertion))

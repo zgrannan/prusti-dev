@@ -63,6 +63,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         fn_def_id: DefId,
         substs: &'tcx GenericArgs<'tcx>,
         args: &[PrustiSymValue<'sym, 'tcx>],
+        in_old: bool,
     ) -> EncodeSymValueResult<'vir, String>
     where
         T: 'vir,
@@ -93,7 +94,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .zip(args.iter())
             .map(|(expected_ty, arg)| {
                 let base = self
-                    .encode_sym_value(deps, arg, false)
+                    .encode_sym_value(deps, arg, in_old)
                     .map_err(|e| EncodeFullError::EncodingError(e, None))?;
                 let arg_ty = arg.ty(self.vcx.tcx()).rust_ty();
                 let caster = deps
