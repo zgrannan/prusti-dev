@@ -22,7 +22,7 @@ use symbolic_execution::{
     encoder::Encoder,
     heap::{HeapData, SymbolicHeap},
     path::Path,
-    path_conditions::PathConditions,
+    path_conditions::{PathConditionPredicate, PathConditions},
     results::{ResultAssertion, ResultAssertions, ResultPath},
     semantics::VerifierSemantics,
     terminator::{FunctionCallEffects, FunctionCallResult},
@@ -39,8 +39,8 @@ use task_encoder::{TaskEncoder, TaskEncoderDependencies};
 use crate::{
     debug::fn_debug_name,
     encoders::{
-        sym::old::{find_node_by_span, thir_node_to_sym_expr}, CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc,
-        ViperTupleEnc,
+        sym::old::{find_node_by_span, thir_node_to_sym_expr},
+        CapabilityEnc, ConstEnc, MirBuiltinEnc, SnapshotEnc, ViperTupleEnc,
     },
 };
 
@@ -357,7 +357,13 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                     sym_ex
                         .arena
                         .mk_synthetic(sym_ex.arena.alloc(PrustiSymValSyntheticData::Old(
-                            thir_node_to_sym_expr(sym_ex.arena, sym_ex.body, &body, &input_idents, arg),
+                            thir_node_to_sym_expr(
+                                sym_ex.arena,
+                                sym_ex.body,
+                                &body,
+                                &input_idents,
+                                arg,
+                            ),
                         )));
                 return Some(FunctionCallEffects {
                     result: FunctionCallResult::Value {
@@ -438,7 +444,12 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             .arena
                             .alloc(PrustiSymValSyntheticData::PureFnCall(def_id, substs, args)),
                     ),
-                    postcondition: None,
+                    postcondition: Some(PathConditionPredicate::Postcondition {
+                        def_id,
+                        substs,
+                        pre_values: args,
+                        post_values: args,
+                    }),
                 };
                 return Some(FunctionCallEffects {
                     precondition_assertion: None,

@@ -82,8 +82,10 @@ fn thir_body<'tcx>(
 ) -> Result<(&Steal<Thir<'_>>, ExprId), ErrorGuaranteed> {
     let original_thir_body = prusti_rustc_interface::interface::DEFAULT_QUERY_PROVIDERS.thir_body;
     let body = original_thir_body(tcx, def_id);
-    unsafe {
-        mir_storage::store_thir_body(tcx, def_id, body.unwrap().0.borrow().clone());
+    if let Ok((body, _)) = body {
+        unsafe {
+            mir_storage::store_thir_body(tcx, def_id, body.borrow().clone());
+        }
     }
     body
 }
