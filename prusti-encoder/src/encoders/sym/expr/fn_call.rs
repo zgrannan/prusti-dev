@@ -6,6 +6,7 @@ use prusti_rustc_interface::{
     },
     span::def_id::{DefId, LocalDefId},
 };
+use rustc_middle::ty::layout::MaybeResult;
 use symbolic_execution::{
     value::BackwardsFn,
     visualization::{OutputMode, VisFormat},
@@ -35,12 +36,21 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     {
         let output_ref = deps
             .require_ref::<SymImpureEnc>((
-                backwards_fn.def_id.as_local().unwrap(),
+                backwards_fn.def_id().as_local().unwrap(),
                 backwards_fn.substs,
                 backwards_fn.caller_def_id,
             ))
             .unwrap();
-        let back_fn = &output_ref.backwards_fns[&backwards_fn.arg_index];
+        let back_fn = output_ref
+            .backwards_fns
+            .get(&backwards_fn.arg_index)
+            .ok_or_else(|| {
+                format!(
+                    "Backwards function not found for arg index: {}",
+                    backwards_fn.arg_index
+                )
+                // format!("baz")
+            })?;
         let mono = cfg!(feature = "mono_function_encoding");
         let ty_args = deps
             .require_local::<LiftedFuncAppTyParamsEnc>((mono, backwards_fn.substs))

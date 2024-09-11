@@ -91,18 +91,24 @@ pub fn mk_backwards_fn_axioms<
 
         let pledge_axiom_substs = Substs::from_iter(
             (0..ctxt.shared.arg_count)
-                .map(|i| {
-                    (
-                        SymVar::nth_input(i),
-                        encoder.arena.mk_backwards_fn(BackwardsFn {
-                            def_id: ctxt.def_id,
-                            substs: ctxt.substs,
-                            caller_def_id: ctxt.caller_def_id,
-                            arg_snapshots,
-                            return_snapshot: back_return_snapshot,
-                            arg_index: i,
-                        }),
-                    )
+                .flat_map(|i| {
+                    // TODO: It should actually check whether the ty contains any refs
+                    if !arg_snapshots[i].is_primitive(vcx.tcx()) {
+                        Some((
+                            SymVar::nth_input(i),
+                            encoder.arena.mk_backwards_fn(BackwardsFn::new(
+                                vcx.tcx(),
+                                ctxt.def_id,
+                                ctxt.substs,
+                                ctxt.caller_def_id,
+                                arg_snapshots,
+                                back_return_snapshot,
+                                i,
+                            )),
+                        ))
+                    } else {
+                        None
+                    }
                 })
                 .chain(std::iter::once((
                     SymVar::nth_input(ctxt.shared.arg_count),
@@ -137,7 +143,13 @@ pub fn mk_backwards_fn_axioms<
                                 .map(|call| vcx.mk_trigger(vcx.alloc_slice(&[call])))
                                 .collect::<Vec<_>>(),
                         ), // TODO, maybe too imprecise?
-                        encoder.encode_pure_spec(deps, pledge).unwrap().to_expr(vcx),
+                        match encoder.encode_pure_spec(deps, pledge) {
+                            Ok(spec) => spec.to_expr(vcx),
+                            Err(err) => {
+                                eprintln!("Error encoding pledge: {}", err);
+                                vcx.mk_bool::<true, !, !>()
+                            }
+                        },
                     ),
                 )
             })

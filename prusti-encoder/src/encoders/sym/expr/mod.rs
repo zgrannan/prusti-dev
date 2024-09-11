@@ -424,7 +424,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
         match &pc {
             PathConditionAtom::Assertion(a) => {
                 let encoder = AssertionEncoder::new(self.vcx, &self);
-                let clauses = encoder.encode_assertion_clauses(deps, a);
+                let clauses = encoder.encode_assertion_clauses(deps, a)?;
                 Ok(EncodedPCAtom::new(self.vcx.alloc_slice(&clauses)))
             }
             PathConditionAtom::Predicate(pc) => self.encode_pc_predicate_atom(deps, pc),
@@ -598,14 +598,14 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .map(|ra| {
                 let pcs = self.encode_path_condition(deps, &ra.pcs).unwrap();
                 let assertion_encoder = AssertionEncoder::new(self.vcx, &self);
-                pcs.conditionalize_expr(
+                Ok(pcs.conditionalize_expr(
                     self.vcx,
                     self.vcx.mk_disj(self.vcx.alloc_slice(
-                        &assertion_encoder.encode_assertion_clauses(deps, &ra.assertion),
+                        &(assertion_encoder.encode_assertion_clauses(deps, &ra.assertion)?),
                     )),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, String>>()?;
         let clauses = path_clauses
             .into_iter()
             .chain(well_formed_clauses.into_iter())

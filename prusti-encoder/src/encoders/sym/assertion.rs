@@ -27,18 +27,16 @@ impl<'sym, 'tcx, 'vir, 'enc> AssertionEncoder<'sym, 'tcx, 'vir, 'enc> {
         &'slf self,
         deps: &'enc mut TaskEncoderDependencies<'vir, T>,
         assertion: &PrustiAssertion<'sym, 'tcx>,
-    ) -> Vec<vir::Expr<'vir>>
+    ) -> Result<Vec<vir::Expr<'vir>>, String>
     where
         T: TaskEncoder<EncodingError = String>,
     {
         let arena = self.encoder.arena;
         match assertion {
-            Assertion::Value(val) => {
-                vec![self
-                    .encoder
-                    .encode_sym_value_as_prim(deps, val, false)
-                    .unwrap()]
-            }
+            Assertion::Value(val) => Ok(vec![self
+                .encoder
+                .encode_sym_value_as_prim(deps, val, false)
+                .unwrap()]),
             Assertion::Precondition(def_id, substs, args) => {
                 let arg_substs = arena.alloc(Substs::from_iter(
                     args.iter()
@@ -55,22 +53,21 @@ impl<'sym, 'tcx, 'vir, 'enc> AssertionEncoder<'sym, 'tcx, 'vir, 'enc> {
                         self.encoder
                             .encode_pure_spec(deps, p.subst(arena, arg_substs))
                     })
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
-                encoded_pres.into_iter().flat_map(|e| e.clauses).collect()
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(encoded_pres.into_iter().flat_map(|e| e.clauses).collect())
             }
             Assertion::Implication(lhs, rhs) => {
-                let lhs_clauses = self.vcx.mk_conj(&self.encode_assertion_clauses(deps, lhs));
-                let rhs_clauses = self.vcx.mk_conj(&self.encode_assertion_clauses(deps, rhs));
-                vec![self.vcx.mk_implies_expr(lhs_clauses, rhs_clauses)]
+                let lhs_clauses = self.vcx.mk_conj(&self.encode_assertion_clauses(deps, lhs)?);
+                let rhs_clauses = self.vcx.mk_conj(&self.encode_assertion_clauses(deps, rhs)?);
+                Ok(vec![self.vcx.mk_implies_expr(lhs_clauses, rhs_clauses)])
             }
-            Assertion::PathConditions(conditions) => self
+            Assertion::PathConditions(conditions) => Ok(self
                 .encoder
                 .encode_path_condition(deps, conditions)
                 .into_iter()
                 .flat_map(|pc| pc.atoms)
                 .map(|atom| atom.to_expr(self.vcx))
-                .collect(),
+                .collect()),
         }
     }
 
@@ -84,18 +81,25 @@ impl<'sym, 'tcx, 'vir, 'enc> AssertionEncoder<'sym, 'tcx, 'vir, 'enc> {
     {
         match assertion {
             Assertion::Implication(lhs, rhs) => {
-                let lhs_clauses = self.vcx.mk_conj(&self.encode_assertion_clauses(deps, lhs));
+                let lhs_clauses = self
+                    .vcx
+                    .mk_conj(&self.encode_assertion_clauses(deps, lhs).unwrap());
                 vec![self.vcx.mk_if_stmt(
                     lhs_clauses,
                     self.vcx.alloc_slice(&self.encode_assertion(deps, rhs)),
                     &[],
                 )]
             }
-            _ => self
-                .encode_assertion_clauses(deps, assertion)
-                .into_iter()
-                .map(|expr| self.vcx.mk_exhale_stmt(expr))
-                .collect(),
+            _ => match self.encode_assertion_clauses(deps, assertion) {
+                Ok(clauses) => clauses
+                    .into_iter()
+                    .map(|expr| self.vcx.mk_exhale_stmt(expr))
+                    .collect(),
+                Err(err) => vec![
+                    self.vcx.mk_comment_stmt(self.vcx.alloc(err)),
+                    self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
+                ],
+            },
         }
     }
 }
