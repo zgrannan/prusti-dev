@@ -590,7 +590,7 @@ impl SymPureEnc {
                 def_id: def_id.as_local().unwrap(),
                 body: &body.body,
                 tcx: vcx.tcx(),
-                fpcs_analysis: pcs::run_free_pcs(
+                fpcs_analysis: pcs::run_combined_pcs(
                     &BodyWithBorrowckFacts {
                         body: body.body.clone(),
                         promoted: body.promoted,

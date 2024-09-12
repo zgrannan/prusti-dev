@@ -624,14 +624,8 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
     ) -> EncodePCResult<'vir, String> {
         let mut exprs = Vec::new();
         for atom in &pc.atoms {
-            let encoded = self.encode_pc_atom(deps, atom);
-            match encoded {
-                Ok(encoded) => exprs.push(encoded),
-                Err(err) => {
-                    panic!("Error when encoding path condition {:#?} : {:?}", atom, err);
-                    // return Ok(EncodedPC { atoms: vec![] });
-                }
-            }
+            let encoded = self.encode_pc_atom(deps, atom)?;
+            exprs.push(encoded);
         }
         Ok(EncodedPC { atoms: exprs })
     }

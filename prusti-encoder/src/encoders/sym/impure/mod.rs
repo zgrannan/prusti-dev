@@ -204,7 +204,7 @@ impl TaskEncoder for SymImpureEnc {
                 output_facts: body.output_facts,
             };
 
-            let fpcs_analysis = pcs::run_free_pcs(&body_with_facts, vcx.tcx(), debug_dir.clone());
+            let fpcs_analysis = pcs::run_combined_pcs(&body_with_facts, vcx.tcx(), debug_dir.clone());
 
             let symbolic_execution = symbolic_execution::run_symbolic_execution(SymExParams {
                 def_id: def_id.as_local().unwrap(),
@@ -549,14 +549,14 @@ impl<'slf, 'sym, 'tcx, 'vir: 'tcx, 'enc> EncVisitor<'sym, 'tcx, 'vir, 'enc> {
         let encoded_pc = match self.encoder.encode_path_condition(self.deps, pc) {
             Ok(pc) => pc,
             Err(err) => {
-                panic!("Error when encoding path condition {:?}: {:?}", pc, err);
-                // return Ok(vec![
-                //     self.vcx.mk_comment_stmt(
-                //         self.vcx
-                //             .alloc(format!("Error when encoding path condition: {:?}", err)),
-                //     ),
-                //     self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
-                // ])
+                // panic!("Error when encoding path condition {:?}: {:?}", pc, err);
+                return Ok(vec![
+                    self.vcx.mk_comment_stmt(
+                        self.vcx
+                            .alloc(format!("Error when encoding path condition: {:?}", err)),
+                    ),
+                    self.vcx.mk_exhale_stmt(self.vcx.mk_bool::<false, !, !>()),
+                ])
             }
         };
         let assertion_encoder = AssertionEncoder::new(self.vcx, &self.encoder);
