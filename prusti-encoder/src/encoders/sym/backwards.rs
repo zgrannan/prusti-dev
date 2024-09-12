@@ -44,7 +44,8 @@ impl<'shared, 'vir, 'tcx> BackwardsFnContext<'shared, 'vir, 'tcx> {
 }
 
 /**
- *  Encodes the composite backwards function.
+ *  Encodes the composite backwards Viper function. Note that this does not
+ *  check the correctness of the pledges. (See `mk_backwards_method` for that.)
  */
 pub fn mk_backwards_fn<
     'shared,
@@ -156,16 +157,25 @@ pub fn mk_backwards_method<'enc, 'vir, 'sym, 'tcx, T: TaskEncoder<EncodingError 
     vir::with_vcx(|vcx| {
         // The map from an index in `BackwardsFact` to the backwards result local
         let back_result_vars: BTreeMap<usize, vir::Local<'vir>> = (0..fb_shared.arg_count)
-            .map(|idx| {
-                let name = vir::vir_format!(vcx, "backwards_{}", idx);
-                let ty = fb_shared.symvar_vir_ty(SymVar::nth_input(idx));
-                (idx, vcx.mk_local(name, ty))
+            .flat_map(|idx| {
+                if fb_shared.symvar_ty(SymVar::nth_input(idx)).ref_mutability()
+                    == Some(Mutability::Mut)
+                {
+                    let name = vir::vir_format!(vcx, "backwards_{}", idx);
+                    let ty = fb_shared.symvar_vir_ty(SymVar::nth_input(idx));
+                    Some((idx, vcx.mk_local(name, ty)))
+                } else {
+                    None
+                }
             })
             .collect();
 
         let get_back_result = |idx| {
-            let local = back_result_vars.get(&idx).unwrap();
-            vcx.mk_local_ex(local.name, local.ty)
+            if let Some(local) = back_result_vars.get(&idx) {
+                vcx.mk_local_ex(local.name, local.ty)
+            } else {
+                fb_shared.nth_input_expr(idx)
+            }
         };
 
         let mut body_stmts = vec![];

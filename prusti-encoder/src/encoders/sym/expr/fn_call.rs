@@ -111,15 +111,15 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             .map_err(|e| format!("{:?}", e))?;
         let args = encoded_args.chain(encoded_fn_args).collect::<Vec<_>>();
         let function_ref = deps
-            .require_ref::<SymFunctionEnc>(FunctionCallTaskDescription {
-                def_id: fn_def_id,
-                substs: if mono {
+            .require_ref::<SymFunctionEnc>(FunctionCallTaskDescription::new(
+                fn_def_id,
+                if mono {
                     substs
                 } else {
                     GenericArgs::identity_for_item(self.vcx.tcx(), fn_def_id)
                 },
-                caller_def_id: self.def_id,
-            })
+                self.def_id,
+            ))
             .map_err(|e| format!("{:?}", e))?
             .function_ident;
         Ok(function_ref.apply(self.vcx, &args))

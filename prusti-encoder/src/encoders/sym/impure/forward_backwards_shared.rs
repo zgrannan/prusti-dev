@@ -108,6 +108,10 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
         self.symvar_tys[&SymVar::nth_input(i)]
     }
 
+    pub fn nth_input_local(&self, i: usize) -> vir::Local<'vir> {
+        self.symvar_locals[&SymVar::nth_input(i)]
+    }
+
     pub fn nth_input_expr(&self, i: usize) -> vir::Expr<'vir> {
         let local = self.symvar_locals[&SymVar::nth_input(i)];
         vir::with_vcx(|vcx| vcx.mk_local_ex_local(local))

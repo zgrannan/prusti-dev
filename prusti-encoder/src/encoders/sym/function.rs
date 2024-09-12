@@ -58,7 +58,7 @@ impl<'vir> Identifiable for PureFunctionIdent<'vir> {
                 "pure_{}_{}_{:?}",
                 vcx.tcx().def_path_str(self.0.def_id),
                 extra,
-                self.0.caller_def_id
+                self.0.caller_def_id()
             )
         })
     }
@@ -128,7 +128,7 @@ impl TaskEncoder for SymFunctionEnc {
                 if #[cfg(feature="mono_function_encoding")] {
                     let substs = task_key.substs;
                     let def_id = task_key.def_id;
-                    let caller_def_id = Some(task_key.caller_def_id);
+                    let caller_def_id = task_key.caller_def_id();
                 } else {
                     let def_id = *task_key;
                     let substs = GenericArgs::identity_for_item(vcx.tcx(), def_id);

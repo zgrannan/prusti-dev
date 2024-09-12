@@ -32,7 +32,7 @@ impl FunctionEnc for MirMonoImpureEnc {
     }
 
     fn get_caller_def_id(task_key: &Self::TaskKey<'_>) -> Option<DefId> {
-        Some(task_key.caller_def_id)
+        task_key.caller_def_id()
     }
 
     fn get_substs<'tcx>(
