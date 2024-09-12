@@ -26,7 +26,7 @@ use symbolic_execution::{
     Assertion, SymExParams,
 };
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
-use vir::{vir_format, CallableIdent, MethodIdent, UnknownArity};
+use vir::{vir_format, CallableIdent, DomainIdent, MethodIdent, TypeData, UnknownArity};
 
 pub struct SymImpureEnc;
 
@@ -36,39 +36,61 @@ pub enum MirImpureEncError {
 }
 
 #[derive(Clone, Debug)]
-pub struct BackwardsFnRef<'vir>(pub vir::FunctionIdent<'vir, UnknownArity<'vir>>);
+pub struct MirImpureEncOutputRef<'vir> {
+    pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
 
-impl<'vir> BackwardsFnRef<'vir> {
-    pub fn apply(
+    /// Backwards functions for the method
+    pub backwards_ref: Option<BackwardsRef<'vir>>,
+}
+
+impl<'vir> MirImpureEncOutputRef<'vir> {
+    pub fn back_function_ident(&self) -> vir::FunctionIdent<'vir, UnknownArity<'vir>> {
+        self.backwards_ref
+            .as_ref()
+            .unwrap_or_else(|| {
+                panic!("No backwards function found for {:?}", self.method_ref);
+            })
+            .back_function_ident
+    }
+    pub fn composite_back_fn_app(
         &self,
         ty_args: Vec<vir::Expr<'vir>>,
         args: Vec<vir::Expr<'vir>>,
     ) -> vir::Expr<'vir> {
         vir::with_vcx(|vcx| {
-            let args = vcx.alloc_slice(
-                &ty_args
-                    .into_iter()
-                    .chain(args.into_iter())
-                    .collect::<Vec<_>>(),
-            );
-            self.0.apply(vcx, args)
+            self.back_function_ident().apply(
+                vcx,
+                vcx.alloc_slice(
+                    &ty_args
+                        .into_iter()
+                        .chain(args.into_iter())
+                        .collect::<Vec<_>>(),
+                ),
+            )
         })
+    }
+    pub fn backwards_expr(
+        &self,
+        arg: mir::Local,
+        ty_args: Vec<vir::Expr<'vir>>,
+        args: Vec<vir::Expr<'vir>>,
+    ) -> vir::Expr<'vir> {
+        self.backwards_ref
+            .as_ref()
+            .unwrap()
+            .apply(arg, ty_args, args)
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct MirImpureEncOutputRef<'vir> {
-    pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
-    pub backwards_fns: BTreeMap<usize, BackwardsFnRef<'vir>>,
-}
 impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
 
 #[derive(Clone, Debug)]
 pub struct MirImpureEncOutput<'vir> {
     pub debug_ids: BTreeSet<String>,
     pub method: vir::Method<'vir>,
+    pub backwards_domain: Option<vir::Domain<'vir>>,
     pub backwards_method: Option<vir::Method<'vir>>,
-    pub backwards_fns_domain: vir::Domain<'vir>,
+    pub backwards_fns: Vec<vir::Function<'vir>>,
 }
 use crate::{
     debug::{fn_debug_name, visualization_data_dir},
@@ -77,6 +99,7 @@ use crate::{
         domain::DomainEnc,
         lifted::{cast::CastToEnc, casters::CastTypePure},
         most_generic_ty::extract_type_params,
+        sym_spec::SymSpec,
         ConstEnc, MirBuiltinEnc,
     },
 };
@@ -103,7 +126,7 @@ use super::{
         SymFunctionEnc, SymPureEnc, SymPureEncTask,
     },
     assertion::AssertionEncoder,
-    backwards::{mk_backwards_fn_axioms, BackwardsFnContext},
+    backwards::{encode_backwards_ref, mk_backwards_fn, BackwardsFnContext, BackwardsRef},
 };
 
 pub mod forward_backwards_shared;
@@ -194,54 +217,48 @@ impl TaskEncoder for SymImpureEnc {
                 new_symvars_allowed: true,
             });
 
-            let fb_shared =
-                ForwardBackwardsShared::new(&symbolic_execution, substs, &body.body, deps);
-
-            let backwards_fn_arity = UnknownArity::new(
-                vcx.alloc_slice(
-                    &fb_shared
-                        .ty_and_arg_decls()
-                        .into_iter()
-                        .map(|l| l.ty)
-                        .chain(std::iter::once(fb_shared.result_local.ty))
-                        .collect::<Vec<_>>(),
-                ),
-            );
-
-            let backwards_fn_idents = body
-                .body
-                .args_iter()
-                .flat_map(|local| {
-                    if body.body.local_decls[local].ty.ref_mutability() == Some(Mutability::Mut) {
-                        let idx = local.as_usize() - 1;
-                        let ident =
-                            vir::vir_format_identifier!(vcx, "backwards_{}_{}", method_name, idx);
-                        Some((
-                            idx,
-                            BackwardsFnRef(vir::FunctionIdent::new(
-                                ident,
-                                backwards_fn_arity,
-                                fb_shared.symvars[&SymVar::nth_input(idx)].1.ty,
-                            )),
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<usize, _>>();
-
-            let output_ref = MirImpureEncOutputRef {
-                method_ref: method_ident,
-                backwards_fns: backwards_fn_idents.clone(),
-            };
-            deps.emit_output_ref(*task_key, output_ref.clone())?;
-
             let spec = deps
                 .require_local::<SymSpecEnc>((def_id, substs, caller_def_id))
                 .unwrap();
+
             let mut debug_ids = spec.debug_ids();
 
-            let mut stmts = Vec::new();
+            let result_local = vcx.mk_local(
+                "res",
+                deps.require_ref::<RustTySnapshotsEnc>(body.body.local_decls[RETURN_PLACE].ty)
+                    .unwrap()
+                    .generic_snapshot
+                    .snapshot,
+            );
+
+            let symvar_substs = mk_symvar_substs(vcx, &body.body, &symbolic_execution, deps);
+
+            let ty_args = deps.require_local::<LiftedTyParamsEnc>(substs).unwrap();
+
+            let input_tys: Vec<_> = ty_args
+                .iter()
+                .map(|l| l.ty())
+                .chain(
+                    body.body
+                        .args_iter()
+                        .map(|local| symvar_substs[&SymVar::Input(local)].ty),
+                )
+                .collect();
+
+            let backwards_ref = encode_backwards_ref(
+                method_name,
+                input_tys,
+                &body.body,
+                &symvar_substs,
+                result_local,
+            );
+
+            let output_ref = MirImpureEncOutputRef {
+                method_ref: method_ident,
+                backwards_ref: backwards_ref.clone(),
+            };
+            deps.emit_output_ref(*task_key, output_ref.clone())?;
+
             let mut visitor = EncVisitor {
                 deps,
                 vcx,
@@ -255,33 +272,41 @@ impl TaskEncoder for SymImpureEnc {
                             arena.mk_var(SymVar::Input(local), body.body.local_decls[local].ty),
                         )
                     })),
-                    fb_shared
-                        .symvars
+                    symvar_substs
                         .iter()
-                        .map(|(var, (_, local))| (*var, vcx.mk_local_ex(local.name, local.ty)))
+                        .map(|(k, v)| (*k, vcx.mk_local_ex(v.name, v.ty)))
                         .collect(),
                     def_id,
                 ),
                 arena: &arena,
             };
 
-            stmts.extend(fb_shared.decl_stmts.clone());
-            stmts.extend(fb_shared.type_assertion_stmts.clone());
+            let spec_precondition_exprs =
+                encode_spec_exprs(spec.pres, &visitor.encoder, visitor.deps);
 
-            for pre in spec.pres.into_iter() {
-                match visitor.encoder.encode_pure_spec(visitor.deps, pre) {
-                    Ok(pre) => {
-                        for clause in pre.clauses {
-                            stmts.push(vcx.mk_inhale_stmt(clause));
-                        }
-                    }
-                    Err(err) => {
-                        stmts
-                            .push(vcx.mk_comment_stmt(vcx.alloc(format!("Encoding err: {err:?}"))));
-                        stmts.push(vcx.mk_exhale_stmt(vcx.mk_bool::<false, !, !>()));
-                    }
-                }
-            }
+            let fb_shared = ForwardBackwardsShared::new(
+                &symbolic_execution,
+                substs,
+                symvar_substs.clone(),
+                spec_precondition_exprs,
+                &body.body,
+                result_local,
+                ty_args,
+                visitor.deps,
+            );
+
+            let mut stmts = Vec::new();
+
+            stmts.extend(fb_shared.decl_stmts.clone());
+            stmts.extend(
+                fb_shared
+                    .precondition_exprs
+                    .iter()
+                    .map(|e| vcx.mk_inhale_stmt(e)),
+            );
+            stmts.extend(
+                fb_shared.body_type_assertion_stmts.iter()
+            );
 
             for ResultAssertion {
                 path,
@@ -376,18 +401,24 @@ impl TaskEncoder for SymImpureEnc {
                 }
             }
 
-            let backwards_fn_axioms = mk_backwards_fn_axioms(
-                &spec.pledges,
-                BackwardsFnContext {
-                    output_ref,
-                    def_id,
-                    substs,
-                    caller_def_id,
-                    shared: &fb_shared,
-                },
-                &visitor.encoder,
-                visitor.deps,
-            );
+            let backwards_fns = if let Some(ref backwards_ref) = backwards_ref {
+                vec![mk_backwards_fn(
+                    visitor.encoder.arena,
+                    &backwards_ref,
+                    &spec.pledges,
+                    BackwardsFnContext {
+                        output_ref,
+                        def_id,
+                        substs,
+                        caller_def_id,
+                        shared: &fb_shared,
+                    },
+                    visitor.encoder.old_values.clone(),
+                    visitor.deps,
+                )]
+            } else {
+                vec![]
+            };
 
             let backwards_method = mk_backwards_method(
                 method_name,
@@ -405,18 +436,6 @@ impl TaskEncoder for SymImpureEnc {
                     None
                 }
             };
-
-            let backwards_fns_domain = vcx.mk_domain(
-                vir::vir_format_identifier!(vcx, "Backwards_{}", method_ident.name()),
-                &[],
-                backwards_fn_axioms,
-                vcx.alloc_slice(
-                    &backwards_fn_idents
-                        .iter()
-                        .map(|(_, f)| vcx.mk_domain_function(f.0, false))
-                        .collect::<Vec<_>>(),
-                ),
-            );
 
             debug_ids.insert(fn_debug_name(def_id, substs));
 
@@ -436,12 +455,68 @@ impl TaskEncoder for SymImpureEnc {
                         )])),
                     ),
                     backwards_method,
-                    backwards_fns_domain,
+                    backwards_fns,
+                    backwards_domain: backwards_ref.map(|b| b.domain),
                 },
                 (),
             ))
         })
     }
+}
+
+fn encode_spec_exprs<'sym, 'tcx, 'vir, 'deps>(
+    spec: SymSpec<'sym, 'tcx>,
+    encoder: &SymExprEncoder<'vir, 'sym, 'tcx>,
+    deps: &'deps mut TaskEncoderDependencies<'vir, SymImpureEnc>,
+) -> Vec<vir::Expr<'vir>> {
+    spec.into_iter()
+        .flat_map(|pre| encoder.encode_pure_spec(deps, pre).unwrap().clauses)
+        .collect()
+}
+
+fn mk_symvar_substs<'sym, 'tcx, 'vir: 'tcx, 'deps>(
+    vcx: &'vir vir::VirCtxt<'tcx>,
+    body: &'sym mir::Body<'tcx>,
+    symex_result: &'sym SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
+    deps: &'deps mut TaskEncoderDependencies<'vir, SymImpureEnc>,
+) -> BTreeMap<SymVar, vir::Local<'vir>> {
+    let input_symvars = body
+        .args_iter()
+        .map(|local| {
+            let ty = body.local_decls[local].ty;
+            (
+                SymVar::Input(local),
+                vcx.mk_local(
+                    vir_format!(vcx, "i{}", local.as_usize()),
+                    deps.require_ref::<RustTySnapshotsEnc>(ty)
+                        .unwrap()
+                        .generic_snapshot
+                        .snapshot,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let fresh_symvars = symex_result
+        .fresh_symvars
+        .iter()
+        .enumerate()
+        .map(|(idx, ty)| {
+            (
+                SymVar::Fresh(idx),
+                vcx.mk_local(
+                    vir_format!(vcx, "f{}", idx),
+                    deps.require_ref::<RustTySnapshotsEnc>(*ty)
+                        .unwrap()
+                        .generic_snapshot
+                        .snapshot,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    input_symvars
+        .into_iter()
+        .chain(fresh_symvars.into_iter())
+        .collect::<BTreeMap<_, _>>()
 }
 
 struct EncVisitor<'sym, 'tcx, 'vir, 'enc>

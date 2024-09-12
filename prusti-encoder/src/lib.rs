@@ -101,14 +101,21 @@ pub fn test_entrypoint<'tcx>(
     }
     for output in crate::encoders::SymImpureEnc::all_outputs() {
         viper_code.push_str(&format!("{:?}\n", output.method));
-        viper_code.push_str(&format!("{:?}\n", output.backwards_fns_domain));
         program_methods.push(output.method);
+        if let Some(backwards_domain) = output.backwards_domain {
+            eprintln!("backwards_domain: {:?}", backwards_domain);
+            program_domains.push(backwards_domain);
+            viper_code.push_str(&format!("{:?}\n", backwards_domain));
+        }
         if let Some(backwards_method) = output.backwards_method {
             program_methods.push(backwards_method);
             viper_code.push_str(&format!("{:?}\n", backwards_method));
         }
         function_names.extend(output.debug_ids);
-        program_domains.push(output.backwards_fns_domain);
+        for backward_fn in output.backwards_fns {
+            viper_code.push_str(&format!("{:?}\n", backward_fn));
+            program_functions.push(backward_fn);
+        }
     }
 
     header(&mut viper_code, "functions");
@@ -188,7 +195,9 @@ pub fn test_entrypoint<'tcx>(
         program_methods.push(output.method_assign);
     }
 
-    if let Ok(var) = std::env::var("NO_VIPER_FILE") && var == "true" {
+    if let Ok(var) = std::env::var("NO_VIPER_FILE")
+        && var == "true"
+    {
     } else {
         std::fs::write("local-testing/simple.vpr", viper_code).unwrap();
     }

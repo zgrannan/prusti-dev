@@ -69,7 +69,7 @@ impl<'vir> EncodedPureSpec<'vir> {
 pub struct SymExprEncoder<'vir: 'tcx, 'sym, 'tcx> {
     vcx: &'vir vir::VirCtxt<'tcx>,
     pub arena: &'sym SymExContext<'tcx>,
-    old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
+    pub old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
     substs: BTreeMap<SymVar, vir::Expr<'vir>>,
     def_id: DefId,
 }
@@ -116,11 +116,15 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
             SymValueKind::Var(var, ..) => {
                 if in_old {
                     if let SymVar::Input(i) = var {
+                        let old_value = self.old_values.get(i).cloned().unwrap();
+                        eprintln!("Old value for {:?} is {:?}", var, old_value);
                         return self.encode_sym_value(
                             deps,
-                            self.old_values.get(i).cloned().unwrap(),
+                            old_value,
                             false,
                         );
+                    } else {
+                        eprintln!("Old value for {:?} not found", var);
                     }
                 }
                 self.substs
