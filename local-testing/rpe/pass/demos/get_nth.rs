@@ -38,15 +38,31 @@ impl List {
     #[requires(n < self.len())]
     #[after_expiry(self.len() == old(self.len()) && self.get_nth(n) == before_expiry(*result))]
     fn get_nth_mut(&mut self, n: usize) -> &mut u32 {
+        let current = self;
         if n == 0 {
-            &mut self.head
+            &mut current.head
         } else {
-            match &mut self.tail {
+            match &mut current.tail {
                 Some(ref mut tail) => tail.get_nth_mut(n - 1),
                 None => unreachable!(),
             }
         }
     }
+
+    // #[requires(n < self.len())]
+    // #[after_expiry(self.len() == old(self.len()) && self.get_nth(n) == before_expiry(*result))]
+    // fn get_nth_loop(&mut self, n: usize) -> &mut u32 {
+    //     let mut i = 0;
+    //     let mut current = self;
+    //     while i < n {
+    //         current = match current.tail {
+    //             Some(ref mut tail) => tail,
+    //             None => unreachable!(),
+    //         };
+    //         i += 1;
+    //     }
+    //     &mut current.head
+    // }
 }
 
 fn main() {}

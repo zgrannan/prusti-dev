@@ -117,14 +117,7 @@ impl<'vir, 'sym, 'tcx> SymExprEncoder<'vir, 'sym, 'tcx> {
                 if in_old {
                     if let SymVar::Input(i) = var {
                         let old_value = self.old_values.get(i).cloned().unwrap();
-                        eprintln!("Old value for {:?} is {:?}", var, old_value);
-                        return self.encode_sym_value(
-                            deps,
-                            old_value,
-                            false,
-                        );
-                    } else {
-                        eprintln!("Old value for {:?} not found", var);
+                        return self.encode_sym_value(deps, old_value, false);
                     }
                 }
                 self.substs
