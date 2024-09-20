@@ -103,7 +103,6 @@ pub fn test_entrypoint<'tcx>(
         viper_code.push_str(&format!("{:?}\n", output.method));
         program_methods.push(output.method);
         if let Some(backwards_domain) = output.backwards_domain {
-            eprintln!("backwards_domain: {:?}", backwards_domain);
             program_domains.push(backwards_domain);
             viper_code.push_str(&format!("{:?}\n", backwards_domain));
         }

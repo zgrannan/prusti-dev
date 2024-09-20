@@ -1,0 +1,18 @@
+fn main(){
+    let mut list = 0;
+    let mut b = &mut list;
+    let mut a = &mut *b;
+    while true {
+        // list = 2;
+        *a = 5;
+        a = &mut list;     // L2 'list2
+        b = &mut *a;       // L3
+    }
+    if true {
+        let d = *b;
+        unreachable!();
+    } else {
+        // let d = *a;
+        unreachable!();
+    }
+}

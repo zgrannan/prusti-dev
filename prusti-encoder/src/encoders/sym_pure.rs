@@ -319,8 +319,6 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
             let fn_name = vcx.tcx().def_path_str(def_id);
             let mut heap = SymbolicHeap::new(heap, vcx.tcx(), sym_ex.body, sym_ex.arena);
             if fn_name == "prusti_contracts::old" {
-                eprintln!("def_id: {:?}", def_id);
-                eprintln!("sym_ex.def_id: {:?}", sym_ex.def_id);
                 let body = mir_storage::retrieve_thir_body(vcx.tcx(), sym_ex.def_id);
                 let body_for_params = if vcx.tcx().is_closure_like(sym_ex.def_id.to_def_id()) {
                     let def_id = vcx

@@ -34,3 +34,4 @@ oprofile_data/
 
 # TODO: remove
 local-testing/simple.vpr
+mir_dump
