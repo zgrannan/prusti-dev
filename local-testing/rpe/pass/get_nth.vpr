@@ -1,0 +1,42 @@
+predicate u32(ref: Ref)
+predicate List(list: Ref) {
+    acc(list.value) && u32(list.value) && acc(list.tail) && (list.tail != null ==> List(list.tail))
+}
+
+field value: Ref
+field tail: Ref
+
+method get_nth(list: Ref, n: Int) returns (res: Ref)
+    requires List(list)
+    ensures acc(u32(res))
+    ensures acc(u32(res)) --* List(list)
+{
+    var i: Int := 0;
+    var current: Ref := list
+
+    package List(current) --* List(list)
+    while (i < n)
+    invariant List(current)
+    invariant List(current) --* List(list)
+    {
+        unfold List(current)
+        var old_list: Ref := current
+        if (current.tail != null) {
+            current := current.tail
+            package List(current) --* List(list) {
+                fold List(old_list)
+                apply List(old_list) --* List(list)
+            }
+        } else {
+            fold List(current)
+        }
+        i := i + 1
+    }
+    unfold List(current)
+    res := current.value
+    package acc(u32(res)) --* List(list) {
+        fold List(current)
+        apply List(current) --* List(list)
+    }
+}
+
