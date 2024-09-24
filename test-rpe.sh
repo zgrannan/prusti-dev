@@ -17,24 +17,28 @@ for arg in "$@"; do
     fi
 done
 
-if [[ "$pcs" == true ]]; then
-    cd ../pcs/ && cargo build --all --release && cd - || exit 1
-else
-    ./x.py build --all --release || exit 1
-    killall prusti-server-driver
-    ./x.py run --release --bin prusti-server -- -p 3000 &
-    PRUSTI_SERVER_PID=$!
-    export PRUSTI_SERVER_ADDRESS=localhost:3000
-    sleep 2
-fi
 
 
 directory_pass="local-testing/rpe/pass"
 directory_fail="local-testing/rpe/fail"
 
-
-check_pass() {
+prepend_failure_count() {
     local file=$1
+    local count=$(grep -Fxc "$file" .failures)
+    echo "$count $file"
+}
+
+list_files_by_failure_count() {
+    local search_dir=$1
+    local files=$(find "$search_dir" -type f -name "*.rs")
+    for file in $files; do
+        prepend_failure_count "$file"
+    done | sort -n -r | cut -d' ' -f2-
+}
+
+check() {
+    local file=$1
+    local type=$2
     if [[ "$pcs" == true ]]; then
         echo "Checking $file (PCS only)"
         ../pcs/target/release/pcs_bin "$file"
@@ -43,36 +47,21 @@ check_pass() {
             exit 1
         fi
     else
-        echo "Checking $file (expected to pass)"
+        echo "Checking $file (expected to $type)"
         target/release/prusti-rustc --edition=2018 "$file"
-        if [[ $? -ne 0 ]]; then
-            echo "Test $file failed"
+        if [[ "$type" == "pass" && $? -ne 0 ]]; then
+            echo "Test $file failed (should have passed)"
+            echo "$file" >> .failures
+            exit 1
+        elif [[ "$type" == "fail" && $? -eq 0 ]]; then
+            echo "Test $file passed (should have failed)"
+            echo "$file" >> .failures
             exit 1
         fi
     fi
 }
 
-check_fail() {
-    local file=$1
-    if [[ "$pcs" == true ]]; then
-        echo "Checking $file (PCS only)"
-        ../pcs/target/release/pcs_bin "$file"
-        if [[ $? -ne 0 ]]; then
-            echo "Test $file failed"
-            exit 1
-        fi
-    else
-        echo "Checking $file (expected to fail)"
-        target/release/prusti-rustc --edition=2018 "$file"
-        if [[ $? -eq 0 ]]; then
-            echo "Test $file passed but it should have failed"
-            exit 1
-        fi
-    fi
-}
-
-export -f check_pass
-export -f check_fail
+export -f check
 
 # Add this function to handle script termination
 cleanup() {
@@ -90,22 +79,33 @@ trap cleanup SIGINT
 
 run_tests() {
     local directory=$1
-    local check_function=$2
+    local check_type=$2
     local search_dir="$directory"
     if [[ "$old" == true ]]; then
         search_dir="$directory/old"
     fi
     while IFS= read -r FILE
     do
-        "$check_function" "$FILE"
-    done < <(find "$search_dir" -type f -name "*.rs")
+        check "$FILE" "$check_type"
+    done < <(list_files_by_failure_count "$search_dir")
     if [[ $? -ne 0 ]]; then
         exit 1
     fi
 }
 
-run_tests "$directory_pass" check_pass
-run_tests "$directory_fail" check_fail
+if [[ "$pcs" == true ]]; then
+    cd ../pcs/ && cargo build --all --release && cd - || exit 1
+else
+    ./x.py build --all --release || exit 1
+    killall prusti-server-driver
+    ./x.py run --release --bin prusti-server -- -p 3000 &
+    PRUSTI_SERVER_PID=$!
+    export PRUSTI_SERVER_ADDRESS=localhost:3000
+    sleep 2
+fi
+
+run_tests "$directory_pass" "pass"
+run_tests "$directory_fail" "fail"
 
 echo "All tests passed successfully"
 
