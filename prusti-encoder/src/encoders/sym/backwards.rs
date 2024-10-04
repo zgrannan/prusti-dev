@@ -59,7 +59,7 @@ pub fn mk_backwards_fn<
     backwards_ref: &BackwardsRef<'vir>,
     pledges: &SymSpec<'sym, 'tcx>,
     ctxt: BackwardsFnContext<'shared, 'vir, 'tcx>,
-    old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
+    _old_values: BTreeMap<mir::Local, PrustiSymValue<'sym, 'tcx>>,
     deps: &'enc mut TaskEncoderDependencies<'vir, T>,
 ) -> Function<'vir> {
     vir::with_vcx(|vcx| {

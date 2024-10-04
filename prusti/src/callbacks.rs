@@ -14,8 +14,8 @@ use prusti_rustc_interface::{
     interface::{interface::Compiler, Config, Queries},
     middle::{
         mir,
-        query::{queries::mir_borrowck::ProvidedValue as MirBorrowck, ExternProviders},
-        thir::{self, ExprId, Thir},
+        query::{queries::mir_borrowck::ProvidedValue as MirBorrowck},
+        thir::{ExprId, Thir},
         ty::TyCtxt,
         util::Providers,
     },
@@ -79,7 +79,7 @@ fn mir_promoted<'tcx>(
 fn thir_body<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
-) -> Result<(&Steal<Thir<'_>>, ExprId), ErrorGuaranteed> {
+) -> Result<(&Steal<Thir<'tcx>>, ExprId), ErrorGuaranteed> {
     let original_thir_body = prusti_rustc_interface::interface::DEFAULT_QUERY_PROVIDERS.thir_body;
     let body = original_thir_body(tcx, def_id);
     if let Ok((body, _)) = body {

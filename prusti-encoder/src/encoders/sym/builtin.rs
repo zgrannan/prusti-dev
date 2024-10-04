@@ -125,7 +125,6 @@ pub fn partial_eq_expr<'sym, 'tcx>(
                 None
             }
         }
-        ty::TyKind::Uint(..) => Some(arena.mk_bin_op(tcx.types.bool, mir::BinOp::Eq, lhs, rhs)),
         ty::TyKind::Param(..) => None, // TODO
         other => todo!("partial_eq_expr: {:?}", other),
     }

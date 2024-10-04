@@ -89,7 +89,7 @@ impl TaskEncoder for GenericEnc {
         };
 
         #[allow(clippy::unit_arg)]
-        deps.emit_output_ref(
+        let _ = deps.emit_output_ref(
             *task_key,
             output_ref
         )?;

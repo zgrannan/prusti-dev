@@ -12,7 +12,7 @@ pub struct FunctionCallTaskDescription<'tcx> {
 }
 
 impl<'tcx> FunctionCallTaskDescription<'tcx> {
-    pub fn new(def_id: DefId, substs: ty::GenericArgsRef<'tcx>, caller_def_id: DefId) -> Self {
+    pub fn new(def_id: DefId, substs: ty::GenericArgsRef<'tcx>, _caller_def_id: DefId) -> Self {
         Self {
             def_id,
             substs, /* , caller_def_id */

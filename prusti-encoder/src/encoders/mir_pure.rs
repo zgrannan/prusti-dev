@@ -641,7 +641,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             // AddressOf
             // Len
             // Cast
-            rv @ mir::Rvalue::BinaryOp(op, box (l, r)) => {
+            mir::Rvalue::BinaryOp(op, box (l, r)) => {
                 let l_ty = l.ty(self.body, self.vcx.tcx());
                 let r_ty = r.ty(self.body, self.vcx.tcx());
                 use crate::encoders::MirBuiltinEncTask::BinOp;

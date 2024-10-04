@@ -17,8 +17,8 @@ use arg_value::arg_value;
 use callbacks::PrustiCompilerCalls;
 use log::info;
 use prusti_rustc_interface::{
-    driver, errors,
-    session::{self, EarlyDiagCtxt},
+    driver,
+    session,
 };
 use prusti_utils::{config, report::user, Stopwatch};
 use std::env;
@@ -72,8 +72,8 @@ fn init_loggers() -> Option<FlushGuard> {
 }
 
 fn main() {
-    driver::install_ice_hook(BUG_REPORT_URL, |handler| {
-        let version_info = get_prusti_version_info();
+    driver::install_ice_hook(BUG_REPORT_URL, |_handler| {
+        let _version_info = get_prusti_version_info();
         // handler.note(format!("Prusti version: {version_info}"));
     });
 

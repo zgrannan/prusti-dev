@@ -106,7 +106,7 @@ where
             let ident_args = UnknownArity::new(vcx.alloc_slice(&ident_args));
             let return_type = local_defs.locals[mir::RETURN_PLACE].ty;
             let function_ref = FunctionIdent::new(function_ident, ident_args, return_type.snapshot);
-            deps.emit_output_ref(task_key, MirFunctionEncOutputRef { function_ref });
+            let _ = deps.emit_output_ref(task_key, MirFunctionEncOutputRef { function_ref });
 
             let spec = deps
                 .require_local::<MirSpecEnc>((def_id, substs, None, true))

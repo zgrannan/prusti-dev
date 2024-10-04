@@ -506,7 +506,7 @@ impl<'sym, 'tcx> VerifierSemantics<'sym, 'tcx> for PrustiSemantics<'sym, 'tcx> {
                             Mutability::Not,
                         );
                         let substs = Substs::singleton(SymVar::nth_input(0), subst);
-                        let mut encoded = encoded.subst(arena, &substs);
+                        let encoded = encoded.subst(arena, &substs);
                         let assertions = encoded
                             .paths
                             .into_iter()

@@ -307,7 +307,7 @@ impl TaskEncoder for DomainEnc {
                 }
                 &TyKind::Param(_) => {
                     let out = deps.require_ref::<GenericEnc>(())?;
-                    deps.emit_output_ref(
+                    let _ = deps.emit_output_ref(
                         *task_key,
                         DomainEncOutputRef {
                             base_name,
@@ -972,7 +972,7 @@ impl<'vir> DomainDataPrim<'vir> {
     fn bounds(&self, ty: ty::Ty<'vir>) -> Option<(vir::Expr<'vir>, vir::Expr<'vir>)> {
         match *self.prim_type {
             vir::TypeData::Bool => None,
-            ref int @ vir::TypeData::Int { .. } => {
+            ref _int @ vir::TypeData::Int { .. } => {
                 let rust_ty = ty.kind();
                 Some(vir::with_vcx(|vcx| {
                     (vcx.get_min_int(rust_ty), vcx.get_max_int(rust_ty))

@@ -45,7 +45,7 @@ use crate::{
 };
 
 pub fn find_node_by_span<'thir, 'tcx>(
-    tcx: TyCtxt<'tcx>,
+    _tcx: TyCtxt<'tcx>,
     body: &'thir Thir<'tcx>,
     target_span: Span,
 ) -> Option<&'thir thir::Expr<'tcx>> {
@@ -77,7 +77,7 @@ pub fn thir_node_to_sym_expr<'sym, 'tcx>(
                 },
                 _ => todo!("{:?}", hir_node),
             };
-            let (index, ty) = input_idents.get(&ident).unwrap();
+            let (index, _ty) = input_idents.get(&ident).unwrap();
             arena.mk_var(SymVar::nth_input(*index), node.ty)
         }
         thir::ExprKind::VarRef { id } => {
@@ -147,11 +147,11 @@ pub fn thir_node_to_sym_expr<'sym, 'tcx>(
                 .find_map(|bb| match &bb.terminator().kind {
                     mir::TerminatorKind::Call {
                         func,
-                        args,
-                        destination,
-                        target,
-                        unwind,
-                        call_source,
+                        args: _,
+                        destination: _,
+                        target: _,
+                        unwind: _,
+                        call_source: _,
                         fn_span: mir_fn_span,
                     } => {
                         if fn_span == mir_fn_span {

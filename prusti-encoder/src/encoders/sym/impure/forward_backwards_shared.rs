@@ -133,7 +133,7 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
 
     pub fn new<'sym, 'deps>(
         symex_result: &SymbolicExecutionResult<'sym, 'tcx, PrustiSymValSynthetic<'sym, 'tcx>>,
-        substs: ty::GenericArgsRef<'tcx>,
+        _substs: ty::GenericArgsRef<'tcx>,
         symvar_locals: BTreeMap<SymVar, vir::Local<'vir>>,
         spec_precondition_exprs: Vec<vir::Expr<'vir>>,
         body: &mir::Body<'tcx>,
