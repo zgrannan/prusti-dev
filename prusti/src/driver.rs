@@ -17,7 +17,6 @@ use arg_value::arg_value;
 use callbacks::PrustiCompilerCalls;
 use log::info;
 use prusti_rustc_interface::driver;
-};
 use prusti_utils::{config, report::user, Stopwatch};
 use std::env;
 use tracing_chrome::{ChromeLayerBuilder, FlushGuard};
