@@ -1,7 +1,6 @@
 #![feature(rustc_private)]
 #![feature(never_type)]
 #![feature(iter_intersperse)]
-#![feature(return_position_impl_trait_in_trait)]
 
 mod context;
 mod data;

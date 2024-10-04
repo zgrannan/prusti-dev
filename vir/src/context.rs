@@ -1,7 +1,6 @@
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::{
-    borrow::BorrowMut,
     cell::{Cell, RefCell},
     fmt::Debug,
 };

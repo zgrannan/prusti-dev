@@ -832,7 +832,7 @@ impl<'tcx> VirCtxt<'tcx> {
         };
         Some(int)
     }
-    pub fn get_bit_width_int<'vir>(&'vir self, ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
+    pub fn get_bit_width_int<'vir>(&'vir self, _ty: Type, rust_ty: &ty::TyKind) -> Expr<'vir> {
         match Self::get_int_data(rust_ty) {
             (u8::BITS, _) => self.mk_uint::<{ u8::BITS as u128 }>(),
             (u16::BITS, _) => self.mk_uint::<{ u16::BITS as u128 }>(),

@@ -220,7 +220,7 @@ pub struct LazyGenData<'vir, Curr: 'vir, Next: 'vir> {
 }
 
 impl<'vir, Curr: 'vir, Next: 'vir> std::hash::Hash for LazyGenData<'vir, Curr, Next> {
-    fn hash<H>(&self, state: &mut H)
+    fn hash<H>(&self, _state: &mut H)
     where
         H: std::hash::Hasher,
     {

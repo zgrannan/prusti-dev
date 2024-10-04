@@ -2,8 +2,6 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use crate::data::*;
 use crate::gendata::*;
-use crate::DomainAxiomGen;
-use crate::DomainFunction;
 
 fn fmt_comma_sep_display<T: Display>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
     els.iter()
