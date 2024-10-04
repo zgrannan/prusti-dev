@@ -5,7 +5,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #![feature(rustc_private)]
-#![feature(proc_macro_internals)]
 #![feature(decl_macro)]
 #![deny(unused_must_use)]
 
