@@ -16,9 +16,7 @@ mod verifier;
 use arg_value::arg_value;
 use callbacks::PrustiCompilerCalls;
 use log::info;
-use prusti_rustc_interface::{
-    driver,
-    session,
+use prusti_rustc_interface::driver;
 };
 use prusti_utils::{config, report::user, Stopwatch};
 use std::env;

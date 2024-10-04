@@ -79,9 +79,9 @@ impl<'vir, E: TaskEncoder> TaskEncoderOutput<'vir, E> {
 */
 
 /// The result of the actual encoder implementation (`do_encode_full`).
-pub type EncodeFullResult<'vir, E: TaskEncoder + 'vir + ?Sized> = Result<(
-    E::OutputFullLocal<'vir>,
-    E::OutputFullDependency<'vir>,
+pub type EncodeFullResult<'vir, E> = Result<(
+    <E as TaskEncoder>::OutputFullLocal<'vir>,
+    <E as TaskEncoder>::OutputFullDependency<'vir>,
 ), EncodeFullError<'vir, E>>;
 
 /// An unsuccessful result occurring in `do_encode_full`.
