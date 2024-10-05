@@ -62,6 +62,7 @@ mod syn_extensions {
     /// Abstraction over everything that has a [syn::Signature]
     pub(crate) trait HasSignature {
         fn sig(&self) -> &Signature;
+        #[allow(unused)]
         fn sig_mut(&mut self) -> &mut Signature;
     }
 

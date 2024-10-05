@@ -1,7 +1,6 @@
 use pcs::combined_pcs::BodyWithBorrowckFacts;
 use prusti_rustc_interface::{
     index::IndexVec,
-    macros::{TyDecodable, TyEncodable},
     middle::{
         mir,
         ty::{self, GenericArgsRef, TyCtxt},
@@ -13,19 +12,8 @@ use std::{cell::RefCell, collections::hash_map::Entry, rc::Rc};
 
 use crate::environment::mir_storage;
 use prusti_rustc_interface::{
-    borrowck::{
-        borrow_set::BorrowSet,
-        consumers::{
-            BodyWithBorrowckFacts as MirBodyWithBorrowckFacts, LocationTable, PoloniusInput,
-            PoloniusOutput, RegionInferenceContext,
-        },
-    },
-    data_structures::fx::FxIndexMap,
-    dataflow::{Analysis, ResultsCursor},
-    middle::{
-        mir::{Body, Local, Location, Promoted, RETURN_PLACE},
-        ty::{GenericArgs, ParamEnv, RegionVid},
-    },
+    borrowck::consumers::BodyWithBorrowckFacts as MirBodyWithBorrowckFacts,
+    middle::ty::{GenericArgs, ParamEnv},
 };
 
 /// Stores any possible MIR body (from the compiler) that
@@ -390,6 +378,7 @@ impl<'tcx> EnvBody<'tcx> {
     }
 
     /// Import non-local mir bodies of specs from cross-crate import.
+    #[allow(unused)]
     pub(crate) fn import_external_bodies(&mut self, bodies: CrossCrateBodies<'tcx>) {
         self.pure_fns.external.extend(bodies.pure_fns);
         self.predicates.external.extend(bodies.predicates);
@@ -399,9 +388,13 @@ impl<'tcx> EnvBody<'tcx> {
 }
 
 pub(crate) struct CrossCrateBodies<'tcx> {
+    #[allow(unused)]
     pure_fns: FxHashMap<DefId, MirBody<'tcx>>,
+    #[allow(unused)]
     predicates: FxHashMap<DefId, MirBody<'tcx>>,
+    #[allow(unused)]
     specs: FxHashMap<DefId, MirBody<'tcx>>,
+    #[allow(unused)]
     closures: FxHashMap<DefId, MirBody<'tcx>>,
 }
 

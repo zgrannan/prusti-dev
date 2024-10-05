@@ -4,18 +4,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use super::{body::MirBody, loops, mir_utils::RealEdges, EnvName, EnvQuery};
-use crate::{data::ProcedureDefId, environment::Environment};
+use super::{loops, mir_utils::RealEdges, EnvQuery};
+use crate::data::ProcedureDefId;
 use log::{debug, trace};
 use prusti_rustc_interface::{
     data_structures::fx::{FxHashMap, FxHashSet},
     hir::def_id,
-    index::IndexVec,
     middle::{
         mir::{self, AggregateKind, BasicBlock, BasicBlockData, Body, Rvalue, StatementKind},
-        ty::{Ty, TyCtxt},
+        ty::TyCtxt,
     },
-    span::Span,
 };
 
 /// Index of a Basic Block
@@ -23,9 +21,13 @@ pub type BasicBlockIndex = mir::BasicBlock;
 
 /// A facade that provides information about the Rust procedure.
 pub struct Procedure<'tcx> {
+    #[allow(unused)]
     tcx: TyCtxt<'tcx>,
+    #[allow(unused)]
     proc_def_id: ProcedureDefId,
+    #[allow(unused)]
     mir: mir::Body<'tcx>,
+    #[allow(unused)]
     real_edges: RealEdges,
     loop_info: loops::ProcedureLoops,
     reachable_basic_blocks: FxHashSet<BasicBlock>,

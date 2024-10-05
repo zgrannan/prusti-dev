@@ -650,6 +650,7 @@ enum PrustiToken {
     Outer(Span),
     Quantifier(Span, Quantifier),
     SpecEnt(Span, bool),
+    #[allow(unused)]
     CallDesc(Span, bool),
 }
 

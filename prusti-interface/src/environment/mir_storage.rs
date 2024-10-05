@@ -13,7 +13,7 @@ use prusti_rustc_interface::{
     middle::thir::Thir,
     middle::{mir, ty::TyCtxt},
 };
-use std::{cell::RefCell, rc::Rc, thread_local};
+use std::{cell::RefCell, thread_local};
 
 use super::body::MirBody;
 
@@ -45,7 +45,7 @@ pub fn retrieve_thir_body<'tcx>(
     def_id: LocalDefId,
 ) -> Thir<'tcx> {
     let body: Thir<'static> = THIR_BODIES.with(|state| {
-        let mut map = state.borrow_mut();
+        let map = state.borrow_mut();
         map.get(&def_id).unwrap().clone()
     });
     unsafe { std::mem::transmute(body) }
@@ -77,7 +77,7 @@ pub(crate) unsafe fn retrieve_mir_body<'tcx>(
     def_id: LocalDefId,
 ) -> MirBody<'tcx> {
     let body_with_facts: MirBody<'static> = SHARED_STATE_WITH_FACTS.with(|state| {
-        let mut map = state.borrow_mut();
+        let map = state.borrow_mut();
         map.get(&def_id).unwrap().clone()
     });
     // SAFETY: See the module level comment.
@@ -101,6 +101,7 @@ pub unsafe fn store_promoted_mir_body<'tcx>(
 }
 
 #[allow(clippy::needless_lifetimes)] // We want to be very explicit about lifetimes here.
+#[allow(unused)]
 pub(crate) unsafe fn retrieve_promoted_mir_body<'tcx>(
     _tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,

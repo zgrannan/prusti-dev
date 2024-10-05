@@ -2,7 +2,6 @@ use prusti_rustc_interface::{
     errors::{EmissionGuarantee, MultiSpan, Diag},
     middle::ty::TyCtxt,
 };
-use std::{borrow::Borrow, cell::RefCell};
 
 pub struct EnvDiagnostic<'tcx> {
     tcx: TyCtxt<'tcx>,

@@ -6,7 +6,7 @@ use prusti_rustc_interface::{
         ty::{self, codec::TyEncoder, PredicateKind, Ty, TyCtxt},
     },
     serialize::{opaque, Encodable, Encoder},
-    span::{ExpnId, Span, SpanEncoder, StableSourceFileId, Symbol, SyntaxContext},
+    span::{ExpnId, Span, SpanEncoder, Symbol, SyntaxContext},
 };
 
 pub struct DefSpecsEncoder<'tcx> {
@@ -112,15 +112,15 @@ impl<'tcx> SpanEncoder for DefSpecsEncoder<'tcx> {
         }
     }
 
-    fn encode_symbol(&mut self, symbol: Symbol) {
+    fn encode_symbol(&mut self, _symbol: Symbol) {
         todo!()
     }
 
-    fn encode_expn_id(&mut self, expn_id: ExpnId) {
+    fn encode_expn_id(&mut self, _expn_id: ExpnId) {
         todo!()
     }
 
-    fn encode_syntax_context(&mut self, syntax_context: SyntaxContext) {
+    fn encode_syntax_context(&mut self, _syntax_context: SyntaxContext) {
         todo!()
     }
 
@@ -128,7 +128,7 @@ impl<'tcx> SpanEncoder for DefSpecsEncoder<'tcx> {
         self.tcx.stable_crate_id(crate_num).encode(self)
     }
 
-    fn encode_def_index(&mut self, def_index: DefIndex) {
+    fn encode_def_index(&mut self, _def_index: DefIndex) {
         todo!()
     }
 

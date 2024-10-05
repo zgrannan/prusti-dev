@@ -1,13 +1,11 @@
+#![allow(unused)]
 // © 2019, ETH Zurich
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{
-    environment::{mir_utils::RealEdges, procedure::BasicBlockIndex},
-    utils,
-};
+use crate::environment::{mir_utils::RealEdges, procedure::BasicBlockIndex};
 use log::{debug, trace};
 use prusti_rustc_interface::{
     data_structures::graph::dominators::Dominators,

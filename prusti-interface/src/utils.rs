@@ -8,9 +8,7 @@
 
 use prusti_rustc_interface::{
     ast::ast,
-    data_structures::fx::FxHashSet,
     middle::{mir, ty::TyCtxt},
-    index::IndexVec,
 };
 use std::borrow::Borrow;
 

@@ -5,7 +5,7 @@ use prusti_rustc_interface::{
     hir::def_id::{CrateNum, DefId, DefIndex, DefPathHash},
     middle::{
         implement_ty_decoder,
-        ty::{codec::TyDecoder, Ty, TyCtxt},
+        ty::{Ty, TyCtxt},
     },
     serialize::{opaque, Decodable},
     session::StableCrateId,
@@ -16,8 +16,11 @@ use rustc_hash::FxHashMap;
 pub struct DefSpecsDecoder<'a, 'tcx> {
     opaque: opaque::MemDecoder<'a>,
     tcx: TyCtxt<'tcx>,
+    #[allow(unused)]
     ty_rcache: FxHashMap<usize, Ty<'tcx>>,
+    #[allow(unused)]
     specs_file: PathBuf,
+    #[allow(unused)]
     crate_name: String,
 }
 
@@ -33,9 +36,7 @@ impl<'a, 'tcx> DefSpecsDecoder<'a, 'tcx> {
     }
 
     fn def_path_hash_to_def_id(&self, hash: DefPathHash) -> DefId {
-        self.tcx
-            .def_path_hash_to_def_id(hash)
-            .unwrap()
+        self.tcx.def_path_hash_to_def_id(hash).unwrap()
         // // Sanity check let cstore = std::panic::AssertUnwindSafe(self.tcx.cstore_untracked());
         // let result = std::panic::catch_unwind(|| {
         //     cstore.stable_crate_id_to_crate_num(hash.stable_crate_id())

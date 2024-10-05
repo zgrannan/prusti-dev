@@ -1,7 +1,7 @@
 use prusti_interface::environment::EnvBody;
 use prusti_rustc_interface::middle::ty;
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     fmt::Debug,
 };
 

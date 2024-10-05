@@ -1,17 +1,16 @@
 use prusti_rustc_interface::{
-    serialize::{Decodable, Encodable},
+    serialize::Encodable,
     span::DUMMY_SP,
 };
-use rustc_hash::FxHashMap;
 use std::{fs, io, path};
 
 use crate::{
-    environment::{body::CrossCrateBodies, Environment},
+    environment::Environment,
     specs::typed::DefSpecificationMap,
     PrustiError,
 };
 
-use super::{decoder::DefSpecsDecoder, encoder::DefSpecsEncoder};
+use super::encoder::DefSpecsEncoder;
 
 pub struct CrossCrateSpecs;
 
@@ -94,10 +93,10 @@ impl CrossCrateSpecs {
         encoder.finish()
     }
 
-    #[tracing::instrument(level = "debug", skip(env, def_spec))]
+    #[tracing::instrument(level = "debug", skip(_env, _def_spec))]
     fn import_from_file(
-        env: &mut Environment,
-        def_spec: &mut DefSpecificationMap,
+        _env: &mut Environment,
+        _def_spec: &mut DefSpecificationMap,
         path: &path::PathBuf,
         crate_name: &str,
     ) -> io::Result<()> {

@@ -110,6 +110,7 @@ impl DefSpecificationMap {
         (specs, pure_fns, predicates)
     }
 
+    #[allow(unused)]
     pub(crate) fn import_external(
         &mut self,
         proc_specs: FxHashMap<DefId, SpecGraph<ProcedureSpecification>>,
