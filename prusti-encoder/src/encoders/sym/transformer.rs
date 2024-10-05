@@ -17,6 +17,7 @@ use prusti_rustc_interface::{
     target::abi::FIRST_VARIANT,
 };
 
+#[allow(unused)]
 trait PrustiSymValueTransformer<'sym, 'tcx: 'sym>:
     BaseSymValueTransformer<'sym, 'tcx, PrustiSymValSyntheticData<'sym, 'tcx>>
 {
