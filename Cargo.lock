@@ -1575,6 +1575,7 @@ dependencies = [
  "derive_more",
  "dot",
  "itertools 0.12.1",
+ "lazy_static",
  "polonius-engine",
  "regex",
  "serde",

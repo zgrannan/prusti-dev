@@ -17,6 +17,7 @@ use tokio::runtime::Builder;
 use viper::{PersistentCache, Viper};
 use warp::Filter;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct BincodeReject(bincode::Error);
 impl warp::reject::Reject for BincodeReject {}

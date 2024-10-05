@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use prusti_rustc_interface::middle::mir;
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{MethodIdent, UnknownArity, ViperIdent};

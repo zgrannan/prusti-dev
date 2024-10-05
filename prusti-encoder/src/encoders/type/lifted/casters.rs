@@ -225,7 +225,7 @@ impl TaskEncoder for CastersEnc<CastTypePure> {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         if ty.is_generic() {
-            deps.emit_output_ref(*ty, CastFunctionsOutputRef::AlreadyGeneric);
+            deps.emit_output_ref(*ty, CastFunctionsOutputRef::AlreadyGeneric)?;
             return Ok((&[], ()));
         }
         vir::with_vcx(|vcx| {
@@ -267,7 +267,7 @@ impl TaskEncoder for CastersEnc<CastTypePure> {
                     make_generic: make_generic_ident,
                     make_concrete: make_concrete_ident,
                 },
-            );
+            )?;
             let make_generic_arg = vcx.mk_local_decl("self", self_ty);
             let make_generic_expr = vcx.mk_local_ex(make_generic_arg.name, make_generic_arg.ty);
 
@@ -370,7 +370,7 @@ impl TaskEncoder for CastersEnc<CastTypeImpure> {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         if ty.is_generic() {
-            deps.emit_output_ref(*ty, CastMethodsOutputRef::AlreadyGeneric);
+            deps.emit_output_ref(*ty, CastMethodsOutputRef::AlreadyGeneric)?;
             return Ok((&[], ()));
         }
         vir::with_vcx(|vcx| {
@@ -401,7 +401,7 @@ impl TaskEncoder for CastersEnc<CastTypeImpure> {
                     make_generic: make_generic_ident,
                     make_concrete: make_concrete_ident,
                 },
-            );
+            )?;
             let (make_generic_pure, _) = deps
                 .require_ref::<CastersEnc<CastTypePure>>(*ty)
                 .unwrap()

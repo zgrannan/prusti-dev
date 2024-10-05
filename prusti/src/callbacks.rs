@@ -79,7 +79,7 @@ fn mir_promoted<'tcx>(
 fn thir_body<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
-) -> Result<(&Steal<Thir<'tcx>>, ExprId), ErrorGuaranteed> {
+) -> Result<(&'tcx Steal<Thir<'tcx>>, ExprId), ErrorGuaranteed> {
     let original_thir_body = prusti_rustc_interface::interface::DEFAULT_QUERY_PROVIDERS.thir_body;
     let body = original_thir_body(tcx, def_id);
     if let Ok((body, _)) = body {
