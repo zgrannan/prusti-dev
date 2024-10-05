@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use prusti_rustc_interface::middle::ty;
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies, TaskEncoderError};
 use vir::{FunctionIdent, MethodIdent, StmtGen, UnknownArity, VirCtxt};

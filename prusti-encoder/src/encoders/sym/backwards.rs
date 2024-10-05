@@ -32,7 +32,9 @@ use super::{expr::SymExprEncoder, impure::MirImpureEncOutputRef};
 pub struct BackwardsFnContext<'shared, 'vir, 'tcx> {
     pub output_ref: MirImpureEncOutputRef<'vir>,
     pub def_id: DefId,
+    #[allow(unused)]
     pub substs: GenericArgsRef<'tcx>,
+    #[allow(unused)]
     pub caller_def_id: Option<DefId>,
     pub shared: &'shared ForwardBackwardsShared<'vir, 'tcx>,
 }

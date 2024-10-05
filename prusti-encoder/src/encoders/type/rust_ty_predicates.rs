@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use prusti_rustc_interface::middle::ty::{self};
 use task_encoder::{TaskEncoder, TaskEncoderDependencies, EncodeFullResult};
 use vir::{with_vcx, Type, TypeData};

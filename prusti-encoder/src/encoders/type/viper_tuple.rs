@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 
 use super::{

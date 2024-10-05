@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use std::marker::PhantomData;
 
 use task_encoder::{TaskEncoder, TaskEncoderDependencies, EncodeFullResult};

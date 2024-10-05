@@ -19,7 +19,6 @@ pub struct SpecEncOutput<'vir> {
     pub pres: &'vir [DefId],
     pub posts: &'vir [DefId],
     pub pledges: &'vir [Pledge],
-    pub pure: bool
 }
 
 use std::cell::RefCell;
@@ -99,10 +98,7 @@ impl TaskEncoder for SpecEnc {
                     .and_then(|specs| specs.base_spec.pledges.expect_empty_or_inherent())
                     .map(|specs| vcx.alloc_slice(specs))
                     .unwrap_or_default();
-                let pure = specs.map_or(false,
-                    |specs| specs.base_spec.kind.is_pure().unwrap(),
-                );
-                Ok((SpecEncOutput { pres, posts, pledges, pure }, () ))
+                Ok((SpecEncOutput { pres, posts, pledges }, () ))
             })
         })
     }

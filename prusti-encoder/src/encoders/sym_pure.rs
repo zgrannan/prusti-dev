@@ -50,21 +50,6 @@ use super::{
 
 pub struct SymPureEnc;
 
-#[derive(Clone, Debug)]
-pub enum SymPureEncError {
-    UnsupportedStatement,
-    UnsupportedTerminator,
-}
-
-// TODO: does this need to be `&'vir [..]`?
-type ExprInput<'vir> = (DefId, &'vir [vir::Expr<'vir>]);
-type ExprRet<'vir> = vir::ExprGen<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
-
-#[derive(Clone, Debug)]
-pub struct SymPureEncOutput<'sym, 'tcx> {
-    pub expr: PrustiSymValue<'sym, 'tcx>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SymPureEncTask<'tcx> {
     pub kind: PureKind,
@@ -111,6 +96,7 @@ impl<'sym, 'tcx> SymPureEncResult<'sym, 'tcx> {
         }
     }
 
+    #[allow(unused)]
     pub fn apply_transformer(
         self,
         arena: &'sym SymExContext<'tcx>,

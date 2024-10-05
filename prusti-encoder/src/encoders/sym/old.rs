@@ -126,9 +126,7 @@ pub fn thir_node_to_sym_expr<'sym, 'tcx>(
             arena.mk_bin_op(node.ty, op, lhs, rhs)
         }
         thir::ExprKind::Call {
-            fun,
             args,
-            ty,
             fn_span,
             ..
         } => {

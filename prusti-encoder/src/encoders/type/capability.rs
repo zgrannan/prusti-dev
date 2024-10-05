@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use prusti_rustc_interface::{
     data_structures::fx::FxHashMap,
     middle::ty::{self, TypeFoldable},

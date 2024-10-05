@@ -31,11 +31,6 @@ use vir::{vir_format, CallableIdent, DomainIdent, MethodIdent, TypeData, Unknown
 pub struct SymImpureEnc;
 
 #[derive(Clone, Debug)]
-pub enum MirImpureEncError {
-    Unsupported,
-}
-
-#[derive(Clone, Debug)]
 pub struct MirImpureEncOutputRef<'vir> {
     pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
 
@@ -52,23 +47,7 @@ impl<'vir> MirImpureEncOutputRef<'vir> {
             })
             .back_function_ident
     }
-    pub fn composite_back_fn_app(
-        &self,
-        ty_args: Vec<vir::Expr<'vir>>,
-        args: Vec<vir::Expr<'vir>>,
-    ) -> vir::Expr<'vir> {
-        vir::with_vcx(|vcx| {
-            self.back_function_ident().apply(
-                vcx,
-                vcx.alloc_slice(
-                    &ty_args
-                        .into_iter()
-                        .chain(args.into_iter())
-                        .collect::<Vec<_>>(),
-                ),
-            )
-        })
-    }
+
     pub fn backwards_expr(
         &self,
         arg: mir::Local,
@@ -278,7 +257,6 @@ impl TaskEncoder for SymImpureEnc {
                         .collect(),
                     def_id,
                 ),
-                arena: &arena,
             };
 
             let spec_precondition_exprs =
@@ -527,7 +505,6 @@ where
     deps: &'enc mut TaskEncoderDependencies<'vir, SymImpureEnc>,
     encoder: SymExprEncoder<'vir, 'sym, 'tcx>,
     local_decls: &'enc mir::LocalDecls<'tcx>,
-    arena: &'sym SymExContext<'tcx>,
 }
 
 impl<'vir, 'enc> MirBaseEnc<'vir, 'enc> for EncVisitor<'_, 'vir, 'vir, 'enc> {

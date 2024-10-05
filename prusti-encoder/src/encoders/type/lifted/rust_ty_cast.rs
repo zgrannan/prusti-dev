@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused)]
 use std::marker::PhantomData;
 
 use prusti_rustc_interface::middle::ty;

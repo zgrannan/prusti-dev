@@ -365,7 +365,6 @@ struct DomainEncData<'vir, 'enc> {
     self_decl: &'vir [vir::LocalDecl<'vir>; 1],
     axioms: Vec<vir::DomainAxiom<'vir>>,
     functions: Vec<vir::DomainFunction<'vir>>,
-    generic_enc: GenericEncOutputRef<'vir>,
     deps: &'enc mut TaskEncoderDependencies<'vir, DomainEnc>,
 }
 impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
@@ -419,7 +418,6 @@ impl<'vir, 'enc> DomainEncData<'vir, 'enc> {
             functions,
             deps,
             typeof_function,
-            generic_enc,
         }
     }
 

@@ -11,13 +11,6 @@ use vir::{Arity, CallableIdent};
 
 pub struct ConstEnc;
 
-#[derive(Clone, Debug)]
-pub struct ConstEncOutputRef<'vir> {
-    pub base_name: String,
-    pub snap_inst: vir::Type<'vir>,
-}
-impl<'vir> task_encoder::OutputRefAny for ConstEncOutputRef<'vir> {}
-
 use crate::encoders::{mir_pure::PureKind, MirPureEnc, MirPureEncTask};
 
 use super::{

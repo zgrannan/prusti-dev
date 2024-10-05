@@ -4,10 +4,7 @@ use vir::{CallableIdent, FunctionIdent, UnknownArity};
 
 pub struct MirBuiltinEnc;
 
-#[derive(Clone, Debug)]
-pub enum MirBuiltinEncError {
-    Unsupported,
-}
+type MirBuiltinEncError = !;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum MirBuiltinEncTask<'tcx> {

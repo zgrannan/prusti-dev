@@ -26,26 +26,6 @@ use symbolic_execution::{
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::{vir_format, CallableIdent, MethodIdent, UnknownArity};
 
-#[derive(Clone, Debug)]
-pub enum MirImpureEncError {
-    Unsupported,
-}
-
-#[derive(Clone, Debug)]
-pub struct MirImpureEncOutputRef<'vir> {
-    pub method_ref: MethodIdent<'vir, UnknownArity<'vir>>,
-    pub backwards_fns: BTreeMap<usize, vir::FunctionIdent<'vir, UnknownArity<'vir>>>,
-}
-impl<'vir> task_encoder::OutputRefAny for MirImpureEncOutputRef<'vir> {}
-
-#[derive(Clone, Debug)]
-pub struct MirImpureEncOutput<'vir> {
-    pub fn_debug_name: String,
-    pub method: vir::Method<'vir>,
-    pub backwards_method: vir::Method<'vir>,
-    pub backwards_fns_domain: vir::Domain<'vir>,
-}
-
 use crate::{
     encoder_traits::pure_function_enc::mk_type_assertion,
     encoders::{
@@ -108,17 +88,9 @@ impl<'vir, 'tcx> ForwardBackwardsShared<'vir, 'tcx> {
         self.symvar_tys[&SymVar::nth_input(i)]
     }
 
-    pub fn nth_input_local(&self, i: usize) -> vir::Local<'vir> {
-        self.symvar_locals[&SymVar::nth_input(i)]
-    }
-
     pub fn nth_input_expr(&self, i: usize) -> vir::Expr<'vir> {
         let local = self.symvar_locals[&SymVar::nth_input(i)];
         vir::with_vcx(|vcx| vcx.mk_local_ex_local(local))
-    }
-
-    pub fn symvar_locals(&self) -> Vec<vir::Local<'vir>> {
-        self.symvar_locals.values().cloned().collect()
     }
 
     pub fn symvar_vir_ty(&self, symvar: SymVar) -> vir::Type<'vir> {

@@ -637,11 +637,6 @@ impl<'vir> EncodedPCAtom<'vir> {
             clauses: vcx.alloc_slice(&[clause]),
         }
     }
-    pub fn false_(vcx: &'vir vir::VirCtxt<'_>) -> Self {
-        Self {
-            clauses: vcx.alloc_slice(&[vcx.mk_bool::<false, !, !>()]),
-        }
-    }
     pub fn to_expr(&self, vcx: &'vir vir::VirCtxt<'_>) -> vir::Expr<'vir> {
         vcx.mk_conj(self.clauses)
     }
