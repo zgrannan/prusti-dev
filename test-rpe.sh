@@ -48,7 +48,7 @@ check() {
         fi
     else
         echo "Checking $file (expected to $type)"
-        target/release/prusti-rustc --edition=2018 "$file"
+        target/release/prusti-rustc --edition=2018 -Zpolonius "$file"
         if [[ "$type" == "pass" && $? -ne 0 ]]; then
             echo "Test $file failed (should have passed)"
             echo "$file" >> .failures
