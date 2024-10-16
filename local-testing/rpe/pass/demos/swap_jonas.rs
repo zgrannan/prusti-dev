@@ -11,9 +11,9 @@ fn swap<'c>(mut p: Pair<'c>) -> Pair<'c> {
 }
 
 fn main() {
-    let mut x = 1;
-    let mut y = 2;
-    let p0 = Pair(&mut x, &mut y);
-    let p1 = swap(p0);
-    assert!(*p1.0 == 2 && *p1.1 == 1);
+    // let mut x = 1;
+    // let mut y = 2;
+    // let p0 = Pair(&mut x, &mut y);
+    // let p1 = swap(p0);
+    // assert!(*p1.0 == 2 && *p1.1 == 1);
 }

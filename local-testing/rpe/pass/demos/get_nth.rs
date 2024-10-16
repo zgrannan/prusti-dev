@@ -11,16 +11,16 @@ struct List {
 fn assume_small(x: usize) {}
 
 impl List {
-    // #[pure]
-    // fn len(&self) -> usize {
-    //     match self.tail {
-    //         None => 1,
-    //         Some(ref tail) => {
-    //             assume_small(tail.len());
-    //             1 + tail.len()
-    //         }
-    //     }
-    // }
+    #[pure]
+    fn len(&self) -> usize {
+        match self.tail {
+            None => 1,
+            Some(ref tail) => {
+                assume_small(tail.len());
+                1 + tail.len()
+            }
+        }
+    }
 
     // #[pure]
     // #[requires(n < self.len())]

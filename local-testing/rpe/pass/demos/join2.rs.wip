@@ -1,0 +1,20 @@
+fn main() {
+    let mut x = 0;
+    let mut y = 0;
+    let mut f = &mut x;
+    let mut e = &mut *f;
+    let mut d = &mut *e;
+    let mut c = &mut *d;
+    let mut b = &mut *c;
+    let mut a = &mut *b;
+    while true {
+        c = &mut y;
+        a = &mut *c;
+        b = &mut x;
+        f = &mut *b;
+        e = &mut *f;
+    }
+    let z0 = *a;
+    let z1 = *c;
+    let z2 = *f;
+}
